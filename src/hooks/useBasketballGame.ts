@@ -11,11 +11,11 @@ const INITIAL_GAME: BasketballGame = {
   settings: { gameName: "Demo Game", periodDuration: 10, shotClockDuration: 24, periodType: "quarter" },
   teamA: { 
     name: "Team A", color: "#EA4335", score: 0, timeouts: 7, fouls: 0,
-    players: [] // FIXED: Added empty player list
+    players: [] 
   },
   teamB: { 
     name: "Team B", color: "#4285F4", score: 0, timeouts: 7, fouls: 0,
-    players: [] // FIXED: Added empty player list
+    players: [] 
   },
   gameState: { 
     period: 1, 
@@ -52,7 +52,8 @@ export const useBasketballGame = (gameCode: string) => {
     togglePossession: () => {}, 
     setPeriod: () => {},
     updateGameTime: () => {},
-    resetShotClock: () => {} 
+    resetShotClock: () => {},
+    updatePlayerStats: () => {}
   };
 
   // --- ACTIONS ---
@@ -89,6 +90,7 @@ export const useBasketballGame = (gameCode: string) => {
     // 1. Calculate new Shot Clock
     let newShotClock = game.gameState.shotClock;
     if (newShotClock > 0) {
+      // Decrease by 0.1s
       newShotClock = parseFloat((newShotClock - 0.1).toFixed(1));
     }
 
@@ -103,6 +105,36 @@ export const useBasketballGame = (gameCode: string) => {
     updateGameField(gameCode, 'gameState.shotClock', seconds);
   };
 
+  // === NEW: Player Stats Logic ===
+  const updatePlayerStats = (team: 'A' | 'B', playerId: string, points: number, fouls: number) => {
+    const teamKey = team === 'A' ? 'teamA' : 'teamB';
+    const currentTeam = game[teamKey];
+    
+    // 1. Update the specific player in the roster
+    const updatedPlayers = currentTeam.players.map(p => {
+      if (p.id === playerId) {
+        return { 
+          ...p, 
+          points: p.points + points, 
+          fouls: p.fouls + fouls 
+        };
+      }
+      return p;
+    });
+
+    // 2. Update Team Totals
+    const newScore = Math.max(0, currentTeam.score + points);
+    const newTeamFouls = Math.max(0, currentTeam.fouls + fouls);
+
+    // 3. Sync everything to Cloud
+    updateGameField(gameCode, teamKey, {
+      ...currentTeam,
+      score: newScore,
+      fouls: newTeamFouls,
+      players: updatedPlayers
+    });
+  };
+
   return {
     ...game,
     updateScore,
@@ -111,6 +143,7 @@ export const useBasketballGame = (gameCode: string) => {
     togglePossession,
     setPeriod,
     updateGameTime,
-    resetShotClock
+    resetShotClock,
+    updatePlayerStats // Exported!
   };
 };

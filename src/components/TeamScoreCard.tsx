@@ -4,8 +4,8 @@ interface TeamScoreCardProps {
   name: string;
   score: number;
   color: string;
-  onUpdateScore?: (points: number) => void; // Made optional
-  readonly?: boolean; // NEW PROP
+  onUpdateScore?: (points: number) => void;
+  readonly?: boolean;
 }
 
 export const TeamScoreCard: React.FC<TeamScoreCardProps> = ({ 
@@ -13,24 +13,27 @@ export const TeamScoreCard: React.FC<TeamScoreCardProps> = ({
 }) => {
   return (
     <div 
-      className="relative flex flex-col items-center p-6 rounded-2xl bg-gray-900 border-2 shadow-2xl transition-transform hover:scale-105"
-      style={{ borderColor: color, boxShadow: `0 0 20px ${color}40` }}
+      className="relative flex flex-col items-center bg-zinc-900 border-t-8 shadow-2xl overflow-hidden"
+      style={{ borderColor: color }}
     >
-      <h2 className="text-2xl font-bold tracking-wider mb-4 uppercase" style={{ color: color }}>
-        {name}
-      </h2>
+      <div className="w-full bg-black/40 p-3 text-center border-b border-zinc-800">
+        <h2 className="text-3xl font-black tracking-tighter uppercase text-white truncate px-2">
+          {name}
+        </h2>
+      </div>
       
-      <div className="text-9xl font-bold text-white mb-8 font-mono leading-none drop-shadow-lg">
-        {score}
+      <div className="flex-1 flex items-center justify-center p-8 bg-black">
+        <div className="text-[10rem] font-bold text-white font-mono leading-none tracking-tighter tabular-nums" style={{ textShadow: `0 0 30px ${color}40` }}>
+          {score}
+        </div>
       </div>
 
-      {/* Only show buttons if NOT readonly */}
       {!readonly && onUpdateScore && (
-        <div className="grid grid-cols-2 gap-3 w-full">
-          <button onClick={() => onUpdateScore(1)} className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 rounded-lg border border-gray-700 transition-colors">+1</button>
-          <button onClick={() => onUpdateScore(2)} className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 rounded-lg border border-gray-700 transition-colors">+2</button>
-          <button onClick={() => onUpdateScore(3)} className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 rounded-lg border border-gray-700 transition-colors">+3</button>
-          <button onClick={() => onUpdateScore(-1)} className="bg-red-900/30 hover:bg-red-900/50 text-red-400 font-bold py-3 rounded-lg border border-red-900/50 transition-colors">-1</button>
+        <div className="grid grid-cols-4 w-full border-t border-zinc-800">
+          <button onClick={() => onUpdateScore(1)} className="h-16 bg-zinc-800 hover:bg-zinc-700 text-white font-bold border-r border-zinc-700 text-xl font-mono active:bg-white active:text-black transition-colors">+1</button>
+          <button onClick={() => onUpdateScore(2)} className="h-16 bg-zinc-800 hover:bg-zinc-700 text-white font-bold border-r border-zinc-700 text-xl font-mono active:bg-white active:text-black transition-colors">+2</button>
+          <button onClick={() => onUpdateScore(3)} className="h-16 bg-zinc-800 hover:bg-zinc-700 text-white font-bold border-r border-zinc-700 text-xl font-mono active:bg-white active:text-black transition-colors">+3</button>
+          <button onClick={() => onUpdateScore(-1)} className="h-16 bg-red-900/20 hover:bg-red-900/40 text-red-500 font-bold text-xl font-mono active:bg-red-600 active:text-white transition-colors">-1</button>
         </div>
       )}
     </div>

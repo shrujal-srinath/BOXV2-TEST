@@ -10,3 +10,88 @@ body {
   margin: 0;
   min-height: 100vh;
 }
+
+
+
+
+/* CONCEPT 1: GLITCH ANIMATIONS */
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  100% { transform: translate(0); }
+}
+.animate-glitch { animation: glitch 0.3s cubic-bezier(.25, .46, .45, .94) both infinite; }
+
+/* CONCEPT 2: CINEMATIC SHIMMER */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.animate-shimmer {
+  background: linear-gradient(to right, #4b5563 20%, #ffffff 40%, #ffffff 60%, #4b5563 80%);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+/* CONCEPT 3: STADIUM LIGHTS */
+@keyframes flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% { opacity: 0.99; text-shadow: -1px -1px 0 rgba(255,255,255, .1); }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% { opacity: 0.4; text-shadow: none; }
+}
+.animate-flicker { animation: flicker 2s linear infinite; }
+
+/* --- THE BROADCAST TITAN ANIMATIONS --- */
+
+/* 1. The Slam (Used for main logo) */
+@keyframes slam-in {
+  0% { transform: scale(3); opacity: 0; filter: blur(10px); }
+  40% { transform: scale(1); opacity: 1; filter: blur(0px); }
+  45% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+.animate-slam { animation: slam-in 0.6s cubic-bezier(0.17, 0.67, 0.23, 1.00) both; }
+
+/* 2. The Laser Scan (Used for the line) */
+@keyframes scan-line {
+  0% { width: 0; opacity: 0; }
+  30% { width: 100%; opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+.animate-scan { animation: scan-line 1.5s ease-out forwards; }
+
+/* 3. The Letter Spacing Expansion (Used for subtext) */
+@keyframes tracking-in {
+  0% { letter-spacing: -0.5em; opacity: 0; }
+  40% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+.animate-tracking { animation: tracking-in 0.8s cubic-bezier(0.215, 0.610, 0.355, 1.000) both; }
+
+/* 4. The Flash (Impact flash) */
+@keyframes flash-impact {
+  0%, 50%, 100% { opacity: 0; }
+  25%, 75% { opacity: 0.1; }
+}
+.animate-flash { animation: flash-impact 0.5s linear infinite; }
+
+/* ... previous animations ... */
+
+/* Ticker Animation */
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-marquee {
+  animation: marquee 20s linear infinite;
+}
+/* Pause on hover so you can click */
+.animate-marquee:hover {
+  animation-play-state: paused;
+}

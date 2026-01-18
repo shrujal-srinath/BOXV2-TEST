@@ -2,6 +2,7 @@ export interface Player {
   id: string;
   name: string;
   number: string;
+  position: string; // NEW: e.g., "PG", "C", "F"
   points: number;
   fouls: number;
 }
@@ -25,7 +26,7 @@ export interface TeamData {
   score: number;
   timeouts: number;
   fouls: number;
-  players: Player[]; // NEW: Roster List
+  players: Player[];
 }
 
 export interface BasketballGame {
