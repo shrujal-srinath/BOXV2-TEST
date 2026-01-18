@@ -1,20 +1,21 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 
-// Your BMSCE config
+// Your real configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyCOxfphialDsr8jrwU7Cad2bfakM_2n1H0", 
-  authDomain: "bmsce-box.firebaseapp.com",
-  projectId: "bmsce-box",
-  storageBucket: "bmsce-box.firebasestorage.app",
-  messagingSenderId: "705333337179",
-  appId: "1:705333337179:web:9018e93764205c6f33337e",
-  measurementId: "G-P6VC5RQRDY"
+  apiKey: "AIzaSyAwH0ryk7YUvx37l2446J6MYOcnYzg-2gg",
+  authDomain: "the-box-v2.firebaseapp.com",
+  projectId: "the-box-v2",
+  storageBucket: "the-box-v2.firebasestorage.app",
+  messagingSenderId: "537547790625",
+  appId: "1:537547790625:web:b8faf300cc43b2eef54660",
+  measurementId: "G-QF3E2D6BTL"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
 
-export const db = getFirestore(app);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+export { db, auth };

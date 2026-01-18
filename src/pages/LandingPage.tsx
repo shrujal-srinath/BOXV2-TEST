@@ -1,193 +1,297 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { subscribeToLiveGames } from '../services/gameService';
+import type { User } from 'firebase/auth';
 import type { BasketballGame } from '../types';
+import { loginWithGoogle, loginWithEmail, registerWithEmail, logoutUser, subscribeToAuth } from '../services/authService';
+import { subscribeToLiveGames } from '../services/gameService';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  
+  // State
+  const [liveGames, setLiveGames] = useState<BasketballGame[]>([]);
   const [joinCode, setJoinCode] = useState('');
   
-  // Animation States
+  // UI & Animation
   const [showSplash, setShowSplash] = useState(true);
   const [stage, setStage] = useState(0); 
 
-  // Live Data State
-  const [liveGames, setLiveGames] = useState<BasketballGame[]>([]);
+  // Modals
+  const [showFreeHostWarning, setShowFreeHostWarning] = useState(false);
+  const [selectedLiveGame, setSelectedLiveGame] = useState<BasketballGame | null>(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  
+  // Auth Form
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
 
-  // 1. SPLASH SCREEN SEQUENCE
+  // --- INITIALIZATION ---
   useEffect(() => {
-    const t1 = setTimeout(() => setStage(1), 200);
-    const t2 = setTimeout(() => setStage(2), 500);
-    const t3 = setTimeout(() => setStage(3), 1400);
-    const t4 = setTimeout(() => setStage(4), 3200);
-    const t5 = setTimeout(() => setShowSplash(false), 3700);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
-  }, []);
-
-  // 2. LIVE GAMES LISTENER
-  useEffect(() => {
-    const unsubscribe = subscribeToLiveGames((games) => {
-      setLiveGames(games);
+    // 1. Splash Sequence
+    const t1 = setTimeout(() => setStage(1), 300);
+    const t2 = setTimeout(() => setStage(2), 800);
+    const t3 = setTimeout(() => setStage(3), 1600);
+    const t4 = setTimeout(() => setStage(4), 3500);
+    const t5 = setTimeout(() => setShowSplash(false), 4100);
+    
+    // 2. Auth Listener with REDIRECT
+    const unsubAuth = subscribeToAuth((u) => {
+      if (u) {
+        // If splash is done, go immediately. If not, wait for splash then go.
+        if (!showSplash) navigate('/dashboard');
+        else setTimeout(() => navigate('/dashboard'), 4200);
+      }
     });
-    return () => unsubscribe();
-  }, []);
 
-  // --- ACTIONS ---
-  const handleLoginHost = () => {
-    // Placeholder for Auth implementation
-    alert("Pro Login Feature Coming Soon! (Will save stats to your account)");
-  };
+    // 3. Live Games
+    const unsubLive = subscribeToLiveGames(setLiveGames);
 
-  const handleFreeHost = () => {
-    navigate('/setup');
-  };
+    return () => { 
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); 
+      unsubAuth(); unsubLive(); 
+    };
+  }, [navigate, showSplash]);
 
-  const handleWatch = (e?: React.FormEvent) => {
+  // --- HANDLERS ---
+  const handleWatchSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (joinCode.length === 6) navigate(`/watch/${joinCode}`);
     else alert("Please enter a valid 6-digit Game ID");
   };
 
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      if (isRegistering) await registerWithEmail(email, password);
+      else await loginWithEmail(email, password);
+      // Redirect handled by useEffect
+    } catch (err: any) {
+      setAuthError(err.message.replace('Firebase: ', ''));
+    }
+  };
+
   // --- RENDER: SPLASH SCREEN ---
   if (showSplash) {
     return (
-      <div className={`fixed inset-0 bg-black z-50 flex items-center justify-center transition-opacity duration-700 ${stage === 4 ? 'opacity-0' : 'opacity-100'}`}>
+      <div className={`fixed inset-0 bg-black z-50 flex items-center justify-center transition-opacity duration-1000 ${stage === 4 ? 'opacity-0' : 'opacity-100'}`}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900 via-black to-black opacity-80"></div>
         <div className="relative z-10 flex flex-col items-center">
-          <div className="flex flex-col md:flex-row items-center gap-0 md:gap-6 mb-2">
-            {stage >= 2 && <h1 className="text-7xl md:text-9xl font-black italic tracking-tighter text-white animate-slam leading-none">THE BOX</h1>}
-            {stage >= 2 && <div className="hidden md:block w-1 h-20 bg-zinc-700 transform skew-x-12 animate-slam"></div>}
+          <div className="flex flex-col md:flex-row items-center gap-0 md:gap-6 mb-4">
+            {stage >= 2 && <h1 className="text-7xl md:text-9xl font-black italic tracking-tighter text-white animate-slam leading-none drop-shadow-2xl">THE BOX</h1>}
+            {stage >= 2 && <div className="hidden md:block w-1 h-24 bg-zinc-700 transform skew-x-12 animate-slam"></div>}
             {stage >= 2 && (
-              <div className="flex flex-col justify-center items-center md:items-start animate-slam mt-2 md:mt-0" style={{ animationDelay: '0.1s' }}>
+              <div className="flex flex-col justify-center items-center md:items-start animate-slam mt-4 md:mt-0" style={{ animationDelay: '0.2s' }}>
                 <span className="text-zinc-500 text-[10px] font-bold tracking-[0.3em] uppercase mb-1">Powered By</span>
                 <span className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-red-500 italic uppercase tracking-tighter leading-none">BMSCE</span>
               </div>
             )}
           </div>
-          {stage >= 1 && <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-red-600 to-transparent animate-scan mb-6 mt-2"></div>}
-          {stage >= 3 && <div className="animate-tracking text-center"><p className="text-zinc-300 text-xs md:text-sm font-mono font-bold tracking-[0.4em] uppercase">The Official College Sports App</p></div>}
+          {stage >= 1 && <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-red-600 to-transparent animate-scan mb-8 mt-2 shadow-[0_0_15px_rgba(220,38,38,0.8)]"></div>}
+          {stage >= 3 && <div className="animate-tracking text-center"><p className="text-zinc-400 text-xs md:text-sm font-mono font-bold uppercase">The Official College Sports App</p></div>}
         </div>
       </div>
     );
   }
 
-  // --- RENDER: MAIN DASHBOARD ---
+  // --- RENDER: MAIN LANDING PAGE ---
   return (
-    <div className="min-h-screen bg-black font-sans text-white p-4 md:p-8 flex flex-col animate-in relative overflow-hidden">
+    <div className="min-h-screen bg-black font-sans text-white flex flex-col relative overflow-hidden animate-in">
       
       {/* HEADER */}
-      <div className="flex justify-between items-end border-b border-zinc-800 pb-4 mb-8 z-10">
-        <div>
-           <h1 className="text-4xl md:text-6xl font-black italic tracking-tighter">BOX <span className="text-red-600">V2</span></h1>
-           <p className="text-zinc-500 text-xs tracking-[0.3em] uppercase font-bold">Official Telemetry System</p>
+      <header className="flex justify-between items-center p-6 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-20 sticky top-0">
+        <div className="flex items-center gap-4">
+          <div className="relative w-10 h-10 flex items-center justify-center">
+            <svg className="w-8 h-8 text-red-600 drop-shadow-[0_0_8px_rgba(220,38,38,0.6)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </div>
+          <div className="flex flex-col justify-center">
+            <h1 className="text-2xl font-black italic tracking-tighter leading-none text-white">THE BOX</h1>
+            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.3em] leading-none mt-1">By BMSCE</p>
+          </div>
         </div>
-        <div className="hidden md:block text-right">
-           <div className="text-zinc-600 text-[10px] font-mono">SERVER STATUS</div>
-           <div className="text-green-500 text-xs font-bold tracking-widest flex items-center justify-end gap-2">
-             <span className="block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> ONLINE
-           </div>
+        <div className="flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1.5 rounded-sm">
+           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_5px_#22c55e]"></div>
+           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Server Online</span>
         </div>
-      </div>
+      </header>
 
-      {/* MAIN GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 z-10 mb-20">
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col md:flex-row gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full mb-20">
         
-        {/* === SECTION 1 & 2: HOSTING (RED ZONE) === */}
-        <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* 1. SIGN IN (PRO) */}
-          <div onClick={handleLoginHost} className="bg-zinc-900 border border-zinc-800 hover:border-red-600 hover:bg-zinc-800 transition-all p-6 flex flex-col justify-between cursor-pointer group rounded-sm relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-2 opacity-50"><span className="text-4xl group-hover:scale-110 transition-transform block">🔐</span></div>
-             <div>
-               <h3 className="text-red-500 font-bold tracking-widest text-xs uppercase mb-1">Pro Access</h3>
-               <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white group-hover:text-red-500 transition-colors">Sign In / Up</h2>
-               <p className="text-zinc-500 text-xs mt-2 leading-relaxed">Save your game history, manage team rosters, and generate official reports.</p>
-             </div>
-             <div className="mt-4 flex items-center gap-2 text-red-500 font-bold text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
-               Access Portal &rarr;
-             </div>
+        {/* LEFT: PUBLIC HOSTING OPTIONS */}
+        <div className="flex-1 flex flex-col gap-6">
+          <div className="flex-1 bg-zinc-900/40 border border-zinc-800 p-8 rounded-sm relative overflow-hidden flex flex-col justify-between">
+            <div className="relative z-10">
+              <h2 className="text-red-600 text-[10px] font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <span className="w-4 h-[1px] bg-red-600"></span> Pro Access
+              </h2>
+              <h3 className="text-4xl font-black italic uppercase tracking-tighter text-white mb-4">Operator Login</h3>
+              <p className="text-zinc-400 text-sm leading-relaxed max-w-sm mb-12">
+                Authenticate to access the dashboard. Save match data, manage rosters, and resume games.
+              </p>
+              
+              <div className="mt-auto space-y-4 pb-2">
+                <button onClick={loginWithGoogle} className="w-full bg-white hover:bg-zinc-200 text-black font-black py-3.5 uppercase tracking-widest flex items-center justify-center gap-3 transition-colors">
+                  <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-4 h-4" alt="G" />
+                  Sign In with Google
+                </button>
+                <button onClick={() => setShowEmailModal(true)} className="w-full bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 font-bold py-3.5 uppercase tracking-widest transition-colors flex items-center justify-center gap-3">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                  Sign In with Email
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* 2. FREE HOST (QUICK) */}
-          <div onClick={handleFreeHost} className="bg-zinc-900 border border-zinc-800 hover:border-white hover:bg-zinc-800 transition-all p-6 flex flex-col justify-between cursor-pointer group rounded-sm">
-             <div className="absolute top-0 right-0 p-2 opacity-50"><span className="text-4xl group-hover:scale-110 transition-transform block">⚡</span></div>
-             <div>
-               <h3 className="text-white font-bold tracking-widest text-xs uppercase mb-1">Instant Mode</h3>
-               <h2 className="text-3xl font-black italic uppercase tracking-tighter text-zinc-400 group-hover:text-white transition-colors">Free Host</h2>
-               <p className="text-zinc-500 text-xs mt-2 leading-relaxed">Start a game immediately without an account. Data is temporary.</p>
-             </div>
-             <div className="mt-4 flex items-center gap-2 text-white font-bold text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
-               Launch Console &rarr;
-             </div>
-          </div>
-
+          <button onClick={() => setShowFreeHostWarning(true)} className="bg-black border border-zinc-800 hover:border-zinc-500 p-5 flex items-center justify-between group transition-all">
+            <div className="text-left">
+              <div className="text-zinc-200 font-bold text-lg group-hover:text-red-500 transition-colors">Free Host Mode</div>
+              <div className="text-[10px] text-zinc-600 uppercase tracking-widest mt-0.5">Quick Start • No Data Retention</div>
+            </div>
+            <div className="w-8 h-8 flex items-center justify-center text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all text-xl">&rarr;</div>
+          </button>
         </div>
 
-        {/* === SECTION 3: WATCH (BLUE ZONE) === */}
-        <div className="lg:col-span-5 bg-blue-950/20 border border-blue-900/50 p-6 md:p-8 flex flex-col justify-center relative overflow-hidden rounded-sm">
-           {/* Decorative Grid */}
-           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#000033 1px, transparent 1px), linear-gradient(90deg, #000033 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+        {/* RIGHT: WATCH OPTIONS (IMPROVED UI) */}
+        <div className="flex-1 bg-gradient-to-br from-blue-950/10 to-black border border-zinc-800 p-10 flex flex-col justify-center relative overflow-hidden rounded-sm group">
+           <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: 'linear-gradient(#1e3a8a 1px, transparent 1px), linear-gradient(90deg, #1e3a8a 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
            
-           <div className="relative z-10">
-             <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-white mb-6">Spectate</h2>
+           <div className="relative z-10 max-w-md mx-auto w-full">
+             <div className="text-blue-500 text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span> Spectator Access
+             </div>
+             <h2 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter text-white mb-8 leading-tight">
+               Watch<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-white">Live Feed</span>
+             </h2>
              
-             <form onSubmit={handleWatch} className="flex flex-col gap-3">
-               <input 
-                 type="text" 
-                 placeholder="ENTER GAME ID" 
-                 maxLength={6}
-                 value={joinCode}
-                 onChange={(e) => setJoinCode(e.target.value)}
-                 className="w-full bg-black border-2 border-blue-900 focus:border-blue-500 p-4 text-center text-3xl font-mono text-white placeholder-blue-900/50 outline-none transition-colors rounded-sm"
-               />
+             <form onSubmit={handleWatchSubmit} className="flex flex-col gap-6">
+               <div className="relative group/input">
+                 {/* HIGH CONTRAST INPUT FIX */}
+                 <div className="bg-zinc-900 border-2 border-zinc-700 focus-within:border-blue-500 transition-colors p-1 flex">
+                   <div className="bg-zinc-800 flex items-center justify-center px-4">
+                     <span className="text-zinc-500 font-bold text-lg">#</span>
+                   </div>
+                   <input 
+                     type="text" 
+                     placeholder="GAME ID" 
+                     maxLength={6}
+                     value={joinCode}
+                     onChange={(e) => setJoinCode(e.target.value)}
+                     className="w-full bg-zinc-900 p-4 text-center text-4xl font-mono text-white placeholder-zinc-600 outline-none font-bold tracking-widest uppercase"
+                   />
+                 </div>
+               </div>
+               
                <button 
                  type="submit" 
-                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest py-4 text-sm transition-all hover:translate-x-1"
+                 className="w-full bg-blue-700 hover:bg-blue-600 text-white font-black uppercase tracking-widest py-5 text-sm shadow-[0_0_20px_rgba(29,78,216,0.2)] hover:shadow-[0_0_30px_rgba(29,78,216,0.4)] transition-all hover:-translate-y-1"
                >
-                 Connect to Live Feed &rarr;
+                 Connect Stream
                </button>
              </form>
            </div>
         </div>
+      </main>
 
+      {/* FOOTER TICKER */}
+      <div className="fixed bottom-0 w-full bg-zinc-950 border-t border-zinc-900 h-14 flex items-center z-30">
+        <div className="bg-red-700 h-full px-6 flex items-center justify-center font-black italic text-lg tracking-tighter shrink-0 shadow-[0_0_20px_rgba(220,38,38,0.4)] relative z-10">LIVE</div>
+        <div className="flex-1 overflow-hidden relative flex items-center h-full group bg-black">
+           <div className="flex gap-12 px-6 animate-marquee whitespace-nowrap group-hover:[animation-play-state:paused]">
+             {liveGames.length === 0 ? (
+               <span className="text-zinc-700 text-xs font-mono tracking-widest uppercase">Waiting for active signals from server...</span>
+             ) : (
+               liveGames.map(g => (
+                 <button key={g.code} onClick={() => setSelectedLiveGame(g)} className="flex items-center gap-3 hover:bg-zinc-900 px-4 py-1.5 rounded-sm transition-colors border border-transparent hover:border-zinc-800">
+                   <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></span>
+                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{g.gameState.period <= 4 ? `Q${g.gameState.period}` : 'OT'}</span>
+                   <span className="text-sm font-bold font-mono text-white">{g.teamA.name} <span className="text-red-500 mx-1 text-lg">{g.teamA.score}</span> - <span className="text-blue-500 mx-1 text-lg">{g.teamB.score}</span> {g.teamB.name}</span>
+                 </button>
+               ))
+             )}
+           </div>
+        </div>
       </div>
 
-      {/* === SECTION 4: ONGOING GAMES (LIVE TICKER) === */}
-      <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 z-50 h-16 flex items-center">
-        <div className="bg-red-600 text-white h-full px-6 flex items-center justify-center font-black italic uppercase tracking-tighter text-xl shrink-0 z-20">
-          LIVE
-        </div>
-        
-        <div className="flex-1 overflow-hidden relative h-full flex items-center">
-          {/* SCROLLING CONTENT */}
-          <div className="flex gap-8 px-4 animate-marquee whitespace-nowrap">
-            {liveGames.length === 0 ? (
-              <span className="text-zinc-500 text-sm font-mono tracking-widest uppercase">--- NO LIVE GAMES IN PROGRESS --- START A NEW GAME TO SEE IT HERE ---</span>
-            ) : (
-              liveGames.map((g) => (
-                <div 
-                  key={g.code} 
-                  onClick={() => navigate(`/watch/${g.code}`)}
-                  className="inline-flex items-center gap-4 bg-black/50 border border-zinc-800 px-4 py-2 rounded-sm hover:border-white cursor-pointer transition-colors"
-                >
-                  <span className="text-red-500 text-[10px] font-bold">● LIVE</span>
-                  <div className="flex items-center gap-2 text-sm font-bold font-mono">
-                    <span style={{color: g.teamA.color}}>{g.teamA.name}</span>
-                    <span className="text-white text-lg">{g.teamA.score}</span>
-                    <span className="text-zinc-600">-</span>
-                    <span className="text-white text-lg">{g.teamB.score}</span>
-                    <span style={{color: g.teamB.color}}>{g.teamB.name}</span>
-                  </div>
-                  <span className="text-zinc-500 text-[10px] border border-zinc-700 px-1 rounded">
-                    {g.gameState.period <= 4 ? `Q${g.gameState.period}` : `OT${g.gameState.period-4}`}
-                  </span>
-                </div>
-              ))
-            )}
-            {/* DUPLICATE FOR INFINITE SCROLL EFFECT (Optional, usually handled by CSS or enough items) */}
+      {/* MODALS (Kept same logic, just hidden for brevity in this snippet as they were perfect in previous step) */}
+      {/* 1. Free Host Warning */}
+      {showFreeHostWarning && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
+          <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-red-600"></div>
+            <h3 className="text-2xl font-black italic uppercase text-white mb-3">Data Loss Warning</h3>
+            <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
+              You are entering <strong>Free Host Mode</strong>. Game data will NOT be saved to an account. If you close this tab, the match state will be lost forever.
+            </p>
+            <div className="flex gap-4">
+              <button onClick={() => setShowFreeHostWarning(false)} className="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors border border-transparent hover:border-zinc-700">Go Back</button>
+              <button onClick={() => navigate('/setup')} className="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold py-3 uppercase tracking-widest">Proceed Anyway</button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* 2. Confirm Spectate */}
+      {selectedLiveGame && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
+          <div className="bg-zinc-900 border border-blue-900/50 max-w-md w-full p-8 shadow-2xl relative">
+            <h3 className="text-blue-500 text-xs font-bold uppercase tracking-widest mb-2">Incoming Feed</h3>
+            <h2 className="text-2xl font-black text-white italic uppercase mb-1">{selectedLiveGame.settings.gameName}</h2>
+            <div className="bg-black border border-zinc-800 p-6 mb-8 mt-6">
+               <div className="flex justify-between items-center text-sm font-bold font-mono mb-2">
+                 <span style={{ color: selectedLiveGame.teamA.color }}>{selectedLiveGame.teamA.name}</span>
+                 <span className="text-zinc-600 text-xs">VS</span>
+                 <span style={{ color: selectedLiveGame.teamB.color }}>{selectedLiveGame.teamB.name}</span>
+               </div>
+               <div className="flex justify-between items-center text-3xl text-white font-mono font-bold">
+                 <span>{selectedLiveGame.teamA.score}</span>
+                 <span className="text-zinc-700 text-lg">-</span>
+                 <span>{selectedLiveGame.teamB.score}</span>
+               </div>
+            </div>
+            <div className="flex gap-4">
+              <button onClick={() => setSelectedLiveGame(null)} className="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors border border-transparent hover:border-zinc-700">Cancel</button>
+              <button onClick={() => navigate(`/watch/${selectedLiveGame.code}`)} className="flex-1 bg-blue-700 hover:bg-blue-600 text-white font-bold py-3 uppercase tracking-widest">Connect</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Email Login */}
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in">
+          <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm p-8 relative shadow-2xl">
+            <button onClick={() => setShowEmailModal(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors">✕</button>
+            <h2 className="text-2xl font-black italic uppercase text-white mb-1">{isRegistering ? 'Create Account' : 'Operator Login'}</h2>
+            <p className="text-xs text-zinc-500 uppercase tracking-widest mb-6">{isRegistering ? 'Join the Box Platform' : 'Access your console'}</p>
+            {authError && <div className="bg-red-900/20 border border-red-900/50 text-red-400 text-xs p-3 mb-4 rounded-sm">{authError}</div>}
+            <form onSubmit={handleEmailAuth} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Email Address</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 text-white text-sm focus:border-white outline-none transition-colors" placeholder="user@example.com" required />
+              </div>
+              <div className="mb-2">
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">Password</label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 text-white text-sm focus:border-white outline-none transition-colors" placeholder="••••••••" required minLength={6} />
+              </div>
+              <button type="submit" className="w-full bg-white hover:bg-zinc-200 text-black font-bold py-3 uppercase tracking-widest mt-4 transition-colors">
+                {isRegistering ? 'Create Account' : 'Sign In'}
+              </button>
+            </form>
+            <div className="mt-8 pt-6 border-t border-zinc-800 text-center">
+              <button onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); }} className="text-xs text-zinc-500 hover:text-white transition-colors">
+                {isRegistering ? 'Already have an account? Sign In' : 'Need an account? Register'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
