@@ -36,10 +36,10 @@ export const LandingPage: React.FC = () => {
     const t4 = setTimeout(() => setStage(4), 3500);
     const t5 = setTimeout(() => setShowSplash(false), 4100);
     
-    // 2. Auth Listener with REDIRECT
+    // 2. Auth Listener with REDIRECT TO DASHBOARD
     const unsubAuth = subscribeToAuth((u) => {
       if (u) {
-        // If splash is done, go immediately. If not, wait for splash then go.
+        // If splash is still showing, wait for it. Otherwise go immediately.
         if (!showSplash) navigate('/dashboard');
         else setTimeout(() => navigate('/dashboard'), 4200);
       }
@@ -67,7 +67,7 @@ export const LandingPage: React.FC = () => {
     try {
       if (isRegistering) await registerWithEmail(email, password);
       else await loginWithEmail(email, password);
-      // Redirect handled by useEffect
+      // Redirect handled by useEffect above
     } catch (err: any) {
       setAuthError(err.message.replace('Firebase: ', ''));
     }
@@ -78,6 +78,9 @@ export const LandingPage: React.FC = () => {
     return (
       <div className={`fixed inset-0 bg-black z-50 flex items-center justify-center transition-opacity duration-1000 ${stage === 4 ? 'opacity-0' : 'opacity-100'}`}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900 via-black to-black opacity-80"></div>
+        {/* Carbon Fiber Texture */}
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+        
         <div className="relative z-10 flex flex-col items-center">
           <div className="flex flex-col md:flex-row items-center gap-0 md:gap-6 mb-4">
             {stage >= 2 && <h1 className="text-7xl md:text-9xl font-black italic tracking-tighter text-white animate-slam leading-none drop-shadow-2xl">THE BOX</h1>}
@@ -149,6 +152,7 @@ export const LandingPage: React.FC = () => {
             </div>
           </div>
 
+          {/* FREE HOST MODE BUTTON */}
           <button onClick={() => setShowFreeHostWarning(true)} className="bg-black border border-zinc-800 hover:border-zinc-500 p-5 flex items-center justify-between group transition-all">
             <div className="text-left">
               <div className="text-zinc-200 font-bold text-lg group-hover:text-red-500 transition-colors">Free Host Mode</div>
@@ -158,13 +162,19 @@ export const LandingPage: React.FC = () => {
           </button>
         </div>
 
-        {/* RIGHT: WATCH OPTIONS (IMPROVED UI) */}
-        <div className="flex-1 bg-gradient-to-br from-blue-950/10 to-black border border-zinc-800 p-10 flex flex-col justify-center relative overflow-hidden rounded-sm group">
-           <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: 'linear-gradient(#1e3a8a 1px, transparent 1px), linear-gradient(90deg, #1e3a8a 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+        {/* RIGHT: WATCH OPTIONS (With Blue Grid) */}
+        <div className="flex-1 bg-gradient-to-br from-blue-950/20 to-black border border-zinc-800 p-10 flex flex-col justify-center relative overflow-hidden rounded-sm group">
+           {/* THE BLUE GRID */}
+           <div className="absolute inset-0 opacity-20" 
+                style={{ 
+                  backgroundImage: 'linear-gradient(#1e40af 1px, transparent 1px), linear-gradient(90deg, #1e40af 1px, transparent 1px)', 
+                  backgroundSize: '40px 40px' 
+                }}>
+           </div>
            
            <div className="relative z-10 max-w-md mx-auto w-full">
              <div className="text-blue-500 text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span> Spectator Access
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]"></span> Spectator Access
              </div>
              <h2 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter text-white mb-8 leading-tight">
                Watch<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-white">Live Feed</span>
@@ -172,10 +182,10 @@ export const LandingPage: React.FC = () => {
              
              <form onSubmit={handleWatchSubmit} className="flex flex-col gap-6">
                <div className="relative group/input">
-                 {/* HIGH CONTRAST INPUT FIX */}
-                 <div className="bg-zinc-900 border-2 border-zinc-700 focus-within:border-blue-500 transition-colors p-1 flex">
-                   <div className="bg-zinc-800 flex items-center justify-center px-4">
-                     <span className="text-zinc-500 font-bold text-lg">#</span>
+                 {/* Glassmorphic Input */}
+                 <div className="bg-black/40 backdrop-blur-sm border-2 border-zinc-700 group-focus-within/input:border-blue-500 transition-colors p-1 flex">
+                   <div className="bg-zinc-800/50 flex items-center justify-center px-5 border-r border-zinc-700">
+                     <span className="text-zinc-500 font-bold text-xl group-focus-within/input:text-blue-500 transition-colors">#</span>
                    </div>
                    <input 
                      type="text" 
@@ -183,7 +193,7 @@ export const LandingPage: React.FC = () => {
                      maxLength={6}
                      value={joinCode}
                      onChange={(e) => setJoinCode(e.target.value)}
-                     className="w-full bg-zinc-900 p-4 text-center text-4xl font-mono text-white placeholder-zinc-600 outline-none font-bold tracking-widest uppercase"
+                     className="w-full bg-transparent p-4 text-center text-4xl font-mono text-white placeholder-zinc-700 outline-none font-bold tracking-widest uppercase"
                    />
                  </div>
                </div>
@@ -219,8 +229,7 @@ export const LandingPage: React.FC = () => {
         </div>
       </div>
 
-      {/* MODALS (Kept same logic, just hidden for brevity in this snippet as they were perfect in previous step) */}
-      {/* 1. Free Host Warning */}
+      {/* MODALS */}
       {showFreeHostWarning && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative overflow-hidden">
@@ -231,13 +240,12 @@ export const LandingPage: React.FC = () => {
             </p>
             <div className="flex gap-4">
               <button onClick={() => setShowFreeHostWarning(false)} className="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors border border-transparent hover:border-zinc-700">Go Back</button>
-              <button onClick={() => navigate('/setup')} className="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold py-3 uppercase tracking-widest">Proceed Anyway</button>
+              <button onClick={() => navigate('/dashboard')} className="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold py-3 uppercase tracking-widest">Proceed Anyway</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. Confirm Spectate */}
       {selectedLiveGame && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-blue-900/50 max-w-md w-full p-8 shadow-2xl relative">
@@ -263,7 +271,6 @@ export const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Email Login */}
       {showEmailModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm p-8 relative shadow-2xl">

@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { GameClock } from './GameClock';
 import { ShotClock } from './ShotClock';
-import { TeamScoreCard } from './TeamScoreCard';
-import { PlayerSelectModal } from './PlayerSelectModal'; // New Import
+import { PlayerSelectModal } from './PlayerSelectModal'; 
 import { useBasketballGame } from '../hooks/useBasketballGame';
 
 export const Scoreboard: React.FC = () => {
@@ -19,16 +18,16 @@ export const Scoreboard: React.FC = () => {
     label: string;
   } | null>(null);
 
-  // --- CLICK HANDLER ---
+  // --- HANDLERS ---
   const handleActionClick = (team: 'A' | 'B', type: 'points' | 'foul', value: number) => {
-    // If undoing (negative), skip modal
+    // Immediate Undo (Negative values)
     if (value < 0) {
       if (type === 'points') game.updateScore(team, value);
       else game.updateFouls(team, value);
       return;
     }
 
-    // Setup modal
+    // Open Player Selection for Positive Actions
     setPendingAction({
       team,
       type,
@@ -53,9 +52,7 @@ export const Scoreboard: React.FC = () => {
     setPendingAction(null);
   };
 
-  // ... (Keep handleNextPeriod and other logic) ...
   const handleNextPeriod = () => {
-    // ... same as before
     const current = game.gameState.period;
     if (current === 4) game.setPeriod(5);
     else game.setPeriod(current + 1);
@@ -64,7 +61,7 @@ export const Scoreboard: React.FC = () => {
   const getPeriodName = (p: number) => p <= 4 ? `Q${p}` : `OT${p - 4}`;
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-sans">
+    <div className="min-h-screen bg-black text-white font-sans flex flex-col overflow-hidden">
       
       {/* MODAL */}
       <PlayerSelectModal 
@@ -77,73 +74,206 @@ export const Scoreboard: React.FC = () => {
         actionLabel={pendingAction?.label || ""}
       />
 
-      {/* HEADER */}
-      <div className="max-w-7xl mx-auto mb-8 flex justify-between items-center bg-gray-900/50 p-4 rounded-xl border border-gray-800 backdrop-blur-sm">
-        <div className="text-gray-400 text-sm tracking-widest">
-          GAME CODE: <span className="text-blue-400 font-bold text-xl ml-2 font-mono">{gameCode}</span>
+      {/* === HEADER BAR === */}
+      <header className="h-14 bg-zinc-950 border-b border-zinc-800 flex justify-between items-center px-6 shrink-0 z-20">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1 bg-red-900/30 border border-red-900/50 rounded-full">
+            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+            <span className="text-[10px] font-bold text-red-500 tracking-widest uppercase">Live Connection</span>
+          </div>
+          <div className="h-4 w-[1px] bg-zinc-800"></div>
+          <div className="text-zinc-500 text-xs font-bold tracking-widest">
+            ID: <span className="text-white font-mono">{gameCode}</span>
+          </div>
+        </div>
+        <div className="text-zinc-600 text-[10px] font-bold uppercase tracking-[0.3em]">Console V2.4</div>
+      </header>
+
+      {/* === MAIN DISPLAY (JUMBOTRON) === */}
+      <div className="flex-1 relative flex flex-col">
+        {/* Background Grid FX */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black pointer-events-none"></div>
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+
+        {/* SCOREBOARD CONTAINER */}
+        <div className="relative z-10 flex-1 flex flex-col justify-center max-w-7xl mx-auto w-full p-4 lg:p-8">
+          
+          <div className="grid grid-cols-12 gap-4 lg:gap-8 h-full max-h-[500px]">
+            
+            {/* TEAM A DISPLAY */}
+            <div className="col-span-4 bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 flex flex-col relative overflow-hidden group">
+               {/* Team Color Accent */}
+               <div className="absolute top-0 left-0 w-full h-2" style={{ background: game.teamA.color }}></div>
+               {game.gameState.possession === 'A' && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-white/10 to-transparent"></div>}
+               
+               <div className="flex justify-between items-start mb-4">
+                 <h2 className="text-2xl lg:text-3xl font-black italic uppercase tracking-tighter text-white truncate max-w-[80%]">{game.teamA.name}</h2>
+                 {game.gameState.possession === 'A' && <div className="w-3 h-3 rounded-full bg-white shadow-[0_0_10px_white] animate-pulse"></div>}
+               </div>
+
+               <div className="flex-1 flex items-center justify-center">
+                 <div className="text-[8rem] lg:text-[10rem] font-mono font-bold leading-none tracking-tighter" style={{ color: game.teamA.color, textShadow: `0 0 40px ${game.teamA.color}40` }}>
+                   {game.teamA.score}
+                 </div>
+               </div>
+
+               <div className="flex justify-between items-end border-t border-zinc-800 pt-4">
+                  <div className="text-center">
+                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Fouls</div>
+                    <div className="text-2xl font-mono font-bold text-red-500">{game.teamA.fouls}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Timeouts</div>
+                    <div className="flex gap-1">
+                      {[...Array(7)].map((_, i) => (
+                        <div key={i} className={`w-2 h-4 rounded-sm ${i < game.teamA.timeouts ? 'bg-yellow-500 shadow-[0_0_5px_#eab308]' : 'bg-zinc-800'}`}></div>
+                      ))}
+                    </div>
+                  </div>
+               </div>
+            </div>
+
+            {/* CENTER CLOCK TOWER */}
+            <div className="col-span-4 flex flex-col gap-4">
+               {/* Main Clock */}
+               <div className="flex-1 bg-black border-2 border-zinc-800 rounded-2xl flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+                  <div className="absolute top-4 text-[10px] font-bold text-zinc-600 uppercase tracking-[0.4em]">Game Clock</div>
+                  <div className="scale-125 lg:scale-150 transform origin-center">
+                    <GameClock onTimeUpdate={(m,s,t) => game.updateGameTime(m,s,t)} />
+                  </div>
+               </div>
+
+               {/* Period & Shot Clock */}
+               <div className="h-1/3 grid grid-cols-2 gap-4">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col items-center justify-center">
+                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Period</span>
+                     <span className="text-4xl font-black italic text-white">{getPeriodName(game.gameState.period)}</span>
+                     <button onClick={handleNextPeriod} className="mt-2 text-[9px] text-blue-500 hover:text-white uppercase font-bold tracking-widest transition-colors">Adv &rarr;</button>
+                  </div>
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col items-center justify-center relative overflow-hidden">
+                     <div className="scale-75">
+                       <ShotClock seconds={game.gameState.shotClock} onReset={game.resetShotClock} />
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            {/* TEAM B DISPLAY */}
+            <div className="col-span-4 bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 flex flex-col relative overflow-hidden group">
+               {/* Team Color Accent */}
+               <div className="absolute top-0 right-0 w-full h-2" style={{ background: game.teamB.color }}></div>
+               {game.gameState.possession === 'B' && <div className="absolute top-0 left-0 w-16 h-16 bg-gradient-to-br from-white/10 to-transparent"></div>}
+               
+               <div className="flex justify-between items-start mb-4 flex-row-reverse">
+                 <h2 className="text-2xl lg:text-3xl font-black italic uppercase tracking-tighter text-white truncate max-w-[80%] text-right">{game.teamB.name}</h2>
+                 {game.gameState.possession === 'B' && <div className="w-3 h-3 rounded-full bg-white shadow-[0_0_10px_white] animate-pulse"></div>}
+               </div>
+
+               <div className="flex-1 flex items-center justify-center">
+                 <div className="text-[8rem] lg:text-[10rem] font-mono font-bold leading-none tracking-tighter" style={{ color: game.teamB.color, textShadow: `0 0 40px ${game.teamB.color}40` }}>
+                   {game.teamB.score}
+                 </div>
+               </div>
+
+               <div className="flex justify-between items-end border-t border-zinc-800 pt-4 flex-row-reverse">
+                  <div className="text-center">
+                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Fouls</div>
+                    <div className="text-2xl font-mono font-bold text-red-500">{game.teamB.fouls}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Timeouts</div>
+                    <div className="flex gap-1 flex-row-reverse">
+                      {[...Array(7)].map((_, i) => (
+                        <div key={i} className={`w-2 h-4 rounded-sm ${i < game.teamB.timeouts ? 'bg-yellow-500 shadow-[0_0_5px_#eab308]' : 'bg-zinc-800'}`}></div>
+                      ))}
+                    </div>
+                  </div>
+               </div>
+            </div>
+
+          </div>
         </div>
       </div>
 
-      {/* MAIN ARENA */}
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-8 items-start mb-8">
-        
-        {/* TEAM A */}
-        <TeamScoreCard 
-          name={game.teamA.name} 
-          color={game.teamA.color} 
-          score={game.teamA.score} 
-          onUpdateScore={(pts) => handleActionClick('A', 'points', pts)} // WIRED UP
-        />
+      {/* === THE CONTROL DECK (PILOT'S COCKPIT) === */}
+      <div className="bg-zinc-950 border-t border-zinc-800 p-6 z-30 shrink-0">
+        <div className="max-w-7xl mx-auto grid grid-cols-12 gap-8">
+          
+          {/* TEAM A CONTROLS */}
+          <div className="col-span-4 flex flex-col gap-4 border-r border-zinc-900 pr-8">
+             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-1">{game.teamA.name} Controls</div>
+             
+             {/* Score Buttons */}
+             <div className="grid grid-cols-3 gap-2">
+               <ScoreBtn value={1} color={game.teamA.color} onClick={() => handleActionClick('A', 'points', 1)} />
+               <ScoreBtn value={2} color={game.teamA.color} onClick={() => handleActionClick('A', 'points', 2)} />
+               <ScoreBtn value={3} color={game.teamA.color} onClick={() => handleActionClick('A', 'points', 3)} />
+             </div>
 
-        {/* CENTER CONSOLE */}
-        <div className="flex flex-col items-center gap-6">
-           <div className="bg-gray-800 px-6 py-2 rounded-full font-bold border border-gray-700">{getPeriodName(game.gameState.period)}</div>
-           <GameClock onTimeUpdate={(m,s,t) => game.updateGameTime(m,s,t)} />
-           <div className="scale-110"><ShotClock seconds={game.gameState.shotClock} onReset={game.resetShotClock} /></div>
-           <button onClick={handleNextPeriod} className="mt-4 px-6 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg border border-gray-700">Next Period &rarr;</button>
+             {/* Admin Row */}
+             <div className="grid grid-cols-3 gap-2 mt-1">
+                <AdminBtn label="FOUL" color="text-red-500" onClick={() => handleActionClick('A', 'foul', 1)} />
+                <AdminBtn label="TIMEOUT" color="text-yellow-500" onClick={() => game.updateTimeouts('A', -1)} />
+                <AdminBtn label="UNDO" color="text-zinc-500" onClick={() => handleActionClick('A', 'points', -1)} />
+             </div>
+          </div>
+
+          {/* CENTER ACTIONS */}
+          <div className="col-span-4 flex items-center justify-center gap-4">
+             <button 
+               onClick={game.togglePossession} 
+               className="w-20 h-20 rounded-full bg-zinc-900 border-2 border-zinc-800 hover:border-white transition-all flex flex-col items-center justify-center gap-1 group active:scale-95"
+             >
+               <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-white">Poss</span>
+               <span className="text-2xl font-black text-white">
+                 {game.gameState.possession === 'A' ? '◀' : '▶'}
+               </span>
+             </button>
+          </div>
+
+          {/* TEAM B CONTROLS */}
+          <div className="col-span-4 flex flex-col gap-4 border-l border-zinc-900 pl-8">
+             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-1 text-right">{game.teamB.name} Controls</div>
+             
+             {/* Score Buttons */}
+             <div className="grid grid-cols-3 gap-2">
+               <ScoreBtn value={1} color={game.teamB.color} onClick={() => handleActionClick('B', 'points', 1)} />
+               <ScoreBtn value={2} color={game.teamB.color} onClick={() => handleActionClick('B', 'points', 2)} />
+               <ScoreBtn value={3} color={game.teamB.color} onClick={() => handleActionClick('B', 'points', 3)} />
+             </div>
+
+             {/* Admin Row */}
+             <div className="grid grid-cols-3 gap-2 mt-1">
+                <AdminBtn label="UNDO" color="text-zinc-500" onClick={() => handleActionClick('B', 'points', -1)} />
+                <AdminBtn label="TIMEOUT" color="text-yellow-500" onClick={() => game.updateTimeouts('B', -1)} />
+                <AdminBtn label="FOUL" color="text-red-500" onClick={() => handleActionClick('B', 'foul', 1)} />
+             </div>
+          </div>
+
         </div>
-
-        {/* TEAM B */}
-        <TeamScoreCard 
-          name={game.teamB.name} 
-          color={game.teamB.color} 
-          score={game.teamB.score} 
-          onUpdateScore={(pts) => handleActionClick('B', 'points', pts)} // WIRED UP
-        />
       </div>
 
-      {/* STATS DECK */}
-      <div className="max-w-5xl mx-auto bg-gray-900 rounded-2xl p-6 border-t-4 border-gray-800 grid grid-cols-1 md:grid-cols-3 gap-8 items-center shadow-2xl">
-        
-        <div className="space-y-4">
-          <StatRow label="FOULS" value={game.teamA.fouls} color={game.teamA.color} onMinus={() => handleActionClick('A', 'foul', -1)} onPlus={() => handleActionClick('A', 'foul', 1)} />
-          <StatRow label="TIMEOUTS" value={game.teamA.timeouts} color="white" onMinus={() => game.updateTimeouts('A', -1)} onPlus={() => game.updateTimeouts('A', 1)} />
-        </div>
-
-        <div onClick={game.togglePossession} className="cursor-pointer flex flex-col items-center justify-center p-4 bg-black rounded-xl border border-gray-800 hover:border-gray-600 transition-colors group">
-          <div className="text-gray-500 text-xs mb-2 tracking-widest group-hover:text-white">POSSESSION</div>
-          <div className="text-6xl" style={{ color: game.gameState.possession === 'A' ? game.teamA.color : game.teamB.color }}>{game.gameState.possession === 'A' ? '◄' : '►'}</div>
-        </div>
-
-        <div className="space-y-4">
-          <StatRow label="FOULS" value={game.teamB.fouls} color={game.teamB.color} right onMinus={() => handleActionClick('B', 'foul', -1)} onPlus={() => handleActionClick('B', 'foul', 1)} />
-          <StatRow label="TIMEOUTS" value={game.teamB.timeouts} color="white" right onMinus={() => game.updateTimeouts('B', -1)} onPlus={() => game.updateTimeouts('B', 1)} />
-        </div>
-
-      </div>
     </div>
   );
 };
 
-// Reusable Stat Component
-const StatRow = ({ label, value, color, onPlus, onMinus, right }: any) => (
-  <div className={`flex items-center gap-4 font-bold ${right ? 'justify-end' : 'justify-start'}`}>
-    {!right && <span className="text-gray-500 w-20 text-sm">{label}</span>}
-    <div className="flex items-center bg-gray-800 rounded-lg p-1 border border-gray-700">
-      <button onClick={onMinus} className="w-8 h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors">-</button>
-      <span className="w-12 text-center text-xl font-mono" style={{ color: color }}>{value}</span>
-      <button onClick={onPlus} className="w-8 h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors">+</button>
-    </div>
-    {right && <span className="text-gray-500 w-20 text-sm text-right">{label}</span>}
-  </div>
+// --- SUB-COMPONENTS ---
+
+const ScoreBtn = ({ value, color, onClick }: any) => (
+  <button 
+    onClick={onClick}
+    className="h-16 rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-white/20 transition-all active:scale-95 active:bg-white flex flex-col items-center justify-center group shadow-lg"
+    style={{ borderBottom: `4px solid ${color}` }}
+  >
+    <span className="text-2xl font-black italic text-white group-active:text-black">+{value}</span>
+  </button>
+);
+
+const AdminBtn = ({ label, color, onClick }: any) => (
+  <button 
+    onClick={onClick}
+    className={`h-10 rounded bg-black border border-zinc-800 hover:border-zinc-600 transition-all active:scale-95 flex items-center justify-center ${color} font-black text-[10px] uppercase tracking-widest`}
+  >
+    {label}
+  </button>
 );
