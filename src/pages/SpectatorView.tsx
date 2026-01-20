@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useBasketballGame } from '../hooks/useBasketballGame';
 import { TeamScoreCard } from '../components/TeamScoreCard';
-import { GameClock } from '../components/GameClock'; // We reuse the style, but override the time
+// Removed unused GameClock import
 import { ShotClock } from '../components/ShotClock';
 
 // A Special Wrapper to force GameClock to show DB time, not internal time

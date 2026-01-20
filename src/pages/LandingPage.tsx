@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User } from 'firebase/auth';
+// Removed unused User import
 import type { BasketballGame } from '../types';
-import { loginWithGoogle, loginWithEmail, registerWithEmail, logoutUser, subscribeToAuth } from '../services/authService';
+import { loginWithGoogle, loginWithEmail, registerWithEmail, subscribeToAuth } from '../services/authService'; // Removed logoutUser
 import { subscribeToLiveGames } from '../services/gameService';
 
 export const LandingPage: React.FC = () => {

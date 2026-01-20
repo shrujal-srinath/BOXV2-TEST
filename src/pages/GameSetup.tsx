@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { createGame } from '../services/gameService';
-import { auth } from '../services/firebase'; // Added import for dynamic hostId
-import type { BasketballGame, TeamData, Player } from '../types';
+import { initializeNewGame } from '../services/gameService'; // Updated import
+import type { Player } from '../types';
 
 // Preset Colors
 const TEAM_COLORS = [
@@ -133,41 +132,20 @@ export const GameSetup: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      const gameCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-      const finalGameName = gameName.trim() || "LEAGUE MATCH 01";
-      const finalTeamA = teamAName.trim() || "TEAM A";
-      const finalTeamB = teamBName.trim() || "TEAM B";
-
-      // Dynamically get the Host ID (Logged in user OR Guest fallback)
-      const currentHostId = auth.currentUser?.uid || "guest-operator";
-
-      const newGame: BasketballGame = {
-        hostId: currentHostId, 
-        code: gameCode,
-        gameType: trackStats ? "pro" : "standard",
-        sport: sportType,
-        status: "live",
-        settings: { 
-          gameName: finalGameName, 
-          periodDuration: periodDuration, 
-          shotClockDuration: shotClockEnabled ? shotClockDuration : 0, 
-          periodType: periodType 
+      // Robust Logic: Use the centralized service to create the game
+      const gameCode = await initializeNewGame(
+        {
+          gameName: gameName.trim() || "LEAGUE MATCH 01",
+          periodDuration,
+          shotClockDuration: shotClockEnabled ? shotClockDuration : 0,
+          periodType
         },
-        teamA: { name: finalTeamA, color: teamAColor, score: 0, timeouts: 7, fouls: 0, players: trackStats ? rosterA : [] } as TeamData,
-        teamB: { name: finalTeamB, color: teamBColor, score: 0, timeouts: 7, fouls: 0, players: trackStats ? rosterB : [] } as TeamData,
-        gameState: { 
-          period: 1, 
-          gameTime: { minutes: periodDuration, seconds: 0, tenths: 0 }, 
-          shotClock: shotClockEnabled ? shotClockDuration : 0, 
-          possession: 'A', 
-          gameRunning: false, 
-          shotClockRunning: false 
-        },
-        lastUpdate: Date.now()
-      };
+        { name: teamAName || "TEAM A", color: teamAColor, players: trackStats ? rosterA : [] },
+        { name: teamBName || "TEAM B", color: teamBColor, players: trackStats ? rosterB : [] },
+        trackStats,
+        sportType
+      );
 
-      await createGame(gameCode, newGame);
       console.log("Game created successfully:", gameCode);
       navigate(`/host/${gameCode}`);
     } catch (error: any) {
