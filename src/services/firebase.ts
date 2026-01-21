@@ -2,8 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
   initializeFirestore, 
-  persistentLocalCache, 
-  persistentMultipleTabManager 
+  memoryLocalCache // <--- Use Memory Cache instead of Persistent
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
@@ -22,12 +21,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 
-// Initialize Firestore with robust settings (Fixes "Client Offline" issues)
+// Initialize Firestore
+// FIX: We removed 'experimentalForceLongPolling' and 'persistentLocalCache'
+// This forces a fresh connection every time and lets the browser choose the best network method.
 const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true, // Keep this true for stability
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
+  localCache: memoryLocalCache() 
 });
 
 const auth = getAuth(app);
