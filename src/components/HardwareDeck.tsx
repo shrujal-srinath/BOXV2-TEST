@@ -66,12 +66,8 @@ export const HardwareDeck: React.FC<HardwareDeckProps> = ({
     callback();
   };
 
-  // Format game clock
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
+  // --- FIX 1: Correctly format time from the GameState object ---
+  const formattedTime = `${gameState.gameTime.minutes.toString().padStart(2, '0')}:${gameState.gameTime.seconds.toString().padStart(2, '0')}`;
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#1a1a1a] text-white select-none overflow-hidden font-sans fixed inset-0" style={{ backgroundImage: 'radial-gradient(circle at center, #2a2a2a 0%, #1a1a1a 100%)' }}>
@@ -93,7 +89,8 @@ export const HardwareDeck: React.FC<HardwareDeckProps> = ({
           {/* Center Info */}
           <div className="flex flex-col items-center">
             <span className="text-blue-400 font-bold text-xl tracking-wider uppercase mb-4">PERIOD {gameState.period}</span>
-            <span className="text-8xl font-black text-white font-mono tracking-tight tabular-nums">{formatTime(gameState.timeLeft)}</span>
+            {/* Display the Fixed Formatted Time */}
+            <span className="text-8xl font-black text-white font-mono tracking-tight tabular-nums">{formattedTime}</span>
             <span className="text-yellow-400 font-bold text-2xl tracking-wider uppercase mt-4">SHOT CLOCK {gameState.shotClock}</span>
           </div>
 
@@ -116,6 +113,7 @@ export const HardwareDeck: React.FC<HardwareDeckProps> = ({
         <div className="flex flex-col gap-6 p-6 bg-zinc-900/50 rounded-3xl border-2 border-zinc-700/50 shadow-xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-600 to-green-400"></div>
           <h3 className="text-center text-green-400 font-bold text-2xl uppercase tracking-wider">HOME</h3>
+          
           <div className="flex items-center justify-between bg-zinc-800/50 p-4 rounded-xl">
             <span className="font-bold text-xl">SCORE</span>
             <div className="flex gap-4">
@@ -124,19 +122,14 @@ export const HardwareDeck: React.FC<HardwareDeckProps> = ({
             </div>
           </div>
           <div className="flex items-center justify-between bg-zinc-800/50 p-4 rounded-xl">
-            <span className="font-bold text-xl">+1</span>
+            <span className="font-bold text-xl">POINTS</span>
             <div className="flex gap-4">
-              <ScoreCircleBtn label="+1" color="green" onClick={() => sendSignal("HOME_+1_+1", { v: 1 }, () => onAction('A', 'points', 1))} />
-              <ScoreCircleBtn label="-1" color="green" onClick={() => sendSignal("HOME_+1_-1", { v: -1 }, () => onAction('A', 'points', -1))} />
+               {/* Fixed Logic: Assuming these are meant to be bigger jumps like +2/+3 or just generic adders */}
+              <ScoreCircleBtn label="+2" color="green" onClick={() => sendSignal("HOME_SCORE_+2", { v: 2 }, () => onAction('A', 'points', 2))} />
+              <ScoreCircleBtn label="+3" color="green" onClick={() => sendSignal("HOME_SCORE_+3", { v: 3 }, () => onAction('A', 'points', 3))} />
             </div>
           </div>
-          <div className="flex items-center justify-between bg-zinc-800/50 p-4 rounded-xl">
-            <span className="font-bold text-xl">-1</span>
-            <div className="flex gap-4">
-              <ScoreCircleBtn label="+1" color="green" onClick={() => sendSignal("HOME_-1_+1", { v: 1 }, () => onAction('A', 'points', 1))} />
-              <ScoreCircleBtn label="-1" color="green" onClick={() => sendSignal("HOME_-1_-1", { v: -1 }, () => onAction('A', 'points', -1))} />
-            </div>
-          </div>
+
           <div className="flex gap-4 mt-auto">
             <RectBtn label="FOULS" color="green" onClick={() => sendSignal("HOME_FOUL", {}, () => onAction('A', 'foul', 1))} className="flex-1" />
             <RectBtn label="TIME OUTS" color="green" onClick={() => sendSignal("HOME_TIMEOUT", {}, () => onAction('A', 'timeout', 1))} className="flex-1" />
@@ -171,6 +164,7 @@ export const HardwareDeck: React.FC<HardwareDeckProps> = ({
         <div className="flex flex-col gap-6 p-6 bg-zinc-900/50 rounded-3xl border-2 border-zinc-700/50 shadow-xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-600 to-red-400"></div>
           <h3 className="text-center text-red-400 font-bold text-2xl uppercase tracking-wider">GUEST</h3>
+          
           <div className="flex items-center justify-between bg-zinc-800/50 p-4 rounded-xl">
             <span className="font-bold text-xl">SCORE</span>
             <div className="flex gap-4">
@@ -179,19 +173,13 @@ export const HardwareDeck: React.FC<HardwareDeckProps> = ({
             </div>
           </div>
           <div className="flex items-center justify-between bg-zinc-800/50 p-4 rounded-xl">
-            <span className="font-bold text-xl">+1</span>
+            <span className="font-bold text-xl">POINTS</span>
             <div className="flex gap-4">
-              <ScoreCircleBtn label="+1" color="red" onClick={() => sendSignal("GUEST_+1_+1", { v: 1 }, () => onAction('B', 'points', 1))} />
-              <ScoreCircleBtn label="-1" color="red" onClick={() => sendSignal("GUEST_+1_-1", { v: -1 }, () => onAction('B', 'points', -1))} />
+              <ScoreCircleBtn label="+2" color="red" onClick={() => sendSignal("GUEST_SCORE_+2", { v: 2 }, () => onAction('B', 'points', 2))} />
+              <ScoreCircleBtn label="+3" color="red" onClick={() => sendSignal("GUEST_SCORE_+3", { v: 3 }, () => onAction('B', 'points', 3))} />
             </div>
           </div>
-          <div className="flex items-center justify-between bg-zinc-800/50 p-4 rounded-xl">
-            <span className="font-bold text-xl">-1</span>
-            <div className="flex gap-4">
-              <ScoreCircleBtn label="+1" color="red" onClick={() => sendSignal("GUEST_-1_+1", { v: 1 }, () => onAction('B', 'points', 1))} />
-              <ScoreCircleBtn label="-1" color="red" onClick={() => sendSignal("GUEST_-1_-1", { v: -1 }, () => onAction('B', 'points', -1))} />
-            </div>
-          </div>
+
           <div className="flex gap-4 mt-auto">
             <RectBtn label="FOULS" color="red" onClick={() => sendSignal("GUEST_FOUL", {}, () => onAction('B', 'foul', 1))} className="flex-1" />
             <RectBtn label="TIME OUTS" color="red" onClick={() => sendSignal("GUEST_TIMEOUT", {}, () => onAction('B', 'timeout', 1))} className="flex-1" />

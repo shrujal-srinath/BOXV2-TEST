@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { HardwareDeck } from '../components/HardwareDeck';
 import { saveGameAction, loadLocalGame } from '../services/hybridService';
 import type { BasketballGame } from '../types';
-import { subscribeToGame } from '../services/gameService'; // We still listen for remote updates if wifi exists
+import { subscribeToGame } from '../services/gameService'; 
 
 export const TabletController: React.FC = () => {
   const { gameCode } = useParams();
@@ -20,10 +20,7 @@ export const TabletController: React.FC = () => {
     }
 
     // Subscribe to cloud updates (Hybrid Sync)
-    // This ensures if someone updates the score elsewhere, the tablet eventually sees it
     const unsubscribe = subscribeToGame(gameCode, (cloudData) => {
-      // We prioritize our local input, but we sync if needed.
-      // For a controller, we usually trust the cloud state if it's newer.
       setGame(cloudData);
     });
 
@@ -31,7 +28,6 @@ export const TabletController: React.FC = () => {
   }, [gameCode]);
 
   // 2. LOGIC HANDLERS (Mutate State Locally -> Save Hybrid)
-  
   const updateGame = (updater: (g: BasketballGame) => void) => {
     if (!game) return;
     
@@ -77,13 +73,17 @@ export const TabletController: React.FC = () => {
        })}
 
        onShotClock={(action) => updateGame((g) => {
-         // Standard Reset Logic
          if (action === 'reset-24') g.gameState.shotClock = 24;
          if (action === 'reset-14') g.gameState.shotClock = 14;
        })}
 
        onPossession={() => updateGame((g) => {
          g.gameState.possession = g.gameState.possession === 'A' ? 'B' : 'A';
+       })}
+
+       // --- FIX 2: Added the missing Next Period Handler ---
+       onNextPeriod={() => updateGame((g) => {
+          g.gameState.period = (g.gameState.period % 4) + 1; // Cycles 1 -> 2 -> 3 -> 4 -> 1
        })}
     />
   );
