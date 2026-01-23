@@ -35,10 +35,20 @@ export const Scoreboard: React.FC = () => {
   } | null>(null);
 
   // ==========================================
-  // 1. TIMER ENGINE
+  // 1. TIMER ENGINE (FIXED)
   // ==========================================
+  
+  // A. Use a Ref to hold the latest state. 
+  // This allows the interval to read the latest time WITHOUT needing to restart the timer every second.
+  const gameStateRef = useRef(game.gameState);
+
+  // Keep the Ref synced with the real state
   useEffect(() => {
-    // Keyboard Shortcuts
+    gameStateRef.current = game.gameState;
+  }, [game.gameState]);
+
+  useEffect(() => {
+    // Keyboard Shortcuts (Keep as is)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT') return;
       switch(e.key) {
@@ -55,20 +65,38 @@ export const Scoreboard: React.FC = () => {
     if (game.gameState.gameRunning) {
       if (!timerRef.current) {
         timerRef.current = window.setInterval(() => {
-          const currentSec = (game.gameState.gameTime.minutes * 60) + game.gameState.gameTime.seconds;
+          // READ FROM REF (Solves the "Stale State" issue without restarting interval)
+          const currentState = gameStateRef.current; 
           
-          if (currentSec > 0) {
-            const newTotal = currentSec - 1;
-            game.updateGameTime(Math.floor(newTotal / 60), newTotal % 60, 0); 
+          const currentTotalSec = (currentState.gameTime.minutes * 60) + currentState.gameTime.seconds;
+          const currentShotClock = currentState.shotClock;
+
+          if (currentTotalSec > 0) {
+            // 1. Decrement Game Time
+            const newTotal = currentTotalSec - 1;
+            
+            // 2. Decrement Shot Clock (FIXED: Now we actually calculate it!)
+            // Logic: Decrease only if it's above 0.
+            let newShot = currentShotClock > 0 ? currentShotClock - 1 : 0;
+            
+            // Auto-reset Shot Clock? (Optional: Usually in basketball it just buzzes and stops, so we keep at 0)
+            
+            // 3. Update Both (Pass newShot instead of 0)
+            game.updateGameTime(Math.floor(newTotal / 60), newTotal % 60, newShot); 
+
+            // Optional: Auto-stop if shot clock hits 0?
+            // if (currentShotClock === 1) { playHorn(); } 
+
           } else {
-            // Time Expired
-            game.toggleTimer(); // Stop clock
+            // Game Time Expired
+            game.toggleTimer(); 
             game.updateGameTime(0, 0, 0);
             playHorn();
           }
         }, 1000);
       }
     } else {
+      // Clean up if paused
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -79,8 +107,9 @@ export const Scoreboard: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [game.gameState.gameRunning, game.gameState.gameTime]);
-
+  // CRITICAL: We REMOVED 'game.gameState.gameTime' from dependencies to stop the "1 second freeze"
+  }, [game.gameState.gameRunning]);
+  
 
   // ==========================================
   // 2. ACTIONS & HANDLERS

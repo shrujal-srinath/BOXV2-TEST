@@ -5,6 +5,7 @@ import { LandingPage } from './pages/LandingPage';
 import { Dashboard } from './pages/Dashboard';
 import { GameSetup } from './pages/GameSetup';
 import { SpectatorView } from './pages/SpectatorView';
+import { TabletController } from './pages/TabletController'; // <--- Added Import
 
 // Import the Scoreboard (Host Console)
 import { Scoreboard } from './components/Scoreboard';
@@ -26,6 +27,9 @@ function App() {
           {/* === THE MISSING LINK === */}
           {/* This tells the app what to show when you navigate to /host/... */}
           <Route path="/host/:gameCode" element={<Scoreboard />} />
+
+          {/* Dedicated Offline Controller Route */}
+          <Route path="/tablet/:gameCode" element={<TabletController />} /> {/* <--- Added Route */}
 
           {/* Public Spectator Screen */}
           <Route path="/watch/:gameId" element={<SpectatorView />} />
