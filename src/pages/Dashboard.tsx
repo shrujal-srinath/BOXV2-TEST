@@ -15,7 +15,7 @@ export const Dashboard: React.FC = () => {
   
   // Menu & Modal States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | null>(null);
+  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | null>(null);
 
   // --- INIT ---
   useEffect(() => {
@@ -33,8 +33,17 @@ export const Dashboard: React.FC = () => {
   };
 
   const startNewGame = (sportId: string) => {
-    // Navigate to setup with the selected sport type
     navigate('/setup', { state: { sport: sportId } });
+  };
+
+  // NEW: Navigate to tablet mode with game selection
+  const goToTabletMode = (gameCode?: string) => {
+    if (gameCode) {
+      navigate(`/tablet/${gameCode}`);
+    } else {
+      // If no game code provided, show modal to select game
+      setActiveModal('tablet');
+    }
   };
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>;
@@ -94,6 +103,16 @@ export const Dashboard: React.FC = () => {
             <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
             <MenuItem label="System Status" icon="⚡" onClick={() => { setIsMenuOpen(false); setActiveModal('status'); }} />
             <MenuItem label="Settings" icon="⚙" onClick={() => { setIsMenuOpen(false); setActiveModal('settings'); }} />
+            
+            {/* === NEW: TABLET MODE OPTION === */}
+            <div className="pt-4 mt-4 border-t border-zinc-900">
+              <MenuItem 
+                label="Tablet Mode" 
+                icon="📱" 
+                onClick={() => { setIsMenuOpen(false); goToTabletMode(); }} 
+                highlight={true}
+              />
+            </div>
           </div>
 
           <div className="pt-6 border-t border-zinc-900">
@@ -185,7 +204,7 @@ export const Dashboard: React.FC = () => {
              ) : (
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                  {myGames.map(g => (
-                   <div key={g.code} onClick={() => navigate(`/host/${g.code}`)} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm hover:border-green-500 cursor-pointer transition-all group relative overflow-hidden">
+                   <div key={g.code} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm hover:border-green-500 transition-all group relative overflow-hidden">
                       <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
                       <div className="flex justify-between items-start mb-4">
                         <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sport || 'BASKETBALL'}</div>
@@ -194,10 +213,26 @@ export const Dashboard: React.FC = () => {
                       <h3 className="font-black italic text-xl text-white mb-1 group-hover:text-green-400 transition-colors uppercase">{g.settings.gameName}</h3>
                       <div className="text-xs font-mono text-zinc-400 mb-4">ID: {g.code}</div>
                       
-                      <div className="flex items-center justify-between bg-black p-3 rounded border border-zinc-800">
+                      <div className="flex items-center justify-between bg-black p-3 rounded border border-zinc-800 mb-3">
                          <div className="font-bold text-white">{g.teamA.score}</div>
                          <div className="text-[9px] text-zinc-600 uppercase">VS</div>
                          <div className="font-bold text-white">{g.teamB.score}</div>
+                      </div>
+
+                      {/* === NEW: ACTION BUTTONS === */}
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => navigate(`/host/${g.code}`)}
+                          className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors"
+                        >
+                          Console
+                        </button>
+                        <button 
+                          onClick={() => goToTabletMode(g.code)}
+                          className="flex-1 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors"
+                        >
+                          📱 Tablet
+                        </button>
                       </div>
                    </div>
                  ))}
@@ -254,7 +289,53 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {/* 3. HISTORY / SETTINGS PLACEHOLDERS */}
+      {/* === NEW: 3. TABLET MODE SELECTION MODAL === */}
+      {activeModal === 'tablet' && (
+        <Modal title="Enter Tablet Mode" onClose={() => setActiveModal(null)}>
+           <div className="mb-6">
+             <p className="text-sm text-zinc-400 mb-4">
+               Select a game to control in tablet mode, or start a new game first.
+             </p>
+             
+             {myGames.length === 0 ? (
+               <div className="bg-zinc-900 border border-zinc-800 p-8 rounded text-center">
+                 <div className="text-3xl mb-3 opacity-30">📱</div>
+                 <p className="text-zinc-500 text-xs">No active games available.</p>
+                 <button 
+                   onClick={() => { setActiveModal(null); navigate('/setup'); }}
+                   className="mt-4 px-6 py-2 bg-white text-black font-bold text-xs uppercase tracking-widest rounded hover:bg-zinc-200 transition-colors"
+                 >
+                   Create New Game
+                 </button>
+               </div>
+             ) : (
+               <div className="space-y-2 max-h-96 overflow-y-auto">
+                 {myGames.map(g => (
+                   <button
+                     key={g.code}
+                     onClick={() => goToTabletMode(g.code)}
+                     className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-blue-500 p-4 rounded text-left transition-all group"
+                   >
+                     <div className="flex justify-between items-center mb-2">
+                       <h4 className="font-black text-white group-hover:text-blue-400 transition-colors">
+                         {g.settings.gameName}
+                       </h4>
+                       <span className="text-xs font-mono text-zinc-500">{g.code}</span>
+                     </div>
+                     <div className="flex items-center gap-4 text-xs text-zinc-400">
+                       <span>{g.teamA.name} {g.teamA.score}</span>
+                       <span>-</span>
+                       <span>{g.teamB.score} {g.teamB.name}</span>
+                     </div>
+                   </button>
+                 ))}
+               </div>
+             )}
+           </div>
+        </Modal>
+      )}
+
+      {/* 4. HISTORY / SETTINGS PLACEHOLDERS */}
       {(activeModal === 'history' || activeModal === 'settings') && (
         <Modal title={activeModal === 'history' ? "Match History" : "System Settings"} onClose={() => setActiveModal(null)}>
            <div className="text-center py-12">
@@ -298,13 +379,14 @@ const SportCard = ({ name, desc, icon, onClick, accent }: any) => {
   );
 };
 
-const MenuItem = ({ label, icon, onClick, active, disabled }: any) => (
+const MenuItem = ({ label, icon, onClick, active, disabled, highlight }: any) => (
   <button 
     onClick={onClick}
     disabled={disabled}
     className={`w-full text-left flex items-center gap-4 p-4 rounded transition-all uppercase font-bold text-[10px] tracking-widest
       ${active ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-900'}
       ${disabled ? 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-zinc-500' : ''}
+      ${highlight ? 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300 border border-blue-900/50' : ''}
     `}
   >
     <span className="text-lg w-6 text-center">{icon}</span>
