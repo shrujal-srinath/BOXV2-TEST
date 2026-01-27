@@ -9,13 +9,13 @@ import {
   where, 
   limit 
 } from "firebase/firestore";
-import { db, auth } from "./firebase"; // <--- Added auth import
+import { db, auth } from "./firebase";
 import type { BasketballGame, TeamData } from "../types";
 
 // --- HELPER: DATA SANITIZER ---
 // ⚠️ CRITICAL FIX: Removes 'undefined' values which crash Firestore
 const sanitize = (obj: any): any => {
-  return JSON.parse(JSON.stringify(obj, (key, value) => {
+  return JSON.parse(JSON.stringify(obj, (_key, value) => {
     return value === undefined ? null : value;
   }));
 };
@@ -50,7 +50,6 @@ export const createGame = async (gameId: string, initialData: BasketballGame) =>
     const docSnap = await getDoc(gameRef);
 
     if (!docSnap.exists()) {
-      // ⚠️ FIX: Sanitize data before writing to prevent 'invalid data' errors
       const cleanData = sanitize(initialData);
       console.log("Attempting to write game data:", cleanData);
       await setDoc(gameRef, cleanData);
@@ -64,7 +63,6 @@ export const createGame = async (gameId: string, initialData: BasketballGame) =>
 };
 
 // 4. Initialize New Game (Factory Function)
-// ⚠️ FIX: This function is required by your GameSetup page
 export const initializeNewGame = async (
   settings: {
     gameName: string;

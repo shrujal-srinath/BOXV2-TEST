@@ -1,12 +1,13 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
-  initializeFirestore, 
-  memoryLocalCache // <--- Use Memory Cache instead of Persistent
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// --- NEW CONFIGURATION (Project: boxv2-1) ---
+// --- FIREBASE CONFIGURATION (Project: boxv2-1) ---
 const firebaseConfig = {
   apiKey: "AIzaSyBC9eer79l4s22UEoFhaR1Q9L6TNuVPdIw",
   authDomain: "boxv2-1.firebaseapp.com",
@@ -21,11 +22,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 
-// Initialize Firestore
-// FIX: We removed 'experimentalForceLongPolling' and 'persistentLocalCache'
-// This forces a fresh connection every time and lets the browser choose the best network method.
+// Initialize Firestore with PERSISTENT cache for offline support
 const db = initializeFirestore(app, {
-  localCache: memoryLocalCache() 
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
 });
 
 const auth = getAuth(app);
