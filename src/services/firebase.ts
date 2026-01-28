@@ -7,16 +7,22 @@ import {
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// --- FIREBASE CONFIGURATION (Project: boxv2-1) ---
+// --- FIREBASE CONFIGURATION (Using Environment Variables) ---
 const firebaseConfig = {
-  apiKey: "AIzaSyBC9eer79l4s22UEoFhaR1Q9L6TNuVPdIw",
-  authDomain: "boxv2-1.firebaseapp.com",
-  projectId: "boxv2-1",
-  storageBucket: "boxv2-1.firebasestorage.app",
-  messagingSenderId: "54168657545",
-  appId: "1:54168657545:web:a84547766022c30449f058",
-  measurementId: "G-BE6020M5WD"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+
+// Validate that all required env vars are present
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error('❌ FIREBASE CONFIG ERROR: Missing required environment variables');
+  console.error('Please ensure all VITE_FIREBASE_* variables are set');
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
