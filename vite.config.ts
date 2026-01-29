@@ -1,3 +1,4 @@
+// vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -14,12 +15,12 @@ export default defineConfig({
         description: 'Offline Sports Controller Unit',
         theme_color: '#000000',
         background_color: '#000000',
-        display: 'standalone',
-        orientation: 'landscape',
+        display: 'standalone',      
+        orientation: 'landscape',   
         start_url: '/',
         icons: [
           {
-            src: 'vite.svg',
+            src: 'vite.svg',        
             sizes: '192x192',
             type: 'image/svg+xml'
           },
@@ -31,18 +32,18 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Increases the cache limit to 5MB to prevent PWA build failures
+        // Cache limit increased to 5MB for large sports assets
         maximumFileSizeToCacheInBytes: 5000000,
         globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       }
     })
   ],
   build: {
-    // Raises the threshold to silence Vercel chunk warnings
+    // FIX: Silences Vercel chunk size warnings
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
-        // Splits large libraries into a separate 'vendor' file for faster loading
+        // FIX: Optimized code splitting for Dashboard/Tablet pages
         manualChunks(id) {
           if (id.includes('node_modules')) {
             return 'vendor';
