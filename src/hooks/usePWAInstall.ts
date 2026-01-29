@@ -5,6 +5,12 @@ export const usePWAInstall = () => {
   const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstallable(false);
+      return;
+    }
+
     const handler = (e: any) => {
       // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();

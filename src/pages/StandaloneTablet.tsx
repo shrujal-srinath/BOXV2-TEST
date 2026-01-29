@@ -3,19 +3,22 @@
  * STANDALONE TABLET PAGE
  * Entry point for offline-first tablet mode
  * User can create local games or resume existing ones without cloud connection
+ * Integrated with PWA installation logic for offline reliability.
  */
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Play, Cloud, Settings, Download, Upload } from 'lucide-react';
+import { Users, Play, Cloud, Settings, Download } from 'lucide-react';
 import { BootSequence } from '../features/tablet/BootSequence';
 import { getLocalGameLibrary, getStorageStats, type LocalGameMetadata } from '../services/localGameService';
 import { getSyncStatus, triggerManualSync } from '../services/syncService';
 import { auth } from '../services/firebase';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 import '../styles/hardware.css';
 
 export const StandaloneTablet: React.FC = () => {
   const navigate = useNavigate();
+  const { isInstallable, handleInstallClick } = usePWAInstall();
   
   // State
   const [isBooting, setIsBooting] = useState(true);
@@ -105,7 +108,7 @@ export const StandaloneTablet: React.FC = () => {
         <div className="max-w-4xl mx-auto space-y-6">
           
           {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Create New Game */}
             <button
               onClick={() => setShowCreateModal(true)}
@@ -117,6 +120,37 @@ export const StandaloneTablet: React.FC = () => {
               <div className="text-center">
                 <div className="text-lg font-black text-white uppercase">Start New Game</div>
                 <div className="text-xs text-zinc-500 mt-1">Quick Setup</div>
+              </div>
+            </button>
+
+            {/* PWA Install Button (Always Visible, States Handled) */}
+            <button
+              onClick={isInstallable ? handleInstallClick : undefined}
+              disabled={!isInstallable}
+              className={`metal-panel p-8 flex flex-col items-center justify-center gap-4 transition-all group relative
+                ${isInstallable 
+                  ? 'border-dashed border-blue-500/50 hover:border-blue-400 cursor-pointer animate-pulse' 
+                  : 'opacity-30 grayscale cursor-not-allowed border-transparent bg-zinc-900/10'
+                }`}
+            >
+               {/* Tooltip/Overlay for Disabled State */}
+               {!isInstallable && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center">
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest bg-black/80 px-2 py-1 rounded border border-zinc-800">
+                    Already Installed
+                  </span>
+                </div>
+              )}
+
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all 
+                ${isInstallable ? 'bg-blue-900/20 group-hover:bg-blue-900/40' : 'bg-zinc-800/20'}`}>
+                <Download size={32} className={isInstallable ? 'text-blue-400' : 'text-zinc-600'} />
+              </div>
+              <div className="text-center">
+                <div className={`text-lg font-black uppercase ${isInstallable ? 'text-white' : 'text-zinc-600'}`}>
+                  Install App
+                </div>
+                <div className="text-xs text-zinc-500 mt-1">Offline Access</div>
               </div>
             </button>
 
