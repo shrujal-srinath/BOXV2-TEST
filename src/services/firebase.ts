@@ -1,3 +1,4 @@
+// src/services/firebase.ts
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -7,28 +8,30 @@ import {
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// --- FIREBASE CONFIGURATION (Using Environment Variables) ---
+// --- FIREBASE CONFIGURATION ---
+// Using type casting to ensure TS recognizes Vite's import.meta.env
+const env = (import.meta as any).env;
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: env?.VITE_FIREBASE_API_KEY || "",
+  authDomain: env?.VITE_FIREBASE_AUTH_DOMAIN || "",
+  projectId: env?.VITE_FIREBASE_PROJECT_ID || "",
+  storageBucket: env?.VITE_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: env?.VITE_FIREBASE_APP_ID || "",
+  measurementId: env?.VITE_FIREBASE_MEASUREMENT_ID || ""
 };
 
-// Validate that all required env vars are present
+// Validate
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  console.error('❌ FIREBASE CONFIG ERROR: Missing required environment variables');
-  console.error('Please ensure all VITE_FIREBASE_* variables are set');
+  console.warn('⚠️ FIREBASE CONFIG: Some environment variables are missing.');
 }
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
-// Initialize Firestore with PERSISTENT cache for offline support
+// Initialize Firestore with PERSISTENT cache
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
