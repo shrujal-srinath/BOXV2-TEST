@@ -1,12 +1,12 @@
 {
-  "name": "BOX-V2 Referee Controller",
+  "name": "THE BOX - Referee Controller",
   "short_name": "BOX-V2",
-  "description": "Professional Basketball Referee Hardware Interface",
+  "description": "Offline-First Basketball Referee Controller",
   "theme_color": "#000000",
   "background_color": "#000000",
-  "display": "fullscreen",
+  "display": "standalone",
   "orientation": "landscape",
-  "start_url": "/",
+  "start_url": "/tablet/standalone",
   "scope": "/",
   "icons": [
     {
@@ -15,5 +15,25 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "categories": ["sports", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "New Game",
+      "short_name": "New",
+      "description": "Start a new local game",
+      "url": "/tablet/standalone",
+      "icons": [{ "src": "/vite.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open full dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/vite.svg", "sizes": "96x96" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
 }
