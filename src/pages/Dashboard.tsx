@@ -17,7 +17,7 @@ export const Dashboard: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'offlineInfo' | null>(null);
 
-  // --- NEW: PWA INSTALL STATE ---
+  // --- PWA INSTALL STATE (Integrated) ---
   const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   // --- INIT ---
@@ -28,11 +28,11 @@ export const Dashboard: React.FC = () => {
       setLoading(false);
     });
 
-    // Listen for the installation prompt even on the Dashboard
+    // Capture the PWA installation event
     const handleInstallPrompt = (e: Event) => {
       e.preventDefault();
       setInstallPrompt(e);
-      console.log("🚀 Dashboard: PWA Install Prompt Stashed");
+      console.log("🚀 BOX-V2: PWA Install Prompt Stashed");
     };
     window.addEventListener('beforeinstallprompt', handleInstallPrompt);
 
@@ -45,7 +45,7 @@ export const Dashboard: React.FC = () => {
   // --- HANDLERS ---
   const handleInstallClick = async () => {
     if (!installPrompt) {
-      // Requirements not met - Show Diagnostics Pop-up
+      // Requirements not met - Show Diagnostics Pop-up (Feature Retained)
       setActiveModal('offlineInfo');
       setIsMenuOpen(false);
       return;
@@ -230,9 +230,8 @@ export const Dashboard: React.FC = () => {
         )}
       </main>
 
-      {/* === MODALS === */}
+      {/* === MODALS (All Features Retained) === */}
 
-      {/* Tablet Mode Selection Modal */}
       {activeModal === 'tablet' && (
         <Modal title="Tablet Controller" onClose={() => setActiveModal(null)}>
            <div className="mb-6">
@@ -249,7 +248,6 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {/* Offline Diagnostics Modal */}
       {activeModal === 'offlineInfo' && (
         <Modal title="Offline Unit Diagnostics" onClose={() => setActiveModal(null)}>
           <div className="space-y-4">
@@ -265,7 +263,6 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {/* Profile Modal */}
       {activeModal === 'profile' && (
         <Modal title="User Profile" onClose={() => setActiveModal(null)}>
           <div className="space-y-6">
@@ -291,7 +288,6 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {/* Status Modal */}
       {activeModal === 'status' && (
         <Modal title="System Status" onClose={() => setActiveModal(null)}>
           <div className="space-y-4">
@@ -303,7 +299,6 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {/* History Modal */}
       {activeModal === 'history' && (
         <Modal title="Match History" onClose={() => setActiveModal(null)}>
           <div className="text-center py-12">
@@ -314,7 +309,6 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {/* Settings Modal */}
       {activeModal === 'settings' && (
         <Modal title="Settings" onClose={() => setActiveModal(null)}>
           <div className="text-center py-12">
@@ -328,7 +322,7 @@ export const Dashboard: React.FC = () => {
   );
 };
 
-// --- HELPER COMPONENTS ---
+// --- HELPER COMPONENTS (Retained in Full) ---
 
 const SportCard = ({ name, desc, icon, onClick, accent }: any) => {
   const accentConfig: any = {
