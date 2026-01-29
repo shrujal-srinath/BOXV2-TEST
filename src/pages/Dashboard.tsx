@@ -15,7 +15,10 @@ export const Dashboard: React.FC = () => {
   
   // Menu & Modal States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | null>(null);
+  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'offlineInfo' | null>(null);
+
+  // --- NEW: PWA INSTALL STATE ---
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   // --- INIT ---
   useEffect(() => {
@@ -24,8 +27,37 @@ export const Dashboard: React.FC = () => {
       if (u) getUserActiveGames(u.uid, setMyGames);
       setLoading(false);
     });
-    return () => unsub();
+
+    // Listen for the installation prompt even on the Dashboard
+    const handleInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      console.log("🚀 Dashboard: PWA Install Prompt Stashed");
+    };
+    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+
+    return () => {
+      unsub();
+      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
+    };
   }, []);
+
+  // --- HANDLERS ---
+  const handleInstallClick = async () => {
+    if (!installPrompt) {
+      // Requirements not met - Show Diagnostics Pop-up
+      setActiveModal('offlineInfo');
+      setIsMenuOpen(false);
+      return;
+    }
+    
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+      setIsMenuOpen(false);
+    }
+  };
 
   const handleLogout = async () => {
     await logoutUser();
@@ -40,7 +72,6 @@ export const Dashboard: React.FC = () => {
     if (gameCode) {
       navigate(`/tablet/${gameCode}`);
     } else {
-      // User clicked from menu - show game selection modal
       setActiveModal('tablet');
     }
   };
@@ -57,7 +88,6 @@ export const Dashboard: React.FC = () => {
       {/* === HEADER === */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20">
         
-        {/* LEFT: User Profile Option */}
         <button 
           onClick={() => setActiveModal('profile')}
           className="flex items-center gap-4 group hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all"
@@ -72,17 +102,11 @@ export const Dashboard: React.FC = () => {
             </div>
             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-black rounded-full animate-pulse"></div>
           </div>
-          <div className="text-left">
-            <h1 className="text-sm font-bold text-white group-hover:text-red-500 transition-colors leading-none">
-              {user ? (user.displayName || 'Operator') : 'Guest User'}
-            </h1>
-            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1">
-              {user ? 'View Profile' : 'Local Mode'}
-            </p>
+          <div className="text-left text-white font-bold text-sm">
+            {user ? (user.displayName || 'Operator') : 'Guest User'}
           </div>
         </button>
 
-        {/* RIGHT: Hamburger Trigger */}
         <button 
           onClick={() => setIsMenuOpen(true)} 
           className="group p-2 space-y-1.5 cursor-pointer z-30 hover:bg-zinc-800 rounded transition-colors"
@@ -92,13 +116,11 @@ export const Dashboard: React.FC = () => {
           <div className="w-6 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors"></div>
           <div className="w-4 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors ml-auto"></div>
         </button>
-
       </header>
 
       {/* === SLIDE-OUT MENU === */}
       <div className={`fixed top-0 right-0 w-[300px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-6 h-full flex flex-col">
-          
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Command Menu</h2>
             <button onClick={() => setIsMenuOpen(false)} className="text-2xl text-zinc-500 hover:text-white transition-colors">&times;</button>
@@ -106,20 +128,29 @@ export const Dashboard: React.FC = () => {
 
           <div className="space-y-1 flex-1 overflow-y-auto">
             <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
+
+            <div className="pt-2 mt-2">
+              <MenuItem 
+                label="Go Offline" 
+                icon="📱" 
+                onClick={handleInstallClick} 
+                highlight={!!installPrompt}
+                subtitle={installPrompt ? "Dedicated Unit Ready" : "Diagnostics Required"}
+              />
+            </div>
+
             <MenuItem label="My Profile" icon="👤" onClick={() => { setIsMenuOpen(false); setActiveModal('profile'); }} disabled={!user} />
             <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
             
-            {/* === TABLET MODE - Smart Placement Logic === */}
-            {/* Show in Quick Actions section ONLY if there are active games */}
             {myGames.length > 0 && (
               <div className="pt-4 mt-4 border-t border-zinc-900">
                 <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2 px-4 font-bold">Quick Actions</div>
                 <MenuItem 
                   label="Tablet Controller" 
-                  icon="📱" 
+                  icon="🎮" 
                   onClick={() => { setIsMenuOpen(false); goToTabletMode(); }} 
                   highlight={true}
-                  subtitle={`Control ${myGames.length} active ${myGames.length === 1 ? 'game' : 'games'}`}
+                  subtitle={`Control ${myGames.length} active games`}
                   badge={myGames.length}
                 />
               </div>
@@ -132,78 +163,31 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="pt-6 border-t border-zinc-900">
-             {user ? (
-               <button onClick={handleLogout} className="w-full text-left flex items-center gap-4 p-4 hover:bg-red-900/10 text-red-500 hover:text-red-400 transition-colors uppercase font-bold text-xs tracking-widest rounded">
-                 <span className="text-lg">↪</span> <span>Log Out</span>
-               </button>
-             ) : (
-               <button onClick={() => navigate('/')} className="w-full text-left flex items-center gap-4 p-4 hover:bg-zinc-900 text-zinc-400 hover:text-white transition-colors uppercase font-bold text-xs tracking-widest rounded">
-                 <span className="text-lg">↪</span> <span>Exit Guest Mode</span>
-               </button>
-             )}
+             <button onClick={handleLogout} className="w-full text-left flex items-center gap-4 p-4 hover:bg-red-900/10 text-red-500 transition-colors uppercase font-bold text-xs tracking-widest rounded">
+               <span className="text-lg">↪</span> <span>Log Out</span>
+             </button>
           </div>
         </div>
       </div>
       
-      {/* Overlay for Menu */}
       {isMenuOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => setIsMenuOpen(false)}></div>}
 
       {/* === MAIN CONTENT === */}
       <main className="max-w-7xl mx-auto p-6 md:p-12">
-        
-        {/* SECTION 1: SPORT SELECTION - ENHANCED HOVER WITH BRIGHTENED ICONS */}
         <section className="mb-12">
           <h2 className="text-zinc-500 text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
             <span className="w-2 h-2 bg-red-600 rounded-full"></span> Initialize New Session
           </h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <SportCard 
-              name="BASKETBALL" 
-              desc="FIBA / NBA Rules • Shot Clock" 
-              icon="🏀" 
-              onClick={() => startNewGame('basketball')} 
-              accent="red"
-            />
-            <SportCard 
-              name="BADMINTON" 
-              desc="BWF Rules • Sets & Points" 
-              icon="🏸" 
-              onClick={() => startNewGame('badminton')} 
-              accent="green"
-            />
-            <SportCard 
-              name="VOLLEYBALL" 
-              desc="FIVB Rules • Rotation Track" 
-              icon="🏐" 
-              onClick={() => startNewGame('volleyball')} 
-              accent="yellow"
-            />
-            <SportCard 
-              name="KABADDI" 
-              desc="PKL Style • Raid Timer" 
-              icon="🤼" 
-              onClick={() => startNewGame('kabaddi')} 
-              accent="orange"
-            />
-            <SportCard 
-              name="TABLE TENNIS" 
-              desc="ITTF Rules • 11pt Sets" 
-              icon="🏓" 
-              onClick={() => startNewGame('tabletennis')} 
-              accent="blue"
-            />
-            <SportCard 
-              name="GENERAL" 
-              desc="Universal Scoreboard • Simple" 
-              icon="⏱" 
-              onClick={() => startNewGame('general')} 
-              accent="purple"
-            />
+            <SportCard name="BASKETBALL" desc="FIBA / NBA Rules • Shot Clock" icon="🏀" onClick={() => startNewGame('basketball')} accent="red" />
+            <SportCard name="BADMINTON" desc="BWF Rules • Sets & Points" icon="🏸" onClick={() => startNewGame('badminton')} accent="green" />
+            <SportCard name="VOLLEYBALL" desc="FIVB Rules • Rotation Track" icon="🏐" onClick={() => startNewGame('volleyball')} accent="yellow" />
+            <SportCard name="KABADDI" desc="PKL Style • Raid Timer" icon="🤼" onClick={() => startNewGame('kabaddi')} accent="orange" />
+            <SportCard name="TABLE TENNIS" desc="ITTF Rules • 11pt Sets" icon="🏓" onClick={() => startNewGame('tabletennis')} accent="blue" />
+            <SportCard name="GENERAL" desc="Universal Scoreboard • Simple" icon="⏱" onClick={() => startNewGame('general')} accent="purple" />
           </div>
         </section>
 
-        {/* SECTION 2: ACTIVE GAMES */}
         {user && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
              <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-6">
@@ -224,10 +208,7 @@ export const Dashboard: React.FC = () => {
                       <div className="absolute top-0 left-0 w-1 h-full bg-green-500 group-hover:w-2 transition-all"></div>
                       <div className="flex justify-between items-start mb-4">
                         <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sport || 'BASKETBALL'}</div>
-                        <div className="relative">
-                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                          <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping"></div>
-                        </div>
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                       </div>
                       <h3 className="font-black italic text-xl text-white mb-1 group-hover:text-green-400 transition-colors uppercase tracking-tight">{g.settings.gameName}</h3>
                       <div className="text-xs font-mono text-zinc-400 mb-4">ID: <span className="text-zinc-500">{g.code}</span></div>
@@ -237,20 +218,9 @@ export const Dashboard: React.FC = () => {
                          <div className="text-[9px] text-zinc-600 uppercase tracking-widest">VS</div>
                          <div className="font-bold text-white text-lg">{g.teamB.score}</div>
                       </div>
-
                       <div className="flex gap-2">
-                        <button 
-                          onClick={() => navigate(`/host/${g.code}`)}
-                          className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors"
-                        >
-                          Console
-                        </button>
-                        <button 
-                          onClick={() => goToTabletMode(g.code)}
-                          className="flex-1 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors flex items-center justify-center gap-1"
-                        >
-                          <span>📱</span> Tablet
-                        </button>
+                        <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors">Console</button>
+                        <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors">Tablet</button>
                       </div>
                    </div>
                  ))}
@@ -261,46 +231,37 @@ export const Dashboard: React.FC = () => {
       </main>
 
       {/* === MODALS === */}
-      
+
       {/* Tablet Mode Selection Modal */}
       {activeModal === 'tablet' && (
         <Modal title="Tablet Controller" onClose={() => setActiveModal(null)}>
            <div className="mb-6">
-             <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
-               Select an active game to control in tablet mode. Tablet mode provides touch-optimized controls for score keeping.
-             </p>
-             
-             {myGames.length === 0 ? (
-               <div className="bg-zinc-900 border border-zinc-800 p-12 rounded text-center">
-                 <div className="text-5xl mb-4 opacity-20">📱</div>
-                 <p className="text-zinc-500 text-xs uppercase tracking-widest">No active games available</p>
-                 <p className="text-zinc-600 text-[10px] mt-2">Start a new game from the dashboard first</p>
-               </div>
-             ) : (
-               <div className="space-y-2 max-h-96 overflow-y-auto">
-                 {myGames.map(g => (
-                   <button
-                     key={g.code}
-                     onClick={() => goToTabletMode(g.code)}
-                     className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-blue-500 p-5 rounded text-left transition-all group relative overflow-hidden"
-                   >
-                     <div className="absolute left-0 top-0 h-full w-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                     <div className="flex justify-between items-start mb-3">
-                       <h4 className="font-black text-lg text-white group-hover:text-blue-400 transition-colors uppercase italic tracking-tight">
-                         {g.settings.gameName}
-                       </h4>
-                       <span className="text-xs font-mono text-zinc-500 bg-black px-2 py-1 rounded">{g.code}</span>
-                     </div>
-                     <div className="flex items-center justify-between text-xs text-zinc-400 bg-black p-3 rounded">
-                       <span className="font-bold">{g.teamA.name} <span className="text-white text-sm ml-1">{g.teamA.score}</span></span>
-                       <span className="text-zinc-600">-</span>
-                       <span className="font-bold"><span className="text-white text-sm mr-1">{g.teamB.score}</span> {g.teamB.name}</span>
-                     </div>
-                   </button>
-                 ))}
-               </div>
-             )}
+             <p className="text-sm text-zinc-400 mb-6 leading-relaxed">Select an active game to control in tablet mode.</p>
+             <div className="space-y-2 max-h-96 overflow-y-auto">
+               {myGames.map(g => (
+                 <button key={g.code} onClick={() => goToTabletMode(g.code)} className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-blue-500 p-5 rounded text-left transition-all">
+                   <h4 className="font-black text-lg text-white uppercase italic tracking-tight">{g.settings.gameName}</h4>
+                   <div className="text-[10px] font-mono text-zinc-500">{g.code}</div>
+                 </button>
+               ))}
+             </div>
            </div>
+        </Modal>
+      )}
+
+      {/* Offline Diagnostics Modal */}
+      {activeModal === 'offlineInfo' && (
+        <Modal title="Offline Unit Diagnostics" onClose={() => setActiveModal(null)}>
+          <div className="space-y-4">
+            <p className="text-xs text-zinc-400 leading-relaxed">The browser is currently preventing the "Offline Unit" installation. Please check the following:</p>
+            <div className="bg-black p-4 border border-zinc-800 space-y-3">
+              <StatusItem label="Secure Context (HTTPS)" status={window.location.protocol === 'https:' ? 'online' : 'offline'} />
+              <StatusItem label="Service Worker" status={'serviceWorker' in navigator ? 'online' : 'offline'} />
+              <StatusItem label="Install Prompt" status={installPrompt ? 'online' : 'local'} />
+            </div>
+            <p className="text-[10px] text-zinc-600 italic">Note: If the app is already installed or your browser doesn't support PWAs, the handshake will stay in 'PENDING'.</p>
+            <button onClick={() => setActiveModal(null)} className="w-full bg-white text-black font-black py-4 uppercase tracking-widest text-[10px] mt-4">Close Diagnostics</button>
+          </div>
         </Modal>
       )}
 
@@ -321,7 +282,6 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xs text-zinc-500">{user?.email || 'No account'}</p>
               </div>
             </div>
-            
             <div className="space-y-3">
               <InfoRow label="Account Type" value={user ? 'Pro Access' : 'Guest Mode'} />
               <InfoRow label="Active Games" value={myGames.length.toString()} />
@@ -364,113 +324,44 @@ export const Dashboard: React.FC = () => {
           </div>
         </Modal>
       )}
-
     </div>
   );
 };
 
-// --- ENHANCED SPORT CARD COMPONENT WITH BRIGHTENED ICON ---
+// --- HELPER COMPONENTS ---
+
 const SportCard = ({ name, desc, icon, onClick, accent }: any) => {
   const accentConfig: any = {
-    red: { 
-      border: 'hover:border-red-600', 
-      text: 'group-hover:text-red-500',
-      glow: 'group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]'
-    },
-    blue: { 
-      border: 'hover:border-blue-600', 
-      text: 'group-hover:text-blue-500',
-      glow: 'group-hover:drop-shadow-[0_0_30px_rgba(37,99,235,0.8)]'
-    },
-    green: { 
-      border: 'hover:border-green-600', 
-      text: 'group-hover:text-green-500',
-      glow: 'group-hover:drop-shadow-[0_0_30px_rgba(22,163,74,0.8)]'
-    },
-    yellow: { 
-      border: 'hover:border-yellow-600', 
-      text: 'group-hover:text-yellow-500',
-      glow: 'group-hover:drop-shadow-[0_0_30px_rgba(202,138,4,0.8)]'
-    },
-    orange: { 
-      border: 'hover:border-orange-600', 
-      text: 'group-hover:text-orange-500',
-      glow: 'group-hover:drop-shadow-[0_0_30px_rgba(234,88,12,0.8)]'
-    },
-    purple: { 
-      border: 'hover:border-purple-600', 
-      text: 'group-hover:text-purple-500',
-      glow: 'group-hover:drop-shadow-[0_0_30px_rgba(147,51,234,0.8)]'
-    },
+    red: { border: 'hover:border-red-600', text: 'group-hover:text-red-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]' },
+    blue: { border: 'hover:border-blue-600', text: 'group-hover:text-blue-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(37,99,235,0.8)]' },
+    green: { border: 'hover:border-green-600', text: 'group-hover:text-green-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(22,163,74,0.8)]' },
+    yellow: { border: 'hover:border-yellow-600', text: 'group-hover:text-yellow-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(202,138,4,0.8)]' },
+    orange: { border: 'hover:border-orange-600', text: 'group-hover:text-orange-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(234,88,12,0.8)]' },
+    purple: { border: 'hover:border-purple-600', text: 'group-hover:text-purple-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(147,51,234,0.8)]' },
   };
-
   const config = accentConfig[accent];
-
   return (
-    <button 
-      onClick={onClick}
-      className={`bg-zinc-900/40 border border-zinc-800 p-6 text-left group transition-all relative overflow-hidden h-40 flex flex-col justify-between ${config.border} hover:shadow-lg`}
-    >
-      {/* ENHANCED: Icon with brightness, scale, glow, and filter effects on hover */}
-      <div 
-        className={`
-          absolute -top-4 -right-4 text-[120px] 
-          opacity-[0.04] 
-          grayscale 
-          group-hover:grayscale-0 
-          group-hover:opacity-40 
-          group-hover:scale-125
-          transition-all duration-500 
-          rotate-12 
-          group-hover:brightness-[1.8]
-          group-hover:saturate-[1.5]
-          ${config.glow}
-        `}
-      >
-        {icon}
-      </div>
-      
-      {/* Sport Name and Description */}
+    <button onClick={onClick} className={`bg-zinc-900/40 border border-zinc-800 p-6 text-left group transition-all relative overflow-hidden h-40 flex flex-col justify-between ${config.border} hover:shadow-lg`}>
+      <div className={`absolute -top-4 -right-4 text-[120px] opacity-[0.04] grayscale group-hover:grayscale-0 group-hover:opacity-40 group-hover:scale-125 transition-all duration-500 rotate-12 group-hover:brightness-[1.8] group-hover:saturate-[1.5] ${config.glow}`}>{icon}</div>
       <div>
-        <h3 className={`text-xl font-black italic text-zinc-300 transition-colors uppercase tracking-tight ${config.text}`}>
-          {name}
-        </h3>
-        <p className="text-zinc-500 text-[10px] mt-1 uppercase tracking-widest font-bold leading-tight">
-          {desc}
-        </p>
+        <h3 className={`text-xl font-black italic text-zinc-300 transition-colors uppercase tracking-tight ${config.text}`}>{name}</h3>
+        <p className="text-zinc-500 text-[10px] mt-1 uppercase tracking-widest font-bold leading-tight">{desc}</p>
       </div>
-      
-      {/* Action hint */}
-      <div className={`flex items-center gap-2 text-zinc-600 text-[10px] font-bold uppercase tracking-widest group-hover:text-white transition-colors ${config.text}`}>
-        Initialize <span className="text-sm">→</span>
-      </div>
+      <div className={`flex items-center gap-2 text-zinc-600 text-[10px] font-bold uppercase tracking-widest group-hover:text-white transition-colors ${config.text}`}>Initialize <span className="text-sm">→</span></div>
     </button>
   );
 };
 
-// MenuItem component with optional badge and subtitle
 const MenuItem = ({ label, icon, onClick, active, disabled, highlight, subtitle, badge }: any) => (
-  <button 
-    onClick={onClick}
-    disabled={disabled}
-    className={`w-full text-left flex items-center justify-between p-4 rounded transition-all uppercase font-bold text-[10px] tracking-widest relative
-      ${active ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-900'}
-      ${disabled ? 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-zinc-500' : ''}
-      ${highlight ? 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300 border border-blue-900/50' : ''}
-    `}
-  >
-    <div className="flex items-center gap-4 flex-1">
+  <button onClick={onClick} disabled={disabled} className={`w-full text-left flex items-center justify-between p-4 rounded transition-all uppercase font-bold text-[10px] tracking-widest relative ${active ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-900'} ${disabled ? 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-zinc-500' : ''} ${highlight ? 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300 border border-blue-900/50' : ''}`}>
+    <div className="flex items-center gap-4 flex-1 min-w-0">
       <span className="text-lg w-6 text-center flex-shrink-0">{icon}</span>
       <div className="flex-1 min-w-0">
         <div className="truncate">{label}</div>
         {subtitle && <div className="text-[8px] text-zinc-600 mt-0.5 normal-case tracking-normal truncate">{subtitle}</div>}
       </div>
     </div>
-    {badge && (
-      <span className="ml-2 bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0">
-        {badge}
-      </span>
-    )}
+    {badge && <span className="ml-2 bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0">{badge}</span>}
   </button>
 );
 
@@ -495,21 +386,13 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
 );
 
 const StatusItem = ({ label, status }: { label: string; status: 'online' | 'offline' | 'local' }) => {
-  const statusConfig = {
-    online: { color: 'bg-green-500', text: 'Online', textColor: 'text-green-400' },
-    offline: { color: 'bg-red-500', text: 'Offline', textColor: 'text-red-400' },
-    local: { color: 'bg-yellow-500', text: 'Local Only', textColor: 'text-yellow-400' }
-  };
+  const statusConfig = { online: { color: 'bg-green-500', text: 'Online', textColor: 'text-green-400' }, offline: { color: 'bg-red-500', text: 'Offline', textColor: 'text-red-400' }, local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-400' } };
   const config = statusConfig[status];
-
   return (
     <div className="flex justify-between items-center py-3 border-b border-zinc-900">
       <span className="text-xs text-zinc-400 uppercase tracking-wider">{label}</span>
       <div className="flex items-center gap-2">
-        <div className="relative">
-          <div className={`w-2 h-2 ${config.color} rounded-full`}></div>
-          <div className={`absolute inset-0 w-2 h-2 ${config.color} rounded-full animate-ping opacity-75`}></div>
-        </div>
+        <div className="relative"><div className={`w-2 h-2 ${config.color} rounded-full`}></div><div className={`absolute inset-0 w-2 h-2 ${config.color} rounded-full animate-ping opacity-75`}></div></div>
         <span className={`text-xs font-bold uppercase tracking-widest ${config.textColor}`}>{config.text}</span>
       </div>
     </div>

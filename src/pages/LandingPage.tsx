@@ -14,6 +14,11 @@ export const LandingPage: React.FC = () => {
   // UI & Animation
   const [showSplash, setShowSplash] = useState(true);
   const [stage, setStage] = useState(0); 
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showInstallInfo, setShowInstallInfo] = useState(false);
+
+  // PWA Install State
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   // Modals
   const [showFreeHostWarning, setShowFreeHostWarning] = useState(false);
@@ -46,13 +51,37 @@ export const LandingPage: React.FC = () => {
     // 3. Live Games
     const unsubLive = subscribeToLiveGames(setLiveGames);
 
+    // 4. PWA Install Listener
+    const handleInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      console.log("🚀 PWA Install Prompt Stashed");
+    };
+    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+
     return () => { 
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); 
       unsubAuth(); unsubLive(); 
+      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
     };
   }, [navigate, showSplash]);
 
   // --- HANDLERS ---
+  const handleInstallClick = async () => {
+    if (!installPrompt) {
+      setShowInstallInfo(true);
+      setShowUserMenu(false);
+      return;
+    }
+    
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+      setShowUserMenu(false);
+    }
+  };
+
   const handleWatchSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (joinCode.length === 6) navigate(`/watch/${joinCode}`);
@@ -74,14 +103,12 @@ export const LandingPage: React.FC = () => {
   if (showSplash) {
     return (
       <div className={`fixed inset-0 bg-black z-50 flex items-center justify-center transition-opacity duration-1000 ${stage === 4 ? 'opacity-0' : 'opacity-100'}`}>
-        {/* Multi-layer radial gradient background with depth */}
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 via-black to-black"></div>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_var(--tw-gradient-stops))] from-red-950/20 via-transparent to-transparent"></div>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,_var(--tw-gradient-stops))] from-red-950/10 via-transparent to-transparent"></div>
         </div>
         
-        {/* Animated grid pattern with pulse */}
         <div 
           className="absolute inset-0 opacity-[0.15]" 
           style={{ 
@@ -91,7 +118,6 @@ export const LandingPage: React.FC = () => {
           }}
         ></div>
         
-        {/* Diagonal light beams with improved animation */}
         {stage >= 1 && (
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute top-0 left-1/4 w-[2px] h-full bg-gradient-to-b from-red-600/0 via-red-600/40 to-red-600/0 transform -skew-x-12 animate-beam-1 shadow-[0_0_30px_rgba(220,38,38,0.5)]"></div>
@@ -105,17 +131,14 @@ export const LandingPage: React.FC = () => {
             {stage >= 2 && (
               <h1 className="text-7xl md:text-9xl font-black italic tracking-tighter text-white animate-slam leading-none drop-shadow-2xl relative">
                 THE BOX
-                {/* Enhanced glitch effect with multiple layers */}
                 <span className="absolute inset-0 text-red-600 opacity-40 animate-glitch-1" aria-hidden="true">THE BOX</span>
                 <span className="absolute inset-0 text-red-500 opacity-20 animate-glitch-2" aria-hidden="true">THE BOX</span>
-                {/* Subtle glow effect */}
                 <span className="absolute inset-0 blur-2xl text-red-600 opacity-30 animate-pulse" aria-hidden="true">THE BOX</span>
               </h1>
             )}
             {stage >= 2 && (
               <div className="hidden md:block relative">
                 <div className="w-[2px] h-32 bg-gradient-to-b from-transparent via-red-600 to-transparent transform skew-x-12 animate-slam shadow-[0_0_25px_rgba(220,38,38,0.9)]"></div>
-                {/* Pulsing glow orbs on the divider */}
                 <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_15px_rgba(239,68,68,1)]"></div>
                 <div className="absolute top-3/4 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-400 rounded-full animate-pulse shadow-[0_0_15px_rgba(248,113,113,1)]" style={{ animationDelay: '0.5s' }}></div>
               </div>
@@ -130,11 +153,9 @@ export const LandingPage: React.FC = () => {
             )}
           </div>
           
-          {/* Enhanced scan line with particle trail */}
           {stage >= 1 && (
             <div className="relative w-full max-w-2xl mb-12 mt-6">
               <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-red-600 to-transparent animate-scan shadow-[0_0_20px_rgba(220,38,38,0.9)]"></div>
-              {/* Particle effects with trails */}
               <div className="absolute top-0 left-0 w-3 h-3 bg-red-500 rounded-full animate-particle-1 shadow-[0_0_15px_rgba(239,68,68,1)] blur-[1px]"></div>
               <div className="absolute top-0 right-0 w-3 h-3 bg-red-400 rounded-full animate-particle-2 shadow-[0_0_15px_rgba(248,113,113,1)] blur-[1px]"></div>
               <div className="absolute top-0 left-1/2 w-2 h-2 bg-red-300 rounded-full animate-particle-3 shadow-[0_0_10px_rgba(252,165,165,1)] blur-[1px]"></div>
@@ -146,7 +167,6 @@ export const LandingPage: React.FC = () => {
               <p className="text-zinc-400 text-sm md:text-base font-mono font-bold uppercase tracking-wide mb-3">
                 The Official College Sports Platform
               </p>
-              {/* Enhanced status indicator with ring pulse */}
               <div className="flex items-center justify-center gap-3 mt-6">
                 <div className="relative">
                   <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-[0_0_15px_rgba(34,197,94,1)]"></div>
@@ -158,69 +178,17 @@ export const LandingPage: React.FC = () => {
           )}
         </div>
 
-        {/* CSS animations for splash */}
         <style>{`
-          @keyframes grid-pulse {
-            0%, 100% { opacity: 0.15; transform: scale(1); }
-            50% { opacity: 0.25; transform: scale(1.02); }
-          }
-          
-          @keyframes beam-1 {
-            0%, 100% { opacity: 0; transform: translateY(-100%) skewX(-12deg); }
-            50% { opacity: 1; transform: translateY(100%) skewX(-12deg); }
-          }
-          
-          @keyframes beam-2 {
-            0%, 100% { opacity: 0; transform: translateY(-100%) skewX(12deg); }
-            50% { opacity: 1; transform: translateY(100%) skewX(12deg); }
-          }
-          
-          @keyframes beam-3 {
-            0%, 100% { opacity: 0; transform: translateY(-100%); }
-            50% { opacity: 1; transform: translateY(100%); }
-          }
-          
-          @keyframes glitch-1 {
-            0%, 100% { transform: translate(0); clip-path: inset(0); }
-            20% { transform: translate(-3px, 2px); clip-path: inset(0 0 80% 0); }
-            40% { transform: translate(-3px, -2px); clip-path: inset(60% 0 0 0); }
-            60% { transform: translate(3px, 2px); clip-path: inset(30% 0 30% 0); }
-            80% { transform: translate(2px, -2px); clip-path: inset(0 0 50% 0); }
-          }
-          
-          @keyframes glitch-2 {
-            0%, 100% { transform: translate(0); clip-path: inset(0); }
-            25% { transform: translate(2px, -2px); clip-path: inset(20% 0 60% 0); }
-            50% { transform: translate(-2px, 2px); clip-path: inset(50% 0 0 0); }
-            75% { transform: translate(2px, 2px); clip-path: inset(0 0 70% 0); }
-          }
-          
-          @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-          }
-          
-          @keyframes particle-1 {
-            0% { transform: translate(0, 0) scale(1); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 0.8; }
-            100% { transform: translate(-250px, -60px) scale(0.3); opacity: 0; }
-          }
-          
-          @keyframes particle-2 {
-            0% { transform: translate(0, 0) scale(1); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 0.8; }
-            100% { transform: translate(250px, -60px) scale(0.3); opacity: 0; }
-          }
-          
-          @keyframes particle-3 {
-            0% { transform: translate(0, 0) scale(1); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 0.6; }
-            100% { transform: translate(0, -80px) scale(0.2); opacity: 0; }
-          }
+          @keyframes grid-pulse { 0%, 100% { opacity: 0.15; transform: scale(1); } 50% { opacity: 0.25; transform: scale(1.02); } }
+          @keyframes beam-1 { 0%, 100% { opacity: 0; transform: translateY(-100%) skewX(-12deg); } 50% { opacity: 1; transform: translateY(100%) skewX(-12deg); } }
+          @keyframes beam-2 { 0%, 100% { opacity: 0; transform: translateY(-100%) skewX(12deg); } 50% { opacity: 1; transform: translateY(100%) skewX(12deg); } }
+          @keyframes beam-3 { 0%, 100% { opacity: 0; transform: translateY(-100%); } 50% { opacity: 1; transform: translateY(100%); } }
+          @keyframes glitch-1 { 0%, 100% { transform: translate(0); clip-path: inset(0); } 20% { transform: translate(-3px, 2px); clip-path: inset(0 0 80% 0); } 40% { transform: translate(-3px, -2px); clip-path: inset(60% 0 0 0); } 60% { transform: translate(3px, 2px); clip-path: inset(30% 0 30% 0); } 80% { transform: translate(2px, -2px); clip-path: inset(0 0 50% 0); } }
+          @keyframes glitch-2 { 0%, 100% { transform: translate(0); clip-path: inset(0); } 25% { transform: translate(2px, -2px); clip-path: inset(20% 0 60% 0); } 50% { transform: translate(-2px, 2px); clip-path: inset(50% 0 0 0); } 75% { transform: translate(2px, 2px); clip-path: inset(0 0 70% 0); } }
+          @keyframes gradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+          @keyframes particle-1 { 0% { transform: translate(0, 0) scale(1); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 0.8; } 100% { transform: translate(-250px, -60px) scale(0.3); opacity: 0; } }
+          @keyframes particle-2 { 0% { transform: translate(0, 0) scale(1); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 0.8; } 100% { transform: translate(250px, -60px) scale(0.3); opacity: 0; } }
+          @keyframes particle-3 { 0% { transform: translate(0, 0) scale(1); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 0.6; } 100% { transform: translate(0, -80px) scale(0.2); opacity: 0; } }
         `}</style>
       </div>
     );
@@ -231,7 +199,7 @@ export const LandingPage: React.FC = () => {
     <div className="min-h-screen bg-black font-sans text-white flex flex-col relative overflow-hidden animate-in">
       
       {/* HEADER */}
-      <header className="flex justify-between items-center p-6 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-20 sticky top-0">
+      <header className="flex justify-between items-center p-6 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-40 sticky top-0">
         <div className="flex items-center gap-4">
           <div className="relative w-10 h-10 flex items-center justify-center">
             <svg className="w-8 h-8 text-red-600 drop-shadow-[0_0_8px_rgba(220,38,38,0.6)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -245,9 +213,62 @@ export const LandingPage: React.FC = () => {
             <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-[0.3em] leading-none mt-1">By BMSCE</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1.5 rounded-sm">
-           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_5px_#22c55e]"></div>
-           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Server Online</span>
+
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1.5 rounded-sm">
+             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_5px_#22c55e]"></div>
+             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Server Online</span>
+          </div>
+
+          <div className="relative">
+            <button 
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="p-2 hover:bg-zinc-900 border border-zinc-800 rounded-sm transition-colors text-zinc-400 hover:text-white"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
+              </svg>
+            </button>
+
+            {showUserMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)}></div>
+                <div className="absolute right-0 mt-3 w-64 bg-zinc-950 border border-zinc-800 shadow-2xl z-50 animate-in slide-in-from-top-2">
+                  <div className="p-4 border-b border-zinc-900">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">System Menu</p>
+                  </div>
+                  
+                  {/* FORCED VISIBLE: GO OFFLINE BUTTON */}
+                  <button 
+                    onClick={handleInstallClick}
+                    className="flex items-center gap-3 w-full px-4 py-4 text-left hover:bg-zinc-900 transition-colors group"
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${installPrompt ? 'bg-red-600/20 group-hover:bg-red-600' : 'bg-zinc-800'}`}>
+                      <svg className={`w-4 h-4 ${installPrompt ? 'text-red-500 group-hover:text-white' : 'text-zinc-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-black italic uppercase tracking-tight text-white">Go Offline</span>
+                      <span className="text-[9px] text-zinc-500 font-bold uppercase">
+                        {installPrompt ? 'Dedicated Unit Ready' : 'Setup Required'}
+                      </span>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => { setShowEmailModal(true); setShowUserMenu(false); }}
+                    className="flex items-center gap-3 w-full px-4 py-4 text-left hover:bg-zinc-900 transition-colors border-t border-zinc-900"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                    </div>
+                    <span className="text-sm font-bold text-zinc-300">Operator Login</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -279,7 +300,6 @@ export const LandingPage: React.FC = () => {
             </div>
           </div>
 
-          {/* FREE HOST MODE BUTTON */}
           <button onClick={() => setShowFreeHostWarning(true)} className="bg-black border border-zinc-800 hover:border-zinc-500 p-5 flex items-center justify-between group transition-all">
             <div className="text-left">
               <div className="text-zinc-200 font-bold text-lg group-hover:text-red-500 transition-colors">Free Host Mode</div>
@@ -289,9 +309,8 @@ export const LandingPage: React.FC = () => {
           </button>
         </div>
 
-        {/* RIGHT: WATCH OPTIONS (With Blue Grid) */}
+        {/* RIGHT: WATCH OPTIONS */}
         <div className="flex-1 bg-gradient-to-br from-blue-950/20 to-black border border-zinc-800 p-10 flex flex-col justify-center relative overflow-hidden rounded-sm group">
-           {/* THE BLUE GRID */}
            <div className="absolute inset-0 opacity-20" 
                 style={{ 
                   backgroundImage: 'linear-gradient(#1e40af 1px, transparent 1px), linear-gradient(90deg, #1e40af 1px, transparent 1px)', 
@@ -309,7 +328,6 @@ export const LandingPage: React.FC = () => {
              
              <form onSubmit={handleWatchSubmit} className="flex flex-col gap-6">
                <div className="relative group/input">
-                 {/* Glassmorphic Input */}
                  <div className="bg-black/40 backdrop-blur-sm border-2 border-zinc-700 group-focus-within/input:border-blue-500 transition-colors p-1 flex">
                    <div className="bg-zinc-800/50 flex items-center justify-center px-5 border-r border-zinc-700">
                      <span className="text-zinc-500 font-bold text-xl group-focus-within/input:text-blue-500 transition-colors">#</span>
@@ -356,7 +374,41 @@ export const LandingPage: React.FC = () => {
         </div>
       </div>
 
-      {/* MODALS */}
+      {/* DIAGNOSTIC MODAL */}
+      {showInstallInfo && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
+          <div className="bg-zinc-900 border border-zinc-800 max-w-md w-full p-8 shadow-2xl relative">
+            <div className="absolute top-0 left-0 w-full h-1 bg-zinc-700"></div>
+            <h3 className="text-2xl font-black italic uppercase text-white mb-2 tracking-tighter">Diagnostics: Offline Unit</h3>
+            <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
+              The "Go Offline" trigger is visible, but the browser hasn't activated the installation handshake yet.
+            </p>
+            <div className="bg-black border border-zinc-800 p-4 mb-8 space-y-3">
+              <div className="flex items-center justify-between text-[10px] font-bold tracking-widest uppercase">
+                <span className="text-zinc-500">HTTPS Connection</span>
+                <span className={window.location.protocol === 'https:' ? 'text-green-500' : 'text-red-500'}>
+                  {window.location.protocol === 'https:' ? 'ACTIVE' : 'INACTIVE'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-bold tracking-widest uppercase">
+                <span className="text-zinc-500">Service Worker</span>
+                <span className={'serviceWorker' in navigator ? 'text-green-500' : 'text-red-500'}>
+                  {'serviceWorker' in navigator ? 'READY' : 'FAIL'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-bold tracking-widest uppercase">
+                <span className="text-zinc-500">Install State</span>
+                <span className={installPrompt ? 'text-green-500' : 'text-amber-500'}>
+                  {installPrompt ? 'READY TO SYNC' : 'PENDING BROWSER'}
+                </span>
+              </div>
+            </div>
+            <button onClick={() => setShowInstallInfo(false)} className="w-full bg-white text-black font-black py-4 uppercase tracking-widest text-sm hover:bg-zinc-200 transition-colors">Close Diagnostics</button>
+          </div>
+        </div>
+      )}
+
+      {/* ALL ORIGINAL MODALS */}
       {showFreeHostWarning && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative overflow-hidden">

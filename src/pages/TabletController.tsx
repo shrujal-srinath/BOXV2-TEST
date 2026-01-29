@@ -1,8 +1,7 @@
 // src/pages/TabletController.tsx (V2 - PRODUCTION OPTIMIZED)
 /**
  * TABLET CONTROLLER V2 - FOR LENOVO YOGA 2-830LC
- * 
- * NEW FEATURES:
+ * * NEW FEATURES:
  * ✅ Undo/Redo Stack (shake or button)
  * ✅ Offline Action Queue Visualization
  * ✅ Settings Icon (replaced triple-tap)
@@ -358,6 +357,9 @@ export const TabletController: React.FC = () => {
     const teamName = team === 'A' ? currentGame.teamA.name : currentGame.teamB.name;
     let description = '';
 
+    // FIX 1: Mapping 'points' action to 'score' type to satisfy the GameAction union
+    const actionType: GameAction['type'] = type === 'points' ? 'score' : type;
+
     if (isLocalGame) {
       if (type === 'points') {
         localGameHook.updateScore(team, val);
@@ -397,7 +399,7 @@ export const TabletController: React.FC = () => {
       }
     }
 
-    recordAction(type, team, val, description, previousState);
+    recordAction(actionType, team, val, description, previousState);
   }, [isLocalGame, localGameHook, isOnline, recordAction, addToOfflineQueue]);
 
   const handleToggleClock = useCallback(() => {
@@ -512,7 +514,8 @@ export const TabletController: React.FC = () => {
   // RENDER
   // ============================================
   if (isBooting) {
-    return <BootSequence gameCode={gameCode || 'UNKNOWN'} />;
+    // FIX 2: BootSequence expects onComplete prop instead of gameCode
+    return <BootSequence onComplete={() => setIsBooting(false)} />;
   }
 
   if (isLoading) {
@@ -632,8 +635,11 @@ export const TabletController: React.FC = () => {
 
       {/* Diagnostics Console */}
       {showDiagnostics && (
+        // FIX 3: DiagnosticConsole requires syncQueue and isOpen props
         <DiagnosticConsole
           game={game}
+          syncQueue={offlineQueue}
+          isOpen={showDiagnostics}
           onClose={() => setShowDiagnostics(false)}
         />
       )}
