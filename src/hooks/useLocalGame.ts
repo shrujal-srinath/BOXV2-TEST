@@ -11,7 +11,7 @@ import {
   getLocalGame,
   updateLocalGame,
   setActiveLocalGame,
-  getActiveLocalGame,
+  getLocalGameLibrary, // IMPORTED DIRECTLY
   type LocalGameMetadata,
 } from '../services/localGameService';
 import { addToSyncQueue } from '../services/syncService';
@@ -53,12 +53,7 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Use ref to track latest game state (prevents stale closures)
   const gameRef = useRef<BasketballGame | null>(null);
-
-  // ============================================
-  // LOAD GAME
-  // ============================================
 
   const loadGame = useCallback(() => {
     setIsLoading(true);
@@ -79,7 +74,6 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
       setMetadata(gameMetadata);
       gameRef.current = gameMetadata.game;
       
-      // Set as active game
       setActiveLocalGame(gameId);
 
     } catch (err: any) {
@@ -90,51 +84,31 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     }
   }, [gameId]);
 
-  // Load on mount and when gameId changes
   useEffect(() => {
     loadGame();
   }, [loadGame]);
 
-  // ============================================
-  // UPDATE HELPER
-  // ============================================
-
-  /**
-   * Generic game updater with automatic save and sync
-   */
   const updateGameState = useCallback((updater: (game: BasketballGame) => void) => {
     if (!gameRef.current) {
       console.error('[useLocalGame] No game loaded');
       return;
     }
 
-    // Clone current game
     const updatedGame = JSON.parse(JSON.stringify(gameRef.current)) as BasketballGame;
-
-    // Apply updates
     updater(updatedGame);
-
-    // Update timestamp
     updatedGame.lastUpdate = Date.now();
 
-    // Save to state
     setGame(updatedGame);
     gameRef.current = updatedGame;
 
-    // Save to localStorage
     const success = updateLocalGame(gameId, updatedGame);
 
     if (success) {
-      // Add to sync queue (will sync when user logs in / goes online)
       addToSyncQueue(gameId, updatedGame);
     } else {
       console.error('[useLocalGame] Failed to save game');
     }
   }, [gameId]);
-
-  // ============================================
-  // GAME ACTIONS
-  // ============================================
 
   const updateScore = useCallback((team: 'A' | 'B', points: number) => {
     updateGameState((game) => {
@@ -194,10 +168,6 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     });
   }, [updateGameState]);
 
-  // ============================================
-  // ADVANCED ACTIONS
-  // ============================================
-
   const forceSync = useCallback(() => {
     if (gameRef.current) {
       addToSyncQueue(gameId, gameRef.current);
@@ -209,18 +179,11 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     loadGame();
   }, [loadGame]);
 
-  // ============================================
-  // RETURN API
-  // ============================================
-
   return {
-    // State
     game,
     metadata,
     isLoading,
     error,
-
-    // Actions
     updateScore,
     updateFouls,
     updateTimeouts,
@@ -229,29 +192,18 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     togglePossession,
     nextPeriod,
     setGameTime,
-
-    // Advanced
     updateGameState,
     forceSync,
     reload,
   };
 };
 
-// ============================================
-// TIMER HOOK (Optional Enhancement)
-// ============================================
-
-/**
- * Separate hook for handling game timer
- * Manages the clock countdown loop
- */
 export const useLocalGameTimer = (gameId: string) => {
   const { game, updateGameState } = useLocalGame(gameId);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!game || !game.gameState.gameRunning) {
-      // Clear timer if game stopped
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -259,7 +211,6 @@ export const useLocalGameTimer = (gameId: string) => {
       return;
     }
 
-    // Start timer
     timerRef.current = window.setInterval(() => {
       updateGameState((g) => {
         const totalSec = g.gameState.gameTime.minutes * 60 + g.gameState.gameTime.seconds;
@@ -269,17 +220,14 @@ export const useLocalGameTimer = (gameId: string) => {
           g.gameState.gameTime.minutes = Math.floor(newTotal / 60);
           g.gameState.gameTime.seconds = newTotal % 60;
 
-          // Shot clock countdown
           if (g.gameState.shotClock > 0) {
             g.gameState.shotClock = Math.max(0, g.gameState.shotClock - 1);
           }
         } else {
-          // Time expired
           g.gameState.gameRunning = false;
           g.gameState.gameTime.minutes = 0;
           g.gameState.gameTime.seconds = 0;
 
-          // Trigger buzzer
           if (navigator.vibrate) {
             navigator.vibrate([200, 100, 200, 100, 200]);
           }
@@ -296,20 +244,17 @@ export const useLocalGameTimer = (gameId: string) => {
 };
 
 // ============================================
-// GAME LIBRARY HOOK
+// GAME LIBRARY HOOK (REFACTORED)
 // ============================================
 
-/**
- * Hook for accessing all local games
- * Useful for game selection / library screens
- */
 export const useLocalGameLibrary = () => {
   const [games, setGames] = useState<LocalGameMetadata[]>([]);
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    const localGameService = require('../services/localGameService');
-    const library = localGameService.getLocalGameLibrary();
+    // REMOVED: const localGameService = require('../services/localGameService');
+    // FIXED: Using direct imports instead of require
+    const library = getLocalGameLibrary(); 
     setGames(library.games);
     setActiveGameId(library.activeGameId);
   }, []);
@@ -324,9 +269,5 @@ export const useLocalGameLibrary = () => {
     refresh,
   };
 };
-
-// ============================================
-// EXPORTS
-// ============================================
 
 export default useLocalGame;
