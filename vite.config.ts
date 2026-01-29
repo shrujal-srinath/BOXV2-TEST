@@ -1,4 +1,3 @@
-// vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -15,8 +14,8 @@ export default defineConfig({
         description: 'Offline Sports Controller Unit',
         theme_color: '#000000',
         background_color: '#000000',
-        display: 'standalone',      // Removes the browser URL bar
-        orientation: 'landscape',   // Forces landscape mode
+        display: 'standalone',
+        orientation: 'landscape',
         start_url: '/',
         icons: [
           {
@@ -32,19 +31,18 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // This regex tells the app to cache ALL code and styles for offline use
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        // Ensure large service worker files don't break the build
-        maximumFileSizeToCacheInBytes: 5000000 
+        // Increases the cache limit to 5MB to prevent PWA build failures
+        maximumFileSizeToCacheInBytes: 5000000,
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       }
     })
   ],
   build: {
-    // FIX: Resolves the "Adjust chunk size limit" warning on Vercel
+    // Raises the threshold to silence Vercel chunk warnings
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
-        // FIX: Implements code-splitting to keep main bundle small
+        // Splits large libraries into a separate 'vendor' file for faster loading
         manualChunks(id) {
           if (id.includes('node_modules')) {
             return 'vendor';
