@@ -20,16 +20,37 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'vite.svg',        // Placeholder icon (we can swap later)
+            src: 'vite.svg',
             sizes: '192x192',
+            type: 'image/svg+xml'
+          },
+          {
+            src: 'vite.svg',
+            sizes: '512x512',
             type: 'image/svg+xml'
           }
         ]
       },
       workbox: {
         // This regex tells the app to cache ALL code and styles for offline use
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Ensure large service worker files don't break the build
+        maximumFileSizeToCacheInBytes: 5000000 
       }
     })
   ],
+  build: {
+    // FIX: Resolves the "Adjust chunk size limit" warning on Vercel
+    chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      output: {
+        // FIX: Implements code-splitting to keep main bundle small
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        }
+      }
+    }
+  }
 });
