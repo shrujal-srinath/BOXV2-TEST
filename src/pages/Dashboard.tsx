@@ -5,7 +5,7 @@ import { logoutUser, subscribeToAuth } from '../services/authService';
 import { getUserActiveGames } from '../services/gameService';
 import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';
-// 1. IMPORT THE NEW COMPONENT
+// 1. IMPORT THE COMPONENT
 import { InstallPrompt } from '../components/InstallPrompt';
 
 export const Dashboard: React.FC = () => {
@@ -20,8 +20,10 @@ export const Dashboard: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | null>(null);
 
-  // 2. ADD STATE TO CONTROL CARD VISIBILITY
-  const [showInstallCard, setShowInstallCard] = useState(true);
+  // 2. SMART VISIBILITY STATE (Checks localStorage)
+  const [showInstallCard, setShowInstallCard] = useState(() => {
+    return localStorage.getItem('box_dismiss_install') !== 'true';
+  });
 
   // --- PWA LOGIC ---
   const { isInstalled, prompt, triggerInstall } = usePWAInstall();
@@ -37,12 +39,17 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   // --- HANDLERS ---
-  const handleProvisioning = async () => {
+  const handleInstall = async () => {
     const success = await triggerInstall();
     if (success) {
-      setActiveModal(null);
-      setShowInstallCard(false); // Hide card on success
+      setShowInstallCard(false);
     }
+  };
+
+  const handleDismiss = () => {
+    setShowInstallCard(false);
+    // REMEMBER THE USER'S CHOICE
+    localStorage.setItem('box_dismiss_install', 'true');
   };
 
   const handleLogout = async () => {
@@ -62,6 +69,15 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  // Helper to determine text for the modal button
+  const getInstallMessage = () => {
+    if (prompt) return null; // Ready to install
+    if (isInstalled) return "Device Provisioned";
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    if (isIOS) return "iOS Restriction: Use Share Menu → Add to Home Screen";
+    return "Browser Restriction: Open in Chrome/Edge";
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
       <div className="w-8 h-8 border-3 border-red-600 border-t-transparent rounded-full animate-spin"></div>
@@ -71,8 +87,9 @@ export const Dashboard: React.FC = () => {
   return (
     <div className={`min-h-screen bg-black font-sans text-white transition-transform duration-300`}>
       
-      {/* HEADER (Unchanged) */}
+      {/* === HEADER === */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20">
+        
         <button 
           onClick={() => setActiveModal('profile')}
           className="flex items-center gap-4 group hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all"
@@ -103,7 +120,7 @@ export const Dashboard: React.FC = () => {
         </button>
       </header>
 
-      {/* SLIDE-OUT MENU (Unchanged) */}
+      {/* === SLIDE-OUT MENU === */}
       <div className={`fixed top-0 right-0 w-[300px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-6 h-full flex flex-col">
           <div className="flex justify-between items-center mb-8">
@@ -113,7 +130,7 @@ export const Dashboard: React.FC = () => {
 
           <div className="space-y-1 flex-1 overflow-y-auto">
             <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
-            {/* Kept the menu item as a backup/alternative way to access status */}
+            {/* Backup "Provision" Link in Menu */}
             <div className="pt-2 mt-2">
               <MenuItem 
                 label={isInstalled ? "Unit Provisioned" : "Provision Hardware"}
@@ -153,19 +170,20 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+      
       {isMenuOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => setIsMenuOpen(false)}></div>}
 
       {/* === MAIN CONTENT === */}
       <main className="max-w-7xl mx-auto p-6 md:p-12">
         
-        {/* 3. INSERT THE INSTALL CARD HERE */}
+        {/* 3. INSTALLATION CARD (Now handles Safari too!) */}
         {showInstallCard && !isInstalled && (
           <div className="mb-8 animate-in slide-in-from-top-4 fade-in duration-500">
             <InstallPrompt 
               isInstalled={isInstalled}
               hasPrompt={!!prompt}
-              onInstall={handleProvisioning}
-              onDismiss={() => setShowInstallCard(false)}
+              onInstall={handleInstall}
+              onDismiss={handleDismiss}
             />
           </div>
         )}
@@ -226,7 +244,40 @@ export const Dashboard: React.FC = () => {
         )}
       </main>
 
-      {/* MODALS (Kept Provisioning as Backup, or you can remove it if you only want the card) */}
+      {/* MODALS */}
+      {activeModal === 'provision' && (
+        <Modal title="Hardware Provisioning Checklist" onClose={() => setActiveModal(null)}>
+          <div className="space-y-4">
+            <p className="text-xs text-zinc-400 leading-relaxed mb-4">
+              {isInstalled 
+                ? "This device is fully provisioned as a Referee Unit." 
+                : "System pre-flight check required before installing dedicated firmware."}
+            </p>
+            <div className="bg-black p-4 border border-zinc-800 space-y-3">
+              <StatusItem label="Secure Context (HTTPS)" status={window.location.protocol === 'https:' ? 'online' : 'offline'} />
+              <StatusItem label="Local Storage" status={typeof localStorage !== 'undefined' ? 'online' : 'offline'} />
+              <StatusItem label="Service Worker" status={'serviceWorker' in navigator ? 'online' : 'offline'} />
+              <StatusItem label="Install Ready" status={prompt ? 'online' : (isInstalled ? 'online' : 'local')} />
+            </div>
+            {!isInstalled && (
+              <div className="mt-6">
+                {prompt ? (
+                  <button onClick={() => { triggerInstall().then(s => s && setActiveModal(null)); }} className="w-full bg-green-600 hover:bg-green-500 text-black font-black py-4 uppercase tracking-widest text-xs transition-colors shadow-[0_0_20px_rgba(34,197,94,0.4)]">Install Firmware</button>
+                ) : (
+                  <div className="p-3 bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 text-center uppercase tracking-wider font-bold">
+                     {getInstallMessage()}
+                  </div>
+                )}
+              </div>
+            )}
+            {isInstalled && (
+               <button onClick={() => setActiveModal(null)} className="w-full bg-zinc-800 text-white font-bold py-4 uppercase tracking-widest text-[10px] mt-4">Close</button>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* OTHER MODALS */}
       {activeModal === 'tablet' && (
         <Modal title="Tablet Controller" onClose={() => setActiveModal(null)}>
            <div className="mb-6">
@@ -243,76 +294,14 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {/* KEEPING THIS MODAL ALLOWS MANUAL INSTALL VIA MENU IF THEY DISMISSED THE CARD */}
-      {activeModal === 'provision' && (
-        <Modal title="Hardware Provisioning Checklist" onClose={() => setActiveModal(null)}>
-          <div className="space-y-4">
-            <p className="text-xs text-zinc-400 leading-relaxed mb-4">
-              {isInstalled 
-                ? "This device is fully provisioned as a Referee Unit." 
-                : "System pre-flight check required before installing dedicated firmware."}
-            </p>
-            
-            <div className="bg-black p-4 border border-zinc-800 space-y-3">
-              <StatusItem 
-                label="Secure Context (HTTPS)" 
-                status={window.location.protocol === 'https:' ? 'online' : 'offline'} 
-              />
-              <StatusItem 
-                label="Local Storage" 
-                status={typeof localStorage !== 'undefined' ? 'online' : 'offline'} 
-              />
-              <StatusItem 
-                label="Service Worker" 
-                status={'serviceWorker' in navigator ? 'online' : 'offline'} 
-              />
-              <StatusItem 
-                label="Install Ready" 
-                status={prompt ? 'online' : (isInstalled ? 'online' : 'local')} 
-              />
-            </div>
-
-            {!isInstalled && (
-              <div className="mt-6">
-                {prompt ? (
-                  <button 
-                    onClick={handleProvisioning}
-                    className="w-full bg-green-600 hover:bg-green-500 text-black font-black py-4 uppercase tracking-widest text-xs transition-colors shadow-[0_0_20px_rgba(34,197,94,0.4)]"
-                  >
-                    Install Firmware
-                  </button>
-                ) : (
-                  <div className="p-3 bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 text-center uppercase tracking-wider font-bold">
-                     {window.location.hostname === 'localhost' ? 'Waiting for Browser...' : 'Browser Restriction: Use Chrome/Edge'}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {isInstalled && (
-               <button onClick={() => setActiveModal(null)} className="w-full bg-zinc-800 text-white font-bold py-4 uppercase tracking-widest text-[10px] mt-4">
-                 Close
-               </button>
-            )}
-          </div>
-        </Modal>
-      )}
-
       {activeModal === 'profile' && (
         <Modal title="User Profile" onClose={() => setActiveModal(null)}>
           <div className="space-y-6">
             <div className="flex items-center gap-4 pb-6 border-b border-zinc-800">
               <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden border-2 border-red-600">
-                {user?.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-2xl text-zinc-400">{user?.displayName?.[0] || 'U'}</span>
-                )}
+                {user?.photoURL ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" /> : <span className="text-2xl text-zinc-400">{user?.displayName?.[0] || 'U'}</span>}
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">{user?.displayName || 'Guest User'}</h3>
-                <p className="text-xs text-zinc-500">{user?.email || 'No account'}</p>
-              </div>
+              <div><h3 className="text-lg font-bold text-white">{user?.displayName || 'Guest User'}</h3><p className="text-xs text-zinc-500">{user?.email || 'No account'}</p></div>
             </div>
             <div className="space-y-3">
               <InfoRow label="Account Type" value={user ? 'Pro Access' : 'Guest Mode'} />
@@ -336,21 +325,13 @@ export const Dashboard: React.FC = () => {
 
       {activeModal === 'history' && (
         <Modal title="Match History" onClose={() => setActiveModal(null)}>
-          <div className="text-center py-12">
-            <div className="text-5xl mb-4 opacity-20">📊</div>
-            <p className="text-zinc-500 text-xs uppercase tracking-widest">Coming Soon</p>
-            <p className="text-zinc-600 text-[10px] mt-2">Match history feature in development</p>
-          </div>
+          <div className="text-center py-12"><div className="text-5xl mb-4 opacity-20">📊</div><p className="text-zinc-500 text-xs uppercase tracking-widest">Coming Soon</p><p className="text-zinc-600 text-[10px] mt-2">Match history feature in development</p></div>
         </Modal>
       )}
 
       {activeModal === 'settings' && (
         <Modal title="Settings" onClose={() => setActiveModal(null)}>
-          <div className="text-center py-12">
-            <div className="text-5xl mb-4 opacity-20">⚙️</div>
-            <p className="text-zinc-500 text-xs uppercase tracking-widest">Coming Soon</p>
-            <p className="text-zinc-600 text-[10px] mt-2">Settings panel in development</p>
-          </div>
+          <div className="text-center py-12"><div className="text-5xl mb-4 opacity-20">⚙️</div><p className="text-zinc-500 text-xs uppercase tracking-widest">Coming Soon</p><p className="text-zinc-600 text-[10px] mt-2">Settings panel in development</p></div>
         </Modal>
       )}
     </div>
@@ -358,6 +339,7 @@ export const Dashboard: React.FC = () => {
 };
 
 // --- HELPER COMPONENTS (Unchanged) ---
+
 const SportCard = ({ name, desc, icon, onClick, accent }: any) => {
   const accentConfig: any = {
     red: { border: 'hover:border-red-600', text: 'group-hover:text-red-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]' },

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Smartphone, CheckCircle, Info, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, Share, PlusSquare, X } from 'lucide-react';
 
 interface InstallPromptProps {
   isInstalled: boolean;
@@ -14,7 +14,19 @@ export const InstallPrompt: React.FC<InstallPromptProps> = ({
   onInstall,
   onDismiss 
 }) => {
-  const [isInstalling, setIsInstalling] = React.useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isSafari, setIsSafari] = useState(false);
+
+  useEffect(() => {
+    // Detect iOS (iPhone/iPad)
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    // Detect Safari (Desktop or Mobile)
+    const safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    
+    setIsIOS(ios);
+    setIsSafari(safari);
+  }, []);
 
   const handleInstallClick = async () => {
     setIsInstalling(true);
@@ -25,91 +37,58 @@ export const InstallPrompt: React.FC<InstallPromptProps> = ({
     }
   };
 
-  // Don't show anything if already installed
-  if (isInstalled) {
-    return null;
-  }
+  // 1. If already installed, hide everything
+  if (isInstalled) return null;
 
-  // Show install prompt if available
+  // 2. If we have a Chrome/Edge native prompt, show the "Magic Button"
   if (hasPrompt) {
     return (
-      <div className="bg-gradient-to-br from-blue-950/30 to-blue-900/20 border border-blue-900/50 rounded-sm p-6 mb-8 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-        
-        <div className="flex items-start gap-4 mb-4">
-          <div className="text-3xl">📱</div>
-          <div className="flex-1">
-            <h3 className="text-white font-black uppercase tracking-tight text-lg mb-1">
-              Install THE BOX
-            </h3>
-            <p className="text-zinc-400 text-xs uppercase tracking-wider">
-              Get the best referee experience
-            </p>
-          </div>
-          {onDismiss && (
-            <button 
-              onClick={onDismiss}
-              className="text-zinc-600 hover:text-white transition-colors text-xl"
-            >
-              ×
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <CheckCircle size={14} className="text-green-500" />
-            <span>Works Offline</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <CheckCircle size={14} className="text-green-500" />
-            <span>Instant Loading</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <CheckCircle size={14} className="text-green-500" />
-            <span>Full Screen</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <CheckCircle size={14} className="text-green-500" />
-            <span>Home Screen Icon</span>
+      <div className="bg-gradient-to-br from-blue-950/40 to-black border-l-4 border-blue-600 bg-zinc-900/50 p-6 mb-8 relative rounded-sm shadow-xl">
+        <button onClick={onDismiss} className="absolute top-4 right-4 text-zinc-600 hover:text-white"><X size={18}/></button>
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-12 h-12 bg-blue-900/30 rounded-full flex items-center justify-center text-2xl">📱</div>
+          <div>
+            <h3 className="text-white font-black uppercase tracking-tight text-lg">Install App</h3>
+            <p className="text-zinc-400 text-xs font-mono">Enable Full-Screen Referee Mode</p>
           </div>
         </div>
-
         <button
           onClick={handleInstallClick}
           disabled={isInstalling}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 uppercase tracking-widest text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all"
         >
-          {isInstalling ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Installing...
-            </>
-          ) : (
-            <>
-              <Download size={16} />
-              Install Now
-            </>
-          )}
+          {isInstalling ? 'Installing...' : <><Download size={16} /> Install Firmware</>}
         </button>
       </div>
     );
   }
 
-  // Show info if no prompt available
-  return (
-    <div className="bg-zinc-900/30 border border-zinc-800 rounded-sm p-4 mb-8 flex items-center gap-3">
-      <Info size={18} className="text-zinc-600 flex-shrink-0" />
-      <div className="text-xs text-zinc-500">
-        <p className="font-bold uppercase tracking-wider mb-1">Installation Unavailable</p>
-        <p className="text-zinc-600 text-[10px]">
-          {/iPad|iPhone|iPod/.test(navigator.userAgent) 
-            ? 'On iOS: Tap Share → Add to Home Screen' 
-            : 'App already installed or browser not supported'}
-        </p>
+  // 3. If no prompt, but it is iOS/Safari, show "Manual Instructions"
+  if (isIOS || isSafari) {
+    return (
+      <div className="bg-zinc-900/80 border-l-4 border-zinc-600 p-6 mb-8 relative rounded-sm">
+        <button onClick={onDismiss} className="absolute top-4 right-4 text-zinc-600 hover:text-white"><X size={18}/></button>
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center text-2xl">🍎</div>
+          <div>
+            <h3 className="text-white font-black uppercase tracking-tight text-lg">Install on iOS/Safari</h3>
+            <p className="text-zinc-400 text-xs font-mono">Manual Setup Required</p>
+          </div>
+        </div>
+        <div className="space-y-3 bg-black/40 p-4 rounded text-sm text-zinc-300">
+          <div className="flex items-center gap-3">
+            <span className="bg-zinc-700 w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold">1</span>
+            <span>Tap the <strong className="text-blue-400"><Share size={12} className="inline mx-1"/> Share</strong> button below</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="bg-zinc-700 w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold">2</span>
+            <span>Scroll down and tap <strong className="text-white"><PlusSquare size={12} className="inline mx-1"/> Add to Home Screen</strong></span>
+          </div>
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  }
 
-export default InstallPrompt;
+  // 4. Default: Browser not supported or already installed but not detected
+  return null;
+};
