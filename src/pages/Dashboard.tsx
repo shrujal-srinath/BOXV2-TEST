@@ -4,6 +4,7 @@ import type { BasketballGame } from '../types';
 import { logoutUser, subscribeToAuth } from '../services/authService';
 import { getUserActiveGames } from '../services/gameService';
 import type { User } from 'firebase/auth';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -17,9 +18,8 @@ export const Dashboard: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | null>(null);
 
-  // --- PWA INSTALL STATE (Integrated) ---
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
+  // --- PWA LOGIC (Now Robust) ---
+  const { isInstalled, prompt, triggerInstall } = usePWAInstall();
 
   // --- INIT ---
   useEffect(() => {
@@ -28,36 +28,13 @@ export const Dashboard: React.FC = () => {
       if (u) getUserActiveGames(u.uid, setMyGames);
       setLoading(false);
     });
-
-    // Capture the PWA installation event
-    const handleInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-      console.log("🚀 BOX-V2: Hardware Provisioning Ready");
-    };
-
-    // Check if already in standalone mode
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true);
-    }
-
-    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
-
-    return () => {
-      unsub();
-      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
-    };
+    return () => unsub();
   }, []);
 
   // --- HANDLERS ---
-  const executeProvisioning = async () => {
-    if (!installPrompt) return;
-    
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setInstallPrompt(null);
-      setIsInstalled(true);
+  const handleProvisioning = async () => {
+    const success = await triggerInstall();
+    if (success) {
       setActiveModal(null);
     }
   };
@@ -275,22 +252,22 @@ export const Dashboard: React.FC = () => {
               />
               <StatusItem 
                 label="Install Ready" 
-                status={installPrompt ? 'online' : (isInstalled ? 'online' : 'local')} 
+                status={prompt ? 'online' : (isInstalled ? 'online' : 'local')} 
               />
             </div>
 
             {!isInstalled && (
               <div className="mt-6">
-                {installPrompt ? (
+                {prompt ? (
                   <button 
-                    onClick={executeProvisioning}
+                    onClick={handleProvisioning}
                     className="w-full bg-green-600 hover:bg-green-500 text-black font-black py-4 uppercase tracking-widest text-xs transition-colors shadow-[0_0_20px_rgba(34,197,94,0.4)]"
                   >
                     Install Firmware
                   </button>
                 ) : (
                   <div className="p-3 bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 text-center uppercase tracking-wider font-bold">
-                     Browser Restriction: Open in Chrome/Edge
+                     {window.location.hostname === 'localhost' ? 'Waiting for Browser...' : 'Browser Restriction: Use Chrome/Edge'}
                   </div>
                 )}
               </div>

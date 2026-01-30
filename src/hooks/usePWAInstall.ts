@@ -1,44 +1,75 @@
 import { useState, useEffect } from 'react';
 
+// GLOBAL CAPTURE: Listens immediately, even before React renders
+let globalDeferredPrompt: any = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later.
+    globalDeferredPrompt = e;
+    console.log('💿 BOX-V2: PWA Install Event Captured Globally');
+  });
+}
+
 export const usePWAInstall = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const [prompt, setPrompt] = useState<any>(globalDeferredPrompt);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstallable(false);
-      return;
-    }
+    // 1. Check if already installed (Standalone Mode)
+    const checkStandalone = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                           (window.navigator as any).standalone === true;
+      setIsInstalled(isStandalone);
+    };
+    
+    checkStandalone();
 
+    // 2. Listen for future events (if not captured globally yet)
     const handler = (e: any) => {
-      // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
-      // Stash the event so it can be triggered later
-      setDeferredPrompt(e);
-      setIsInstallable(true);
-      console.log('BOX-V2: Install prompt is ready and stashed.');
+      globalDeferredPrompt = e;
+      setPrompt(e);
+      console.log("💿 BOX-V2: PWA Event Updated in Hook");
     };
 
     window.addEventListener('beforeinstallprompt', handler);
+    
+    // 3. Check for successful installation
+    window.addEventListener('appinstalled', () => {
+      console.log('✅ BOX-V2: App installed successfully');
+      setIsInstalled(true);
+      setPrompt(null);
+      globalDeferredPrompt = null;
+    });
 
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+    };
   }, []);
 
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+  const triggerInstall = async () => {
+    if (!prompt) {
+      console.error("❌ No install prompt available");
+      return false;
+    }
 
     // Show the install prompt
-    deferredPrompt.prompt();
+    prompt.prompt();
 
     // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`BOX-V2: User response to install: ${outcome}`);
+    const { outcome } = await prompt.userChoice;
+    console.log(`User response to install: ${outcome}`);
 
-    // We used the prompt, so we can't use it again
-    setDeferredPrompt(null);
-    setIsInstallable(false);
+    if (outcome === 'accepted') {
+      setPrompt(null);
+      globalDeferredPrompt = null;
+      return true;
+    }
+    return false;
   };
 
-  return { isInstallable, handleInstallClick };
+  return { isInstalled, prompt, triggerInstall };
 };

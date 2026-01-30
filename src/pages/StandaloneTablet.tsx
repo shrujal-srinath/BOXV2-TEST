@@ -18,7 +18,9 @@ import '../styles/hardware.css';
 
 export const StandaloneTablet: React.FC = () => {
   const navigate = useNavigate();
-  const { isInstallable, handleInstallClick } = usePWAInstall();
+  
+  // --- UPDATED PWA LOGIC ---
+  const { prompt, triggerInstall, isInstalled } = usePWAInstall();
   
   // State
   const [isBooting, setIsBooting] = useState(true);
@@ -123,31 +125,31 @@ export const StandaloneTablet: React.FC = () => {
               </div>
             </button>
 
-            {/* PWA Install Button (Always Visible, States Handled) */}
+            {/* PWA Install Button (Refined Logic) */}
             <button
-              onClick={isInstallable ? handleInstallClick : undefined}
-              disabled={!isInstallable}
+              onClick={prompt ? triggerInstall : undefined}
+              disabled={!prompt}
               className={`metal-panel p-8 flex flex-col items-center justify-center gap-4 transition-all group relative
-                ${isInstallable 
+                ${prompt 
                   ? 'border-dashed border-blue-500/50 hover:border-blue-400 cursor-pointer animate-pulse' 
                   : 'opacity-30 grayscale cursor-not-allowed border-transparent bg-zinc-900/10'
                 }`}
             >
                {/* Tooltip/Overlay for Disabled State */}
-               {!isInstallable && (
+               {!prompt && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center">
                   <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest bg-black/80 px-2 py-1 rounded border border-zinc-800">
-                    Already Installed
+                    {isInstalled ? "Already Installed" : "Browser Restriction"}
                   </span>
                 </div>
               )}
 
               <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all 
-                ${isInstallable ? 'bg-blue-900/20 group-hover:bg-blue-900/40' : 'bg-zinc-800/20'}`}>
-                <Download size={32} className={isInstallable ? 'text-blue-400' : 'text-zinc-600'} />
+                ${prompt ? 'bg-blue-900/20 group-hover:bg-blue-900/40' : 'bg-zinc-800/20'}`}>
+                <Download size={32} className={prompt ? 'text-blue-400' : 'text-zinc-600'} />
               </div>
               <div className="text-center">
-                <div className={`text-lg font-black uppercase ${isInstallable ? 'text-white' : 'text-zinc-600'}`}>
+                <div className={`text-lg font-black uppercase ${prompt ? 'text-white' : 'text-zinc-600'}`}>
                   Install App
                 </div>
                 <div className="text-xs text-zinc-500 mt-1">Offline Access</div>
