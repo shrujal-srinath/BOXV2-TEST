@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 
 // GLOBAL CAPTURE: Listens immediately, even before React renders
+// This fixes the "Race Condition" where the event fires before the component loads
 let globalDeferredPrompt: any = null;
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the mini-infobar from appearing on mobile
-    e.preventDefault();
-    // Stash the event so it can be triggered later.
-    globalDeferredPrompt = e;
+    e.preventDefault(); // Stop the browser's mini-infobar
+    globalDeferredPrompt = e; // Stash it globally
     console.log('💿 BOX-V2: PWA Install Event Captured Globally');
   });
 }
@@ -18,26 +17,25 @@ export const usePWAInstall = () => {
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // 1. Check if already installed (Standalone Mode)
+    // 1. Check if already installed
     const checkStandalone = () => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
                            (window.navigator as any).standalone === true;
       setIsInstalled(isStandalone);
     };
-    
     checkStandalone();
 
-    // 2. Listen for future events (if not captured globally yet)
+    // 2. Listen for the event (if it happens AFTER mount)
     const handler = (e: any) => {
       e.preventDefault();
       globalDeferredPrompt = e;
       setPrompt(e);
-      console.log("💿 BOX-V2: PWA Event Updated in Hook");
+      console.log("💿 BOX-V2: PWA Event Caught in Hook");
     };
 
     window.addEventListener('beforeinstallprompt', handler);
     
-    // 3. Check for successful installation
+    // 3. Listen for successful install
     window.addEventListener('appinstalled', () => {
       console.log('✅ BOX-V2: App installed successfully');
       setIsInstalled(true);
@@ -45,9 +43,7 @@ export const usePWAInstall = () => {
       globalDeferredPrompt = null;
     });
 
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
-    };
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const triggerInstall = async () => {
@@ -56,13 +52,9 @@ export const usePWAInstall = () => {
       return false;
     }
 
-    // Show the install prompt
     prompt.prompt();
-
-    // Wait for the user to respond to the prompt
     const { outcome } = await prompt.userChoice;
-    console.log(`User response to install: ${outcome}`);
-
+    
     if (outcome === 'accepted') {
       setPrompt(null);
       globalDeferredPrompt = null;
