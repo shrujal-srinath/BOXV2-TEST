@@ -7,10 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Ensure these files exist in your /public folder!
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'vite.svg'],
       devOptions: {
-        enabled: true, // CRITICAL: Enables PWA install on Localhost
+        enabled: true,      // <--- REQUIRED for localhost
         type: 'module',
       },
       manifest: {
@@ -20,18 +19,18 @@ export default defineConfig({
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
-        start_url: '/', // Changed from /tablet/standalone to / to avoid scope errors
+        start_url: '/',
         scope: '/',
         orientation: 'landscape',
         icons: [
           {
-            src: 'pwa-192x192.png', // Must be a PNG
+            src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: 'pwa-512x512.png', // Must be a PNG
+            src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
