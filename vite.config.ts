@@ -1,42 +1,57 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'vite.svg'],
-      devOptions: {
-        enabled: true,      // <--- REQUIRED for localhost
-        type: 'module',
-      },
       manifest: {
-        name: 'BOX-V2 Referee System',
-        short_name: 'BOX-V2',
-        description: 'Professional Sports Referee & Scoring Interface',
+        name: 'The Box - Basketball Scorer',
+        short_name: 'The Box',
+        description: 'Professional basketball scoring system',
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
-        start_url: '/',
-        scope: '/',
         orientation: 'landscape',
-        icons: [
+        // Icons removed temporarily - add back when you have pwa-192x192.png and pwa-512x512.png in public/
+        icons: []
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        runtimeCaching: [
           {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any maskable'
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
           },
           {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
+            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'firebase-storage',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7
+              }
+            }
           }
         ]
+      },
+      devOptions: {
+        enabled: true,
+        type: 'module'
       }
     })
-  ],
-});
+  ]
+})

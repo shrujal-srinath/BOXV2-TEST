@@ -1,8 +1,7 @@
-// src/services/firebase.ts (or wherever your firebase config is)
+// src/services/firebase.ts
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { getAnalytics } from 'firebase/analytics';
 
 // Debug: Log environment variables (remove in production)
 console.log('FIREBASE CONFIG CHECK:', {
@@ -41,11 +40,13 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// Only initialize analytics in browser environment
-let analytics;
-if (typeof window !== 'undefined') {
-  analytics = getAnalytics(app);
-}
+// Analytics disabled temporarily to avoid API key errors
+// Uncomment when Analytics is properly configured in Firebase Console:
+// import { getAnalytics } from 'firebase/analytics';
+// let analytics;
+// if (typeof window !== 'undefined') {
+//   analytics = getAnalytics(app);
+// }
+// export { analytics };
 
-export { analytics };
 export default app;
