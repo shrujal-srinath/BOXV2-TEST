@@ -1,43 +1,51 @@
-// src/services/firebase.ts
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { 
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager
-} from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+// src/services/firebase.ts (or wherever your firebase config is)
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getAnalytics } from 'firebase/analytics';
 
-// --- FIREBASE CONFIGURATION ---
-// Using type casting to ensure TS recognizes Vite's import.meta.env
-const env = (import.meta as any).env;
+// Debug: Log environment variables (remove in production)
+console.log('FIREBASE CONFIG CHECK:', {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ? '✓ Present' : '✗ Missing',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ? '✓ Present' : '✗ Missing',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ? '✓ Present' : '✗ Missing',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ? '✓ Present' : '✗ Missing',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ? '✓ Present' : '✗ Missing',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID ? '✓ Present' : '✗ Missing',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ? '✓ Present' : '✗ Missing',
+});
 
 const firebaseConfig = {
-  apiKey: env?.VITE_FIREBASE_API_KEY || "",
-  authDomain: env?.VITE_FIREBASE_AUTH_DOMAIN || "",
-  projectId: env?.VITE_FIREBASE_PROJECT_ID || "",
-  storageBucket: env?.VITE_FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: env?.VITE_FIREBASE_APP_ID || "",
-  measurementId: env?.VITE_FIREBASE_MEASUREMENT_ID || ""
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// Validate
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  console.warn('⚠️ FIREBASE CONFIG: Some environment variables are missing.');
+// Validate config before initializing
+const requiredFields = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
+const missingFields = requiredFields.filter(field => !firebaseConfig[field as keyof typeof firebaseConfig]);
+
+if (missingFields.length > 0) {
+  console.error('FIREBASE CONFIG: Some environment variables are missing:', missingFields);
+  throw new Error(`Missing Firebase config: ${missingFields.join(', ')}`);
 }
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
-// Initialize Firestore with PERSISTENT cache
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
-});
+// Initialize services
+export const db = getFirestore(app);
+export const auth = getAuth(app);
 
-const auth = getAuth(app);
+// Only initialize analytics in browser environment
+let analytics;
+if (typeof window !== 'undefined') {
+  analytics = getAnalytics(app);
+}
 
-export { db, auth, analytics };
+export { analytics };
+export default app;
