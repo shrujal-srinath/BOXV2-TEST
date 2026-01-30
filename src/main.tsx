@@ -1,24 +1,31 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
-// Explicitly import the SW register to force it
-import { registerSW } from 'virtual:pwa-register'
+import './index.css'
 
-// Auto-update SW logic
-const updateSW = registerSW({
-  onNeedRefresh() {
-    if (confirm('New system update available. Reload?')) {
-      updateSW(true);
-    }
-  },
-  onOfflineReady() {
-    console.log('✅ BOX-V2: System Ready for Offline Mode');
-  },
-})
+// PWA registration with proper error handling
+if ('serviceWorker' in navigator) {
+  import('virtual:pwa-register').then(({ registerSW }) => {
+    const updateSW = registerSW({
+      onNeedRefresh() {
+        if (confirm('New version available! Reload to update?')) {
+          updateSW(true)
+        }
+      },
+      onOfflineReady() {
+        console.log('App ready to work offline')
+      },
+      onRegisterError(error) {
+        console.error('SW registration error', error)
+      }
+    })
+  }).catch((error) => {
+    console.log('PWA not available:', error)
+  })
+}
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
     <App />
-  </StrictMode>,
+  </React.StrictMode>,
 )
