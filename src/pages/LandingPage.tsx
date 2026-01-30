@@ -15,10 +15,6 @@ export const LandingPage: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [stage, setStage] = useState(0); 
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showInstallInfo, setShowInstallInfo] = useState(false);
-
-  // PWA Install State
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
 
   // Modals
   const [showFreeHostWarning, setShowFreeHostWarning] = useState(false);
@@ -51,37 +47,13 @@ export const LandingPage: React.FC = () => {
     // 3. Live Games
     const unsubLive = subscribeToLiveGames(setLiveGames);
 
-    // 4. PWA Install Listener
-    const handleInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-      console.log("🚀 PWA Install Prompt Stashed");
-    };
-    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
-
     return () => { 
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); 
       unsubAuth(); unsubLive(); 
-      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
     };
   }, [navigate, showSplash]);
 
   // --- HANDLERS ---
-  const handleInstallClick = async () => {
-    if (!installPrompt) {
-      setShowInstallInfo(true);
-      setShowUserMenu(false);
-      return;
-    }
-    
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setInstallPrompt(null);
-      setShowUserMenu(false);
-    }
-  };
-
   const handleWatchSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (joinCode.length === 6) navigate(`/watch/${joinCode}`);
@@ -237,28 +209,10 @@ export const LandingPage: React.FC = () => {
                   <div className="p-4 border-b border-zinc-900">
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">System Menu</p>
                   </div>
-                  
-                  {/* FORCED VISIBLE: GO OFFLINE BUTTON */}
-                  <button 
-                    onClick={handleInstallClick}
-                    className="flex items-center gap-3 w-full px-4 py-4 text-left hover:bg-zinc-900 transition-colors group"
-                  >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${installPrompt ? 'bg-red-600/20 group-hover:bg-red-600' : 'bg-zinc-800'}`}>
-                      <svg className={`w-4 h-4 ${installPrompt ? 'text-red-500 group-hover:text-white' : 'text-zinc-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-black italic uppercase tracking-tight text-white">Go Offline</span>
-                      <span className="text-[9px] text-zinc-500 font-bold uppercase">
-                        {installPrompt ? 'Dedicated Unit Ready' : 'Setup Required'}
-                      </span>
-                    </div>
-                  </button>
 
                   <button 
                     onClick={() => { setShowEmailModal(true); setShowUserMenu(false); }}
-                    className="flex items-center gap-3 w-full px-4 py-4 text-left hover:bg-zinc-900 transition-colors border-t border-zinc-900"
+                    className="flex items-center gap-3 w-full px-4 py-4 text-left hover:bg-zinc-900 transition-colors"
                   >
                     <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
                       <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
@@ -374,41 +328,7 @@ export const LandingPage: React.FC = () => {
         </div>
       </div>
 
-      {/* DIAGNOSTIC MODAL */}
-      {showInstallInfo && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
-          <div className="bg-zinc-900 border border-zinc-800 max-w-md w-full p-8 shadow-2xl relative">
-            <div className="absolute top-0 left-0 w-full h-1 bg-zinc-700"></div>
-            <h3 className="text-2xl font-black italic uppercase text-white mb-2 tracking-tighter">Diagnostics: Offline Unit</h3>
-            <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-              The "Go Offline" trigger is visible, but the browser hasn't activated the installation handshake yet.
-            </p>
-            <div className="bg-black border border-zinc-800 p-4 mb-8 space-y-3">
-              <div className="flex items-center justify-between text-[10px] font-bold tracking-widest uppercase">
-                <span className="text-zinc-500">HTTPS Connection</span>
-                <span className={window.location.protocol === 'https:' ? 'text-green-500' : 'text-red-500'}>
-                  {window.location.protocol === 'https:' ? 'ACTIVE' : 'INACTIVE'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-bold tracking-widest uppercase">
-                <span className="text-zinc-500">Service Worker</span>
-                <span className={'serviceWorker' in navigator ? 'text-green-500' : 'text-red-500'}>
-                  {'serviceWorker' in navigator ? 'READY' : 'FAIL'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-bold tracking-widest uppercase">
-                <span className="text-zinc-500">Install State</span>
-                <span className={installPrompt ? 'text-green-500' : 'text-amber-500'}>
-                  {installPrompt ? 'READY TO SYNC' : 'PENDING BROWSER'}
-                </span>
-              </div>
-            </div>
-            <button onClick={() => setShowInstallInfo(false)} className="w-full bg-white text-black font-black py-4 uppercase tracking-widest text-sm hover:bg-zinc-200 transition-colors">Close Diagnostics</button>
-          </div>
-        </div>
-      )}
-
-      {/* ALL ORIGINAL MODALS */}
+      {/* ALL MODALS */}
       {showFreeHostWarning && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative overflow-hidden">

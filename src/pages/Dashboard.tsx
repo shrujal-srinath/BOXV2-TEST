@@ -15,10 +15,11 @@ export const Dashboard: React.FC = () => {
   
   // Menu & Modal States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'offlineInfo' | null>(null);
+  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | null>(null);
 
   // --- PWA INSTALL STATE (Integrated) ---
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   // --- INIT ---
   useEffect(() => {
@@ -32,8 +33,14 @@ export const Dashboard: React.FC = () => {
     const handleInstallPrompt = (e: Event) => {
       e.preventDefault();
       setInstallPrompt(e);
-      console.log("🚀 BOX-V2: PWA Install Prompt Stashed");
+      console.log("🚀 BOX-V2: Hardware Provisioning Ready");
     };
+
+    // Check if already in standalone mode
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+    }
+
     window.addEventListener('beforeinstallprompt', handleInstallPrompt);
 
     return () => {
@@ -43,19 +50,15 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   // --- HANDLERS ---
-  const handleInstallClick = async () => {
-    if (!installPrompt) {
-      // Requirements not met - Show Diagnostics Pop-up (Feature Retained)
-      setActiveModal('offlineInfo');
-      setIsMenuOpen(false);
-      return;
-    }
+  const executeProvisioning = async () => {
+    if (!installPrompt) return;
     
     installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
     if (outcome === 'accepted') {
       setInstallPrompt(null);
-      setIsMenuOpen(false);
+      setIsInstalled(true);
+      setActiveModal(null);
     }
   };
 
@@ -131,11 +134,11 @@ export const Dashboard: React.FC = () => {
 
             <div className="pt-2 mt-2">
               <MenuItem 
-                label="Go Offline" 
-                icon="📱" 
-                onClick={handleInstallClick} 
-                highlight={!!installPrompt}
-                subtitle={installPrompt ? "Dedicated Unit Ready" : "Diagnostics Required"}
+                label={isInstalled ? "Unit Provisioned" : "Provision Hardware"}
+                icon={isInstalled ? "✅" : "📱"}
+                onClick={() => { setIsMenuOpen(false); setActiveModal('provision'); }}
+                highlight={!isInstalled}
+                subtitle={isInstalled ? "Device Ready" : "Setup Referee Unit"}
               />
             </div>
 
@@ -230,7 +233,7 @@ export const Dashboard: React.FC = () => {
         )}
       </main>
 
-      {/* === MODALS (All Features Retained) === */}
+      {/* === MODALS === */}
 
       {activeModal === 'tablet' && (
         <Modal title="Tablet Controller" onClose={() => setActiveModal(null)}>
@@ -248,17 +251,56 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {activeModal === 'offlineInfo' && (
-        <Modal title="Offline Unit Diagnostics" onClose={() => setActiveModal(null)}>
+      {activeModal === 'provision' && (
+        <Modal title="Hardware Provisioning Checklist" onClose={() => setActiveModal(null)}>
           <div className="space-y-4">
-            <p className="text-xs text-zinc-400 leading-relaxed">The browser is currently preventing the "Offline Unit" installation. Please check the following:</p>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-4">
+              {isInstalled 
+                ? "This device is fully provisioned as a Referee Unit." 
+                : "System pre-flight check required before installing dedicated firmware."}
+            </p>
+            
             <div className="bg-black p-4 border border-zinc-800 space-y-3">
-              <StatusItem label="Secure Context (HTTPS)" status={window.location.protocol === 'https:' ? 'online' : 'offline'} />
-              <StatusItem label="Service Worker" status={'serviceWorker' in navigator ? 'online' : 'offline'} />
-              <StatusItem label="Install Prompt" status={installPrompt ? 'online' : 'local'} />
+              <StatusItem 
+                label="Secure Context (HTTPS)" 
+                status={window.location.protocol === 'https:' ? 'online' : 'offline'} 
+              />
+              <StatusItem 
+                label="Local Storage" 
+                status={typeof localStorage !== 'undefined' ? 'online' : 'offline'} 
+              />
+              <StatusItem 
+                label="Service Worker" 
+                status={'serviceWorker' in navigator ? 'online' : 'offline'} 
+              />
+              <StatusItem 
+                label="Install Ready" 
+                status={installPrompt ? 'online' : (isInstalled ? 'online' : 'local')} 
+              />
             </div>
-            <p className="text-[10px] text-zinc-600 italic">Note: If the app is already installed or your browser doesn't support PWAs, the handshake will stay in 'PENDING'.</p>
-            <button onClick={() => setActiveModal(null)} className="w-full bg-white text-black font-black py-4 uppercase tracking-widest text-[10px] mt-4">Close Diagnostics</button>
+
+            {!isInstalled && (
+              <div className="mt-6">
+                {installPrompt ? (
+                  <button 
+                    onClick={executeProvisioning}
+                    className="w-full bg-green-600 hover:bg-green-500 text-black font-black py-4 uppercase tracking-widest text-xs transition-colors shadow-[0_0_20px_rgba(34,197,94,0.4)]"
+                  >
+                    Install Firmware
+                  </button>
+                ) : (
+                  <div className="p-3 bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 text-center uppercase tracking-wider font-bold">
+                     Browser Restriction: Open in Chrome/Edge
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {isInstalled && (
+               <button onClick={() => setActiveModal(null)} className="w-full bg-zinc-800 text-white font-bold py-4 uppercase tracking-widest text-[10px] mt-4">
+                 Close
+               </button>
+            )}
           </div>
         </Modal>
       )}
@@ -322,7 +364,7 @@ export const Dashboard: React.FC = () => {
   );
 };
 
-// --- HELPER COMPONENTS (Retained in Full) ---
+// --- HELPER COMPONENTS ---
 
 const SportCard = ({ name, desc, icon, onClick, accent }: any) => {
   const accentConfig: any = {
@@ -380,7 +422,7 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
 );
 
 const StatusItem = ({ label, status }: { label: string; status: 'online' | 'offline' | 'local' }) => {
-  const statusConfig = { online: { color: 'bg-green-500', text: 'Online', textColor: 'text-green-400' }, offline: { color: 'bg-red-500', text: 'Offline', textColor: 'text-red-400' }, local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-400' } };
+  const statusConfig = { online: { color: 'bg-green-500', text: 'Active', textColor: 'text-green-400' }, offline: { color: 'bg-red-500', text: 'Error', textColor: 'text-red-400' }, local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-400' } };
   const config = statusConfig[status];
   return (
     <div className="flex justify-between items-center py-3 border-b border-zinc-900">
