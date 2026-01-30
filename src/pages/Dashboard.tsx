@@ -399,13 +399,20 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
 );
 
 const StatusItem = ({ label, status }: { label: string; status: 'online' | 'offline' | 'local' }) => {
-  const statusConfig = { online: { color: 'bg-green-500', text: 'Active', textColor: 'text-green-400' }, offline: { color: 'bg-red-500', text: 'Error', textColor: 'text-red-400' }, local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-400' } };
+  const statusConfig = { 
+    online: { color: 'bg-green-500', text: 'Active', textColor: 'text-green-400' }, 
+    offline: { color: 'bg-red-500', text: 'Error', textColor: 'text-red-400' }, 
+    local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-400' } 
+  };
   const config = statusConfig[status];
   return (
     <div className="flex justify-between items-center py-3 border-b border-zinc-900">
       <span className="text-xs text-zinc-400 uppercase tracking-wider">{label}</span>
       <div className="flex items-center gap-2">
-        <div className="relative"><div className={`w-2 h-2 ${config.color} rounded-full`}></div><div className={`absolute inset-0 w-2 h-2 ${config.color} rounded-full animate-ping opacity-75`}></div></div>
+        <div className="relative">
+          <div className={`w-2 h-2 ${config.color} rounded-full`}></div>
+          <div className={`absolute inset-0 w-2 h-2 ${config.color} rounded-full animate-ping opacity-75`}></div>
+        </div>
         <span className={`text-xs font-bold uppercase tracking-widest ${config.textColor}`}>{config.text}</span>
       </div>
     </div>
