@@ -5,6 +5,8 @@ import { logoutUser, subscribeToAuth } from '../services/authService';
 import { getUserActiveGames } from '../services/gameService';
 import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+// 1. IMPORT THE NEW COMPONENT
+import { InstallPrompt } from '../components/InstallPrompt';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -18,7 +20,10 @@ export const Dashboard: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | null>(null);
 
-  // --- PWA LOGIC (Now Robust) ---
+  // 2. ADD STATE TO CONTROL CARD VISIBILITY
+  const [showInstallCard, setShowInstallCard] = useState(true);
+
+  // --- PWA LOGIC ---
   const { isInstalled, prompt, triggerInstall } = usePWAInstall();
 
   // --- INIT ---
@@ -36,6 +41,7 @@ export const Dashboard: React.FC = () => {
     const success = await triggerInstall();
     if (success) {
       setActiveModal(null);
+      setShowInstallCard(false); // Hide card on success
     }
   };
 
@@ -65,9 +71,8 @@ export const Dashboard: React.FC = () => {
   return (
     <div className={`min-h-screen bg-black font-sans text-white transition-transform duration-300`}>
       
-      {/* === HEADER === */}
+      {/* HEADER (Unchanged) */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20">
-        
         <button 
           onClick={() => setActiveModal('profile')}
           className="flex items-center gap-4 group hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all"
@@ -98,7 +103,7 @@ export const Dashboard: React.FC = () => {
         </button>
       </header>
 
-      {/* === SLIDE-OUT MENU === */}
+      {/* SLIDE-OUT MENU (Unchanged) */}
       <div className={`fixed top-0 right-0 w-[300px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-6 h-full flex flex-col">
           <div className="flex justify-between items-center mb-8">
@@ -108,7 +113,7 @@ export const Dashboard: React.FC = () => {
 
           <div className="space-y-1 flex-1 overflow-y-auto">
             <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
-
+            {/* Kept the menu item as a backup/alternative way to access status */}
             <div className="pt-2 mt-2">
               <MenuItem 
                 label={isInstalled ? "Unit Provisioned" : "Provision Hardware"}
@@ -118,7 +123,6 @@ export const Dashboard: React.FC = () => {
                 subtitle={isInstalled ? "Device Ready" : "Setup Referee Unit"}
               />
             </div>
-
             <MenuItem label="My Profile" icon="👤" onClick={() => { setIsMenuOpen(false); setActiveModal('profile'); }} disabled={!user} />
             <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
             
@@ -149,11 +153,23 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-      
       {isMenuOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => setIsMenuOpen(false)}></div>}
 
       {/* === MAIN CONTENT === */}
       <main className="max-w-7xl mx-auto p-6 md:p-12">
+        
+        {/* 3. INSERT THE INSTALL CARD HERE */}
+        {showInstallCard && !isInstalled && (
+          <div className="mb-8 animate-in slide-in-from-top-4 fade-in duration-500">
+            <InstallPrompt 
+              isInstalled={isInstalled}
+              hasPrompt={!!prompt}
+              onInstall={handleProvisioning}
+              onDismiss={() => setShowInstallCard(false)}
+            />
+          </div>
+        )}
+
         <section className="mb-12">
           <h2 className="text-zinc-500 text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
             <span className="w-2 h-2 bg-red-600 rounded-full"></span> Initialize New Session
@@ -210,8 +226,7 @@ export const Dashboard: React.FC = () => {
         )}
       </main>
 
-      {/* === MODALS === */}
-
+      {/* MODALS (Kept Provisioning as Backup, or you can remove it if you only want the card) */}
       {activeModal === 'tablet' && (
         <Modal title="Tablet Controller" onClose={() => setActiveModal(null)}>
            <div className="mb-6">
@@ -228,6 +243,7 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
+      {/* KEEPING THIS MODAL ALLOWS MANUAL INSTALL VIA MENU IF THEY DISMISSED THE CARD */}
       {activeModal === 'provision' && (
         <Modal title="Hardware Provisioning Checklist" onClose={() => setActiveModal(null)}>
           <div className="space-y-4">
@@ -341,8 +357,7 @@ export const Dashboard: React.FC = () => {
   );
 };
 
-// --- HELPER COMPONENTS ---
-
+// --- HELPER COMPONENTS (Unchanged) ---
 const SportCard = ({ name, desc, icon, onClick, accent }: any) => {
   const accentConfig: any = {
     red: { border: 'hover:border-red-600', text: 'group-hover:text-red-500', glow: 'group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]' },
@@ -399,20 +414,13 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
 );
 
 const StatusItem = ({ label, status }: { label: string; status: 'online' | 'offline' | 'local' }) => {
-  const statusConfig = { 
-    online: { color: 'bg-green-500', text: 'Active', textColor: 'text-green-400' }, 
-    offline: { color: 'bg-red-500', text: 'Error', textColor: 'text-red-400' }, 
-    local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-400' } 
-  };
+  const statusConfig = { online: { color: 'bg-green-500', text: 'Active', textColor: 'text-green-400' }, offline: { color: 'bg-red-500', text: 'Error', textColor: 'text-red-400' }, local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-400' } };
   const config = statusConfig[status];
   return (
     <div className="flex justify-between items-center py-3 border-b border-zinc-900">
       <span className="text-xs text-zinc-400 uppercase tracking-wider">{label}</span>
       <div className="flex items-center gap-2">
-        <div className="relative">
-          <div className={`w-2 h-2 ${config.color} rounded-full`}></div>
-          <div className={`absolute inset-0 w-2 h-2 ${config.color} rounded-full animate-ping opacity-75`}></div>
-        </div>
+        <div className="relative"><div className={`w-2 h-2 ${config.color} rounded-full`}></div><div className={`absolute inset-0 w-2 h-2 ${config.color} rounded-full animate-ping opacity-75`}></div></div>
         <span className={`text-xs font-bold uppercase tracking-widest ${config.textColor}`}>{config.text}</span>
       </div>
     </div>
