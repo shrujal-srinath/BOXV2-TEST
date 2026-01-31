@@ -8,15 +8,35 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'The Box - Basketball Scorer',
-        short_name: 'The Box',
+        name: 'The Box - Referee Unit', // Optional: Rename for the dedicated device
+        short_name: 'Referee',
         description: 'Professional basketball scoring system',
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
         orientation: 'landscape',
-        // Icons removed temporarily - add back when you have pwa-192x192.png and pwa-512x512.png in public/
-        icons: []
+        
+        // 🚨 CRITICAL FIX: Point this to your Dedicated Tablet Page
+        start_url: '/tablet/standalone', 
+        
+        // Ensure scope includes the tablet path
+        scope: '/', 
+        
+        // Note: Ensure your icons are present in /public for the install to work fully
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }
+        ]
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
