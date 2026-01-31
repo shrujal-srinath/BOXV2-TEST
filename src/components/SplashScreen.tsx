@@ -1,5 +1,4 @@
 // src/components/SplashScreen.tsx
-// ALTERNATIVE VERSION - Red Gradient Background
 import React, { useState, useEffect } from 'react';
 import './SplashScreen.css';
 
@@ -18,77 +17,114 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       return;
     }
 
-    // Buttery smooth sequence
+    // Ultra-smooth sequence - ESPN broadcast style
     const timers = [
-      setTimeout(() => setStage(1), 150),    // Logo reveal
-      setTimeout(() => setStage(2), 1000),   // Text fade in
-      setTimeout(() => setStage(3), 1800),   // Meta info
-      setTimeout(() => setStage(4), 2600),   // Complete state
+      setTimeout(() => setStage(1), 100),    // Background reveal
+      setTimeout(() => setStage(2), 700),    // Logo fade in
+      setTimeout(() => setStage(3), 1600),   // Main title
+      setTimeout(() => setStage(4), 2400),   // Creator text
+      setTimeout(() => setStage(5), 3200),   // Complete
       setTimeout(() => {
         sessionStorage.setItem('BOX_SPLASH_SHOWN', 'true');
         onComplete();
-      }, 3400)
+      }, 4000)
     ];
 
     return () => timers.forEach(timer => clearTimeout(timer));
   }, [onComplete]);
 
   return (
-    <div className={`splash-premium ${stage === 4 ? 'splash-premium-exit' : ''}`}>
+    <div className={`splash-espn ${stage === 5 ? 'splash-espn-exit' : ''}`}>
       
-      {/* Gradient Background */}
-      <div className="splash-premium-bg">
-        <div className="splash-premium-gradient-1"></div>
-        <div className="splash-premium-gradient-2"></div>
-        <div className="splash-premium-overlay"></div>
+      {/* Black Background with Red Glow */}
+      <div className="splash-espn-bg">
+        <div className="splash-espn-glow"></div>
+        <div className="splash-espn-vignette"></div>
       </div>
 
-      {/* Main Container */}
-      <div className="splash-premium-container">
+      {/* Main Content */}
+      <div className="splash-espn-container">
         
-        {/* Logo */}
-        {stage >= 1 && (
-          <div className="splash-premium-logo-section">
-            <div className="splash-premium-logo">
-              <div className="splash-premium-logo-outer">
-                <div className="splash-premium-logo-middle">
-                  <div className="splash-premium-logo-inner">
-                    <div className="splash-premium-logo-core"></div>
-                  </div>
-                </div>
-              </div>
+        {/* Logo Icon */}
+        {stage >= 2 && (
+          <div className="splash-espn-logo-wrapper">
+            <div className="splash-espn-logo-glow-ring"></div>
+            <div className="splash-espn-logo">
+              <svg viewBox="0 0 100 100" className="splash-espn-svg">
+                {/* Outer Ring */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="45"
+                  fill="none"
+                  stroke="url(#redGradient)"
+                  strokeWidth="2"
+                  className="splash-espn-ring"
+                />
+                
+                {/* Center Box */}
+                <rect
+                  x="30"
+                  y="30"
+                  width="40"
+                  height="40"
+                  fill="url(#redGradient)"
+                  rx="4"
+                  className="splash-espn-box"
+                />
+                
+                {/* Inner Detail */}
+                <rect
+                  x="38"
+                  y="38"
+                  width="24"
+                  height="24"
+                  fill="#000000"
+                  rx="2"
+                  className="splash-espn-inner"
+                />
+                
+                {/* Gradient Definition */}
+                <defs>
+                  <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#DC2626" />
+                    <stop offset="50%" stopColor="#EF4444" />
+                    <stop offset="100%" stopColor="#DC2626" />
+                  </linearGradient>
+                </defs>
+              </svg>
             </div>
           </div>
         )}
 
-        {/* Main Content */}
-        {stage >= 2 && (
-          <div className="splash-premium-content">
-            <h1 className="splash-premium-title">
-              <span className="splash-premium-title-the">THE</span>
-              <span className="splash-premium-title-box">BOX</span>
+        {/* Main Title */}
+        {stage >= 3 && (
+          <div className="splash-espn-title-wrapper">
+            <h1 className="splash-espn-title">
+              <span className="splash-espn-title-the">THE</span>
+              <span className="splash-espn-title-box">BOX</span>
             </h1>
-            <div className="splash-premium-line"></div>
+            <div className="splash-espn-underline"></div>
           </div>
         )}
 
-        {/* Footer */}
-        {stage >= 3 && (
-          <div className="splash-premium-footer">
-            <p className="splash-premium-creator">Created by BMSCE</p>
-            <p className="splash-premium-tagline">
-              Research & Development • Sports Innovation
+        {/* Creator & Meta */}
+        {stage >= 4 && (
+          <div className="splash-espn-meta">
+            <div className="splash-espn-creator">
+              <div className="splash-espn-line"></div>
+              <span className="splash-espn-creator-text">CREATED BY BMSCE</span>
+              <div className="splash-espn-line"></div>
+            </div>
+            <p className="splash-espn-tagline">
+              Research & Development • Sports Innovation Department
             </p>
           </div>
         )}
       </div>
 
-      {/* Floating Elements */}
-      <div className="splash-premium-orbs">
-        <div className="splash-premium-orb splash-premium-orb-1"></div>
-        <div className="splash-premium-orb splash-premium-orb-2"></div>
-        <div className="splash-premium-orb splash-premium-orb-3"></div>
-      </div>
+      {/* Subtle Scanline Effect */}
+      <div className="splash-espn-scanline"></div>
     </div>
   );
 };
