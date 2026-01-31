@@ -1,9 +1,11 @@
-// src/pages/StandaloneTablet.tsx
+// src/pages/StandaloneTablet.tsx (V2 - PRODUCTION READY)
 /**
- * STANDALONE TABLET PAGE
- * Entry point for offline-first tablet mode
- * User can create local games or resume existing ones without cloud connection
- * Integrated with PWA installation logic for offline reliability.
+ * STANDALONE TABLET PAGE - PRODUCTION VERSION
+ * 
+ * FIXES APPLIED:
+ * ✅ Auto-resume last active game
+ * ✅ Better offline indicators
+ * ✅ Improved UX flow
  */
 
 import React, { useState, useEffect } from 'react';
@@ -12,6 +14,7 @@ import { Users, Play, Cloud, Settings, Download } from 'lucide-react';
 import { BootSequence } from '../features/tablet/BootSequence';
 import { getLocalGameLibrary, getStorageStats, type LocalGameMetadata } from '../services/localGameService';
 import { getSyncStatus, triggerManualSync } from '../services/syncService';
+import { getLastActiveGame } from '../hooks/useLocalGame';
 import { auth } from '../services/firebase';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import '../styles/hardware.css';
@@ -19,17 +22,16 @@ import '../styles/hardware.css';
 export const StandaloneTablet: React.FC = () => {
   const navigate = useNavigate();
   
-  // --- UPDATED PWA LOGIC ---
   const { prompt, triggerInstall, isInstalled } = usePWAInstall();
   
-  // State
   const [isBooting, setIsBooting] = useState(true);
   const [localGames, setLocalGames] = useState<LocalGameMetadata[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [lastGame, setLastGame] = useState<{ id: string; timestamp: number } | null>(null);
   const [storageInfo, setStorageInfo] = useState(getStorageStats());
 
-  // Refresh local games
   const refreshGames = () => {
     const library = getLocalGameLibrary();
     setLocalGames(library.games.sort((a, b) => b.lastModified - a.lastModified));
@@ -38,19 +40,34 @@ export const StandaloneTablet: React.FC = () => {
 
   useEffect(() => {
     refreshGames();
+    
+    // ADDED: Check for last active game
+    const last = getLastActiveGame();
+    if (last) {
+      setLastGame(last);
+      
+      // Show resume prompt if game was active recently (within 24 hours)
+      const hoursSinceActive = (Date.now() - last.timestamp) / (1000 * 60 * 60);
+      if (hoursSinceActive < 24) {
+        setShowResumePrompt(true);
+      }
+    }
   }, []);
 
-  // Boot complete handler
   const handleBootComplete = () => {
     setIsBooting(false);
   };
 
-  // Resume game
   const handleResumeGame = (gameId: string) => {
     navigate(`/tablet/${gameId}`);
   };
 
-  // Format date
+  const handleResumeLastGame = () => {
+    if (lastGame) {
+      navigate(`/tablet/${lastGame.id}`);
+    }
+  };
+
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -59,44 +76,35 @@ export const StandaloneTablet: React.FC = () => {
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
+    if (minutes < 1) return 'Just now';
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     return `${days}d ago`;
   };
 
-  // ============================================
-  // BOOT SEQUENCE
-  // ============================================
-
   if (isBooting) {
     return <BootSequence onComplete={handleBootComplete} />;
   }
 
-  // ============================================
-  // MAIN UI
-  // ============================================
-
   return (
     <div className="hardware-container h-screen w-screen overflow-hidden flex flex-col">
-      {/* CRT Effect */}
       <div className="crt-overlay"></div>
 
       {/* Header */}
       <div className="bg-zinc-950 border-b-2 border-zinc-900 p-6 relative z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="led-indicator led-on-green"></div>
+            <div className={`led-indicator ${navigator.onLine ? 'led-on-green' : 'led-on-red'}`}></div>
             <div>
               <h1 className="text-3xl font-black italic tracking-tight text-white">
                 THE BOX
               </h1>
               <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">
-                Offline Referee Controller
+                {navigator.onLine ? 'Online Mode' : 'Offline Mode'}
               </p>
             </div>
           </div>
 
-          {/* Storage Info */}
           <div className="metal-panel px-4 py-2">
             <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
               Storage: {storageInfo.totalGames}/{storageInfo.maxGames}
@@ -104,6 +112,38 @@ export const StandaloneTablet: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Resume Last Game Prompt */}
+      {showResumePrompt && lastGame && (
+        <div className="bg-gradient-to-r from-blue-900/20 to-transparent border-b-2 border-blue-900/50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+              <div>
+                <div className="text-white font-bold text-sm">Resume last game?</div>
+                <div className="text-zinc-500 text-xs">
+                  Last active {formatDate(lastGame.timestamp)}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowResumePrompt(false)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs font-bold uppercase rounded transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={handleResumeLastGame}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase rounded transition-colors flex items-center gap-2"
+              >
+                <Play size={14} />
+                Resume
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 p-8 overflow-y-auto bg-black/20">
@@ -125,7 +165,7 @@ export const StandaloneTablet: React.FC = () => {
               </div>
             </button>
 
-            {/* PWA Install Button (Refined Logic) */}
+            {/* PWA Install */}
             <button
               onClick={prompt ? triggerInstall : undefined}
               disabled={!prompt}
@@ -135,7 +175,6 @@ export const StandaloneTablet: React.FC = () => {
                   : 'opacity-30 grayscale cursor-not-allowed border-transparent bg-zinc-900/10'
                 }`}
             >
-               {/* Tooltip/Overlay for Disabled State */}
                {!prompt && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center">
                   <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest bg-black/80 px-2 py-1 rounded border border-zinc-800">
@@ -221,7 +260,10 @@ export const StandaloneTablet: React.FC = () => {
                             {gameMetadata.game.settings.gameName}
                           </h3>
                           {!gameMetadata.synced && (
-                            <div className="led-indicator led-on-amber"></div>
+                            <div className="flex items-center gap-1">
+                              <div className="led-indicator led-on-amber"></div>
+                              <span className="text-xs text-amber-500 font-bold">OFFLINE</span>
+                            </div>
                           )}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-zinc-500">
@@ -286,9 +328,8 @@ export const StandaloneTablet: React.FC = () => {
 };
 
 // ============================================
-// CREATE GAME MODAL
+// CREATE GAME MODAL (NO CHANGES)
 // ============================================
-
 interface CreateGameModalProps {
   onClose: () => void;
   onGameCreated: (gameId: string) => void;
@@ -387,9 +428,8 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onGameCreate
 };
 
 // ============================================
-// SYNC MODAL
+// SYNC MODAL (NO CHANGES)
 // ============================================
-
 interface SyncModalProps {
   onClose: () => void;
 }
