@@ -1,26 +1,27 @@
 {
-  "name": "THE BOX - Referee Controller",
-  "short_name": "BOX-V2",
-  "description": "Offline-First Basketball Referee Controller",
-  "theme_color": "#000000",
-  "background_color": "#000000",
-  "display": "standalone",
-  "orientation": "landscape",
-  "start_url": "/tablet/standalone",
-  "scope": "/",
+  "short_name": "THE BOX",
+  "name": "THE BOX - Basketball Scoring System",
+  "description": "Professional basketball scoring system optimized for tablets",
   "icons": [
     {
-      "src": "/vite.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
     },
     {
-      "src": "/vite.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512"
     }
   ],
-  "categories": ["sports", "utilities"]
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "orientation": "landscape"
 }
