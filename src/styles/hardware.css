@@ -1,508 +1,460 @@
-/* src/styles/hardware.css (V2 - OPTIMIZED FOR 8" TABLET) */
+/* ============================================
+   HARDWARE.CSS - PRODUCTION TABLET INTERFACE
+   Optimized for iPad (7.9" - 12.9")
+   ============================================ */
 
-/**
- * HARDWARE UI STYLES V2
- * 
- * Optimized for Lenovo Yoga 2-830LC (1280x800)
- * Enhanced haptic feedback
- * Improved touch targets
- * Industrial hardware aesthetic
- */
-
-/* ============================================ */
-/* BASE COLORS & VARIABLES */
-/* ============================================ */
-:root {
-  --hw-green: #22c55e;
-  --hw-green-dark: #15803d;
-  --hw-amber: #f59e0b;
-  --hw-amber-dark: #b45309;
-  --hw-red: #ef4444;
-  --hw-red-dark: #991b1b;
-  --hw-metal: #27272a;
-  --hw-metal-light: #3f3f46;
-  --hw-metal-dark: #18181b;
+/* ============================================
+   BASE STYLES & RESET
+   ============================================ */
+   
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-/* ============================================ */
-/* METAL PANELS */
-/* ============================================ */
+.hardware-container {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ============================================
+   CRT OVERLAY EFFECT
+   ============================================ */
+   
+.crt-overlay {
+  position: fixed;
+  inset: 0;
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.15),
+      rgba(0, 0, 0, 0.15) 1px,
+      transparent 1px,
+      transparent 2px
+    );
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.3;
+}
+
+/* ============================================
+   METAL PANEL EFFECT
+   ============================================ */
+   
 .metal-panel {
-  background: linear-gradient(
-    135deg,
-    var(--hw-metal-light) 0%,
-    var(--hw-metal) 50%,
-    var(--hw-metal-dark) 100%
-  );
-  border: 3px solid var(--hw-green-dark);
+  background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+  border: 2px solid #333;
   border-radius: 8px;
   box-shadow: 
-    inset 0 2px 4px rgba(0, 0, 0, 0.6),
-    inset 0 -2px 4px rgba(255, 255, 255, 0.05),
-    0 8px 24px rgba(0, 0, 0, 0.8);
-  position: relative;
-  overflow: hidden;
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
-.metal-panel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.1) 50%,
-    transparent 100%
-  );
-}
-
-/* ============================================ */
-/* BUTTONS - OPTIMIZED FOR TOUCH */
-/* ============================================ */
-.hw-button {
-  min-height: 44px; /* iOS touch target minimum */
-  padding: 12px 20px;
-  border: 3px solid;
+.metal-panel-inset {
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+  border: 2px solid #1a1a1a;
   border-radius: 6px;
-  font-weight: 900;
-  font-size: 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  
-  /* Default style */
-  background: linear-gradient(
-    180deg,
-    var(--hw-metal-light),
-    var(--hw-metal)
-  );
-  border-color: var(--hw-green-dark);
-  color: var(--hw-green);
   box-shadow: 
-    0 4px 12px rgba(0, 0, 0, 0.5),
-    inset 0 1px 2px rgba(255, 255, 255, 0.1);
+    inset 0 2px 8px rgba(0, 0, 0, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.hw-button:active:not(:disabled) {
-  transform: scale(0.96);
-  box-shadow: 
-    0 2px 6px rgba(0, 0, 0, 0.5),
-    inset 0 2px 4px rgba(0, 0, 0, 0.4);
-}
-
-.hw-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Green Variant */
-.hw-button-green {
-  background: linear-gradient(
-    180deg,
-    #16a34a,
-    #15803d
-  );
-  border-color: #14532d;
-  color: white;
-  box-shadow: 
-    0 4px 12px rgba(34, 197, 94, 0.4),
-    inset 0 1px 2px rgba(255, 255, 255, 0.2);
-}
-
-.hw-button-green:active:not(:disabled) {
-  box-shadow: 
-    0 2px 6px rgba(34, 197, 94, 0.4),
-    inset 0 2px 4px rgba(0, 0, 0, 0.4);
-}
-
-/* Red Variant */
-.hw-button-red {
-  background: linear-gradient(
-    180deg,
-    #dc2626,
-    #991b1b
-  );
-  border-color: #7f1d1d;
-  color: white;
-  box-shadow: 
-    0 4px 12px rgba(239, 68, 68, 0.4),
-    inset 0 1px 2px rgba(255, 255, 255, 0.2);
-}
-
-.hw-button-red:active:not(:disabled) {
-  box-shadow: 
-    0 2px 6px rgba(239, 68, 68, 0.4),
-    inset 0 2px 4px rgba(0, 0, 0, 0.4);
-}
-
-/* Amber Variant */
-.hw-button-amber {
-  background: linear-gradient(
-    180deg,
-    #f59e0b,
-    #b45309
-  );
-  border-color: #78350f;
-  color: white;
-  box-shadow: 
-    0 4px 12px rgba(245, 158, 11, 0.4),
-    inset 0 1px 2px rgba(255, 255, 255, 0.2);
-}
-
-.hw-button-amber:active:not(:disabled) {
-  box-shadow: 
-    0 2px 6px rgba(245, 158, 11, 0.4),
-    inset 0 2px 4px rgba(0, 0, 0, 0.4);
-}
-
-/* ============================================ */
-/* HAPTIC FEEDBACK ANIMATION */
-/* ============================================ */
-@keyframes haptic-flash {
-  0% {
-    box-shadow: 
-      0 0 30px rgba(255, 255, 255, 0.8),
-      inset 0 0 20px rgba(255, 255, 255, 0.5);
-    transform: scale(1.05);
-  }
-  100% {
-    box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.5),
-      inset 0 1px 2px rgba(255, 255, 255, 0.1);
-    transform: scale(1);
-  }
-}
-
-.haptic-feedback {
-  animation: haptic-flash 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ============================================ */
-/* SEGMENT DISPLAY */
-/* ============================================ */
-.segment-display {
-  font-family: 'Orbitron', 'Courier New', monospace;
-  font-weight: 900;
-  font-size: 72px;
-  text-align: center;
-  color: var(--hw-green);
-  text-shadow: 
-    0 0 20px var(--hw-green),
-    0 0 40px var(--hw-green),
-    0 0 60px rgba(34, 197, 94, 0.5);
-  letter-spacing: 0.1em;
-  line-height: 1;
-}
-
-.segment-display-amber {
-  color: var(--hw-amber);
-  text-shadow: 
-    0 0 20px var(--hw-amber),
-    0 0 40px var(--hw-amber),
-    0 0 60px rgba(245, 158, 11, 0.5);
-}
-
-.segment-display-red {
-  color: var(--hw-red);
-  text-shadow: 
-    0 0 20px var(--hw-red),
-    0 0 40px var(--hw-red),
-    0 0 60px rgba(239, 68, 68, 0.5);
-}
-
-/* ============================================ */
-/* LED INDICATORS */
-/* ============================================ */
+/* ============================================
+   LED INDICATORS
+   ============================================ */
+   
 .led-indicator {
-  width: 20px;
-  height: 20px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  border: 2px solid rgba(0, 0, 0, 0.6);
+  box-shadow: 
+    0 0 4px currentColor,
+    inset 0 -2px 4px rgba(0, 0, 0, 0.5);
   position: relative;
-  flex-shrink: 0;
 }
 
-.led-indicator::before {
+.led-indicator::after {
   content: '';
   position: absolute;
   inset: 2px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle at 30% 30%,
-    rgba(255, 255, 255, 0.8),
-    transparent 60%
-  );
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.8), transparent);
 }
 
 .led-on-green {
-  background: radial-gradient(
-    circle at center,
-    var(--hw-green),
-    var(--hw-green-dark)
-  );
-  box-shadow: 
-    0 0 10px var(--hw-green),
-    0 0 20px var(--hw-green),
-    inset 0 1px 2px rgba(255, 255, 255, 0.3);
-}
-
-.led-on-amber {
-  background: radial-gradient(
-    circle at center,
-    var(--hw-amber),
-    var(--hw-amber-dark)
-  );
-  box-shadow: 
-    0 0 10px var(--hw-amber),
-    0 0 20px var(--hw-amber),
-    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  background: #22c55e;
+  color: #22c55e;
 }
 
 .led-on-red {
-  background: radial-gradient(
-    circle at center,
-    var(--hw-red),
-    var(--hw-red-dark)
-  );
-  box-shadow: 
-    0 0 10px var(--hw-red),
-    0 0 20px var(--hw-red),
-    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  background: #ef4444;
+  color: #ef4444;
 }
 
-.led-off {
-  background: #1a1a1a;
-  box-shadow: 
-    inset 0 2px 4px rgba(0, 0, 0, 0.6);
+.led-on-amber {
+  background: #f59e0b;
+  color: #f59e0b;
 }
 
-/* ============================================ */
-/* EMBOSSED LABELS */
-/* ============================================ */
-.embossed-label {
-  font-size: 10px;
-  font-weight: 900;
+.led-on-blue {
+  background: #3b82f6;
+  color: #3b82f6;
+}
+
+/* ============================================
+   HARDWARE BUTTONS - OPTIMIZED TOUCH TARGETS
+   ============================================ */
+   
+.hw-button {
+  /* Minimum 44px touch target (Apple HIG) */
+  min-height: 60px;
+  min-width: 80px;
+  padding: 12px 20px;
+  
+  background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+  border: 2px solid #404040;
+  border-radius: 8px;
+  
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
-  color: #71717a;
-  text-shadow: 
-    0 1px 0 rgba(0, 0, 0, 0.8),
-    0 -1px 0 rgba(255, 255, 255, 0.05);
+  
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  box-shadow: 
+    0 2px 0 #0a0a0a,
+    0 4px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-/* ============================================ */
-/* PULSE ANIMATION FOR CRITICAL STATES */
-/* ============================================ */
-@keyframes pulse-critical {
+.hw-button:active {
+  transform: translateY(2px);
+  box-shadow: 
+    0 1px 0 #0a0a0a,
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.hw-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+/* Button Color Variants */
+.hw-button-green {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  border-color: #16a34a;
+  color: #000;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.hw-button-green:active {
+  background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
+}
+
+.hw-button-red {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.hw-button-red:active {
+  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+}
+
+.hw-button-blue {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.hw-button-amber {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  border-color: #d97706;
+  color: #000;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Large Primary Buttons (Score +2/+3) */
+.hw-button-xl {
+  min-height: 120px;
+  min-width: 160px;
+  font-size: 36px;
+  font-weight: 900;
+  border-radius: 12px;
+  border-width: 3px;
+}
+
+/* Medium Secondary Buttons */
+.hw-button-lg {
+  min-height: 80px;
+  min-width: 120px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* Small Tertiary Buttons */
+.hw-button-sm {
+  min-height: 50px;
+  min-width: 60px;
+  font-size: 11px;
+  padding: 8px 12px;
+}
+
+/* ============================================
+   EMBOSSED LABELS
+   ============================================ */
+   
+.embossed-label {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #666;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
+}
+
+/* ============================================
+   DIGITAL DISPLAY
+   ============================================ */
+   
+.digital-display {
+  background: #000;
+  border: 3px solid #1a1a1a;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 
+    inset 0 4px 12px rgba(0, 0, 0, 0.9),
+    0 0 20px rgba(34, 197, 94, 0.2);
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  color: #22c55e;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+}
+
+.digital-display-large {
+  font-size: 72px;
+  line-height: 1;
+  letter-spacing: 4px;
+}
+
+.digital-display-medium {
+  font-size: 48px;
+  line-height: 1;
+  letter-spacing: 2px;
+}
+
+.digital-display-small {
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+
+/* Team Color Variants */
+.digital-display-team-a {
+  color: #3b82f6;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+  box-shadow: 
+    inset 0 4px 12px rgba(0, 0, 0, 0.9),
+    0 0 20px rgba(59, 130, 246, 0.2);
+}
+
+.digital-display-team-b {
+  color: #ef4444;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+  box-shadow: 
+    inset 0 4px 12px rgba(0, 0, 0, 0.9),
+    0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS FOR TABLETS
+   ============================================ */
+
+/* 8" tablets (iPad mini) - 768px */
+@media (max-width: 768px) {
+  .hw-button-xl {
+    min-height: 100px;
+    min-width: 140px;
+    font-size: 30px;
+  }
+  
+  .hw-button-lg {
+    min-height: 70px;
+    min-width: 100px;
+    font-size: 18px;
+  }
+  
+  .digital-display-large {
+    font-size: 60px;
+  }
+  
+  .digital-display-medium {
+    font-size: 40px;
+  }
+}
+
+/* 10-11" tablets - 1024px */
+@media (min-width: 1024px) and (max-width: 1366px) {
+  .hw-button-xl {
+    min-height: 140px;
+    min-width: 180px;
+    font-size: 42px;
+  }
+  
+  .digital-display-large {
+    font-size: 84px;
+  }
+}
+
+/* 12.9" tablets - 1366px+ */
+@media (min-width: 1367px) {
+  .hw-button-xl {
+    min-height: 160px;
+    min-width: 200px;
+    font-size: 48px;
+  }
+  
+  .digital-display-large {
+    font-size: 96px;
+  }
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+   
+@keyframes pulse-glow {
   0%, 100% {
-    opacity: 1;
-    transform: scale(1);
+    box-shadow: 0 0 20px currentColor;
   }
   50% {
-    opacity: 0.8;
-    transform: scale(1.02);
+    box-shadow: 0 0 40px currentColor;
   }
 }
 
-.animate-pulse-critical {
-  animation: pulse-critical 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+@keyframes score-flash {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }
 
-/* ============================================ */
-/* FADE IN ANIMATION */
-/* ============================================ */
-@keyframes fade-in {
+@keyframes slide-in-top {
   from {
+    transform: translateY(-100%);
     opacity: 0;
-    transform: translateY(-10px);
   }
   to {
-    opacity: 1;
     transform: translateY(0);
+    opacity: 1;
   }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-score-flash {
+  animation: score-flash 0.3s ease-out;
+}
+
+.animate-slide-in-top {
+  animation: slide-in-top 0.4s ease-out;
 }
 
 .animate-fade-in {
-  animation: fade-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fade-in 0.3s ease-out;
 }
 
-/* ============================================ */
-/* BOOT SEQUENCE STYLES */
-/* ============================================ */
-.boot-screen {
-  background: #000;
-  color: var(--hw-green);
-  font-family: 'Courier New', monospace;
-}
-
-.boot-line {
-  opacity: 0;
-  animation: boot-line-appear 0.1s forwards;
-}
-
-@keyframes boot-line-appear {
-  to {
-    opacity: 1;
-  }
-}
-
-.boot-cursor {
-  display: inline-block;
-  width: 8px;
-  height: 16px;
-  background: var(--hw-green);
-  animation: blink 1s step-end infinite;
-  margin-left: 2px;
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-
-/* ============================================ */
-/* SCROLLBAR STYLING */
-/* ============================================ */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #18181b;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--hw-green-dark);
-  border-radius: 4px;
-  border: 2px solid #18181b;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--hw-green);
-}
-
-/* ============================================ */
-/* RESPONSIVE ADJUSTMENTS FOR 8" TABLET */
-/* ============================================ */
-@media (max-width: 1280px) and (max-height: 800px) {
-  .segment-display {
-    font-size: 56px;
-  }
-  
-  .hw-button {
-    padding: 10px 16px;
-    font-size: 14px;
-  }
-  
-  .metal-panel {
-    border-width: 2px;
-  }
-}
-
-/* Landscape orientation optimization */
-@media (orientation: landscape) and (max-height: 800px) {
-  .segment-display {
-    font-size: 48px;
-  }
-}
-
-/* ============================================ */
-/* TOUCH FEEDBACK */
-/* ============================================ */
-.hw-button:active::after {
-  content: '';
-  position: absolute;
+/* ============================================
+   PORTRAIT MODE WARNING
+   ============================================ */
+   
+.portrait-warning {
+  display: none;
+  position: fixed;
   inset: 0;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.2),
-    transparent 70%
-  );
+  background: #000;
+  z-index: 99999;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+}
+
+.portrait-warning-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.portrait-warning-text {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f59e0b;
+  margin-bottom: 10px;
+}
+
+.portrait-warning-hint {
+  font-size: 16px;
+  color: #666;
+}
+
+/* Show warning in portrait mode */
+@media (orientation: portrait) {
+  .portrait-warning {
+    display: flex;
+  }
+  
+  .hardware-container > *:not(.portrait-warning) {
+    display: none;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+   
+.pointer-events-none {
   pointer-events: none;
 }
 
-/* ============================================ */
-/* PERFORMANCE OPTIMIZATIONS */
-/* ============================================ */
-.metal-panel,
-.hw-button,
-.segment-display,
-.led-indicator {
-  will-change: transform;
-  transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-}
-
-/* Force hardware acceleration for animations */
-@media (prefers-reduced-motion: no-preference) {
-  .haptic-feedback,
-  .animate-pulse,
-  .animate-fade-in {
-    will-change: transform, opacity;
-  }
-}
-
-/* ============================================ */
-/* DIAGNOSTIC CONSOLE */
-/* ============================================ */
-.diagnostic-console {
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-}
-
-.diagnostic-row {
-  padding: 4px 8px;
-  border-bottom: 1px solid #27272a;
-}
-
-.diagnostic-row:hover {
-  background: #18181b;
-}
-
-/* ============================================ */
-/* SETTINGS MODAL */
-/* ============================================ */
-.settings-modal-backdrop {
-  backdrop-filter: blur(8px);
-}
-
-/* ============================================ */
-/* UTILITY CLASSES */
-/* ============================================ */
-.text-shadow-glow {
-  text-shadow: 
-    0 0 10px currentColor,
-    0 0 20px currentColor;
-}
-
-.box-shadow-glow {
-  box-shadow: 
-    0 0 20px currentColor,
-    0 0 40px currentColor;
-}
-
-/* Prevent text selection on buttons */
-.hw-button,
-.metal-panel button,
-.embossed-label {
-  -webkit-user-select: none;
-  -moz-user-select: none;
+.select-none {
   user-select: none;
+  -webkit-user-select: none;
 }
 
-/* Smooth transitions */
-.transition-smooth {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.overflow-hidden {
+  overflow: hidden;
+}
+
+/* Touch-friendly spacing */
+.tap-spacing {
+  padding: 8px;
+}
+
+/* Haptic feedback pulse */
+.haptic-pulse {
+  animation: score-flash 0.2s ease-out;
 }

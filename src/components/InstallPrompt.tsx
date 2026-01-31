@@ -19,9 +19,9 @@ export const InstallPrompt: React.FC<InstallPromptProps> = ({
   const [isSafari, setIsSafari] = useState(false);
 
   useEffect(() => {
-    // WORKAROUND: Detect if the user is on an iPhone/iPad
+    // Detect iOS (iPhone/iPad)
     const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    // WORKAROUND: Detect if the user is on Desktop Safari
+    // Detect Safari (Desktop or Mobile)
     const safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     
     setIsIOS(ios);
@@ -37,10 +37,10 @@ export const InstallPrompt: React.FC<InstallPromptProps> = ({
     }
   };
 
-  // 1. If installed, show nothing.
+  // 1. If already installed, hide everything
   if (isInstalled) return null;
 
-  // 2. CHROME: If we have the official signal, show the Button.
+  // 2. If we have a Chrome/Edge native prompt, show the "Magic Button"
   if (hasPrompt) {
     return (
       <div className="bg-gradient-to-br from-blue-950/40 to-black border-l-4 border-blue-600 bg-zinc-900/50 p-6 mb-8 relative rounded-sm shadow-xl">
@@ -63,7 +63,7 @@ export const InstallPrompt: React.FC<InstallPromptProps> = ({
     );
   }
 
-  // 3. SAFARI WORKAROUND: If no signal, but it IS an iPhone, show Instructions.
+  // 3. If no prompt, but it is iOS/Safari, show "Manual Instructions"
   if (isIOS || isSafari) {
     return (
       <div className="bg-zinc-900/80 border-l-4 border-zinc-600 p-6 mb-8 relative rounded-sm">
@@ -89,6 +89,6 @@ export const InstallPrompt: React.FC<InstallPromptProps> = ({
     );
   }
 
-  // 4. Default: User is on a browser that is not supported or already installed.
+  // 4. Default: Browser not supported or already installed but not detected
   return null;
 };
