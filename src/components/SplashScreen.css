@@ -1,578 +1,185 @@
 /* src/components/SplashScreen.css */
-/* ESPN-Inspired Black Splash - Ultra-Smooth Professional Edition */
+/* Reference Design Implementation - System Font Edition */
 
-/* ============================================
-   PROFESSIONAL EASING CURVES
-   ============================================ */
-
+/* Using the same system stack as index.css/LandingPage for perfect consistency */
 :root {
-  /* Custom bezier curves for buttery smooth animations */
-  --ease-silk: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --ease-butter: cubic-bezier(0.33, 0.0, 0.2, 1);
-  --ease-velvet: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-smooth: cubic-bezier(0.4, 0.0, 0.2, 1);
-  --ease-elegant: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  --ease-broadcast: cubic-bezier(0.19, 1, 0.22, 1);
+  --splash-red: #E11C23;
+  --splash-grey: #666666;
+  --ease-silk: cubic-bezier(0.25, 0.8, 0.25, 1);
+  /* Smoother, premium ease */
+  --font-stack: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
 }
 
-/* ============================================
-   BASE CONTAINER - ULTRA SMOOTH
-   ============================================ */
-
-.splash-espn {
+.splash-reference {
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  background-color: #000000;
+  color: white;
+  font-family: var(--font-stack);
   overflow: hidden;
-  background: #000000;
-  opacity: 1;
-  transition: opacity 1.4s var(--ease-velvet);
 }
 
-.splash-espn-exit {
+.splash-exit {
   opacity: 0;
+  transition: opacity 0.8s ease-out;
+  /* Slower fade out */
   pointer-events: none;
 }
 
-/* ============================================
-   BACKGROUND - SMOOTH GLOW EFFECTS
-   ============================================ */
-
-.splash-espn-bg {
+/* Background */
+.splash-bg {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  background: #000000;
+  /* Pure flat black to match LandingPage exactly */
 }
 
-.splash-espn-glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 800px;
-  height: 800px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(
-    circle at center,
-    rgba(220, 38, 38, 0.15) 0%,
-    rgba(220, 38, 38, 0.08) 30%,
-    transparent 60%
-  );
-  animation: splash-espn-glow-pulse 4s var(--ease-silk) infinite;
-  filter: blur(60px);
-}
-
-@keyframes splash-espn-glow-pulse {
-  0%, 100% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 0.6;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.1);
-    opacity: 1;
-  }
-}
-
-.splash-espn-vignette {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 0%,
-    rgba(0, 0, 0, 0.3) 70%,
-    rgba(0, 0, 0, 0.6) 100%
-  );
-  pointer-events: none;
-}
-
-/* ============================================
-   SCANLINE EFFECT - ESPN BROADCAST STYLE
-   ============================================ */
-
-.splash-espn-scanline {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(255, 255, 255, 0.01) 2px,
-    rgba(255, 255, 255, 0.01) 4px
-  );
-  pointer-events: none;
-  opacity: 0.3;
-  animation: splash-espn-scanline-move 8s linear infinite;
-}
-
-@keyframes splash-espn-scanline-move {
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(4px);
-  }
-}
-
-/* ============================================
-   MAIN CONTAINER
-   ============================================ */
-
-.splash-espn-container {
+/* --- CENTER LOCKUP --- */
+.splash-lockup {
   position: relative;
   z-index: 10;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 3rem;
-  padding: 3rem;
+  gap: 32px;
+  /* Increased gap for standard fonts */
+  transform: scale(0.9);
 }
 
-/* ============================================
-   LOGO - ULTRA SMOOTH REVEAL
-   ============================================ */
-
-.splash-espn-logo-wrapper {
-  position: relative;
-  animation: splash-espn-logo-reveal 1.6s var(--ease-broadcast) forwards;
-  opacity: 0;
-}
-
-@keyframes splash-espn-logo-reveal {
-  0% {
-    opacity: 0;
-    transform: scale(0.7) translateY(40px);
-    filter: blur(20px);
-  }
-  50% {
-    filter: blur(5px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: blur(0px);
-  }
-}
-
-.splash-espn-logo-glow-ring {
-  position: absolute;
-  inset: -30px;
-  background: radial-gradient(
-    circle at center,
-    rgba(220, 38, 38, 0.4) 0%,
-    rgba(220, 38, 38, 0.15) 40%,
-    transparent 70%
-  );
-  border-radius: 50%;
-  filter: blur(40px);
-  animation: splash-espn-ring-pulse 3s var(--ease-silk) infinite;
-}
-
-@keyframes splash-espn-ring-pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-}
-
-.splash-espn-logo {
-  width: 140px;
-  height: 140px;
-  position: relative;
-  filter: drop-shadow(0 10px 40px rgba(220, 38, 38, 0.4));
-}
-
-.splash-espn-svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* SVG Ring Animation */
-.splash-espn-ring {
-  stroke-dasharray: 283;
-  stroke-dashoffset: 283;
-  animation: splash-espn-ring-draw 1.8s var(--ease-broadcast) 0.3s forwards;
-}
-
-@keyframes splash-espn-ring-draw {
-  0% {
-    stroke-dashoffset: 283;
-    opacity: 0;
-  }
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-}
-
-/* SVG Box Animation */
-.splash-espn-box {
-  transform-origin: center;
-  animation: 
-    splash-espn-box-appear 1.2s var(--ease-broadcast) 0.5s forwards,
-    splash-espn-box-pulse 3s var(--ease-silk) 1.8s infinite;
-  opacity: 0;
-}
-
-@keyframes splash-espn-box-appear {
-  0% {
-    opacity: 0;
-    transform: scale(0.5) rotate(-45deg);
-  }
-  60% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-  }
-}
-
-@keyframes splash-espn-box-pulse {
-  0%, 100% {
-    transform: scale(1);
-    filter: brightness(1);
-  }
-  50% {
-    transform: scale(1.05);
-    filter: brightness(1.15);
-  }
-}
-
-/* SVG Inner Detail */
-.splash-espn-inner {
-  animation: splash-espn-inner-appear 0.8s var(--ease-smooth) 1s forwards;
-  opacity: 0;
-}
-
-@keyframes splash-espn-inner-appear {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  100% {
-    opacity: 1;
+@media (min-width: 768px) {
+  .splash-lockup {
     transform: scale(1);
   }
 }
 
-/* ============================================
-   MAIN TITLE - BUTTER SMOOTH
-   ============================================ */
-
-.splash-espn-title-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem;
-  animation: splash-espn-title-reveal 1.4s var(--ease-broadcast) 0.2s forwards;
+/* 1. LEFT TITLE */
+.splash-title-wrapper {
   opacity: 0;
+  transform: translateX(30px);
 }
 
-@keyframes splash-espn-title-reveal {
-  0% {
-    opacity: 0;
-    transform: translateY(35px);
-    filter: blur(15px);
-  }
-  60% {
-    filter: blur(0px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0px);
-  }
+.splash-title-wrapper.stage-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.8s var(--ease-silk);
+  /* Slower, silky slide */
 }
 
-.splash-espn-title {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1;
-  gap: 0.8rem;
-}
-
-.splash-espn-title-the {
-  font-size: 2rem;
-  font-weight: 300;
-  letter-spacing: 0.6em;
-  color: rgba(255, 255, 255, 0.7);
-  text-transform: uppercase;
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.8);
-  animation: splash-espn-text-fade 2s var(--ease-silk) infinite;
-}
-
-@keyframes splash-espn-text-fade {
-  0%, 100% {
-    opacity: 0.7;
-  }
-  50% {
-    opacity: 0.95;
-  }
-}
-
-.splash-espn-title-box {
-  font-size: 6rem;
+.splash-title {
+  font-family: var(--font-stack);
   font-weight: 900;
   font-style: italic;
-  letter-spacing: -0.02em;
-  color: #FFFFFF;
-  text-transform: uppercase;
-  text-shadow: 
-    0 0 40px rgba(220, 38, 38, 0.8),
-    0 0 80px rgba(220, 38, 38, 0.4),
-    0 8px 25px rgba(0, 0, 0, 0.9),
-    0 4px 8px rgba(0, 0, 0, 0.6);
-  animation: splash-espn-title-glow 3s var(--ease-silk) infinite;
-}
-
-@keyframes splash-espn-title-glow {
-  0%, 100% {
-    text-shadow: 
-      0 0 40px rgba(220, 38, 38, 0.8),
-      0 0 80px rgba(220, 38, 38, 0.4),
-      0 8px 25px rgba(0, 0, 0, 0.9),
-      0 4px 8px rgba(0, 0, 0, 0.6);
-  }
-  50% {
-    text-shadow: 
-      0 0 50px rgba(220, 38, 38, 1),
-      0 0 100px rgba(220, 38, 38, 0.6),
-      0 10px 30px rgba(0, 0, 0, 0.9),
-      0 5px 10px rgba(0, 0, 0, 0.6);
-  }
-}
-
-/* Title Underline */
-.splash-espn-underline {
-  width: 200px;
-  height: 3px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    #DC2626 20%,
-    #EF4444 50%,
-    #DC2626 80%,
-    transparent 100%
-  );
-  box-shadow: 
-    0 0 20px rgba(220, 38, 38, 0.6),
-    0 2px 8px rgba(0, 0, 0, 0.6);
-  animation: splash-espn-underline-expand 1.2s var(--ease-elegant) 0.4s forwards;
-  opacity: 0;
-  transform-origin: center;
-}
-
-@keyframes splash-espn-underline-expand {
-  0% {
-    width: 0;
-    opacity: 0;
-  }
-  100% {
-    width: 200px;
-    opacity: 1;
-  }
-}
-
-/* ============================================
-   META INFO - SMOOTH FADE IN
-   ============================================ */
-
-.splash-espn-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  animation: splash-espn-meta-reveal 1.2s var(--ease-broadcast) 0.3s forwards;
-  opacity: 0;
-}
-
-@keyframes splash-espn-meta-reveal {
-  0% {
-    opacity: 0;
-    transform: translateY(30px);
-    filter: blur(10px);
-  }
-  60% {
-    filter: blur(0px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0px);
-  }
-}
-
-.splash-espn-creator {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-
-.splash-espn-line {
-  width: 50px;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(220, 38, 38, 0.6) 50%,
-    transparent 100%
-  );
-  box-shadow: 0 0 8px rgba(220, 38, 38, 0.3);
-}
-
-.splash-espn-creator-text {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  color: #DC2626;
-  text-transform: uppercase;
-  text-shadow: 
-    0 0 20px rgba(220, 38, 38, 0.6),
-    0 2px 8px rgba(0, 0, 0, 0.8);
-  animation: splash-espn-creator-glow 2s var(--ease-silk) infinite;
-}
-
-@keyframes splash-espn-creator-glow {
-  0%, 100% {
-    opacity: 0.9;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.splash-espn-tagline {
+  /* Kept italic for sports feel, but normal font */
+  font-size: 4rem;
+  line-height: 1;
+  color: #fff;
+  letter-spacing: -0.05em;
+  /* Tighter tracking for standard sans */
   margin: 0;
-  font-size: 0.8rem;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.5);
-  text-transform: uppercase;
-  text-align: center;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
-  line-height: 1.6;
 }
 
-/* ============================================
-   RESPONSIVE DESIGN
-   ============================================ */
-
-@media (max-width: 768px) {
-  .splash-espn-container {
-    gap: 2.5rem;
-    padding: 2rem;
-  }
-
-  .splash-espn-logo {
-    width: 120px;
-    height: 120px;
-  }
-
-  .splash-espn-title-the {
-    font-size: 1.6rem;
-    letter-spacing: 0.5em;
-  }
-
-  .splash-espn-title-box {
-    font-size: 4.5rem;
-  }
-
-  .splash-espn-underline {
-    width: 150px;
-  }
-
-  .splash-espn-creator-text {
-    font-size: 0.9rem;
-  }
-
-  .splash-espn-tagline {
-    font-size: 0.7rem;
-  }
-
-  .splash-espn-line {
-    width: 40px;
+@media (min-width: 768px) {
+  .splash-title {
+    font-size: 7rem;
   }
 }
 
-@media (max-width: 480px) {
-  .splash-espn-container {
-    gap: 2rem;
-  }
+/* 2. DIVIDER */
+.splash-divider {
+  width: 1px;
+  /* Thinner divider for cleaner look */
+  height: 0px;
+  background-color: #444;
+  opacity: 0.6;
+}
 
-  .splash-espn-logo {
-    width: 100px;
+.splash-divider.stage-active {
+  height: 70px;
+  transition: height 0.6s var(--ease-silk);
+}
+
+@media (min-width: 768px) {
+  .splash-divider.stage-active {
     height: 100px;
   }
+}
 
-  .splash-espn-title-the {
-    font-size: 1.3rem;
+/* 3. RIGHT BRAND COLUMN */
+.splash-brand-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  opacity: 0;
+  transform: translateX(-15px);
+}
+
+.splash-brand-col.stage-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.8s var(--ease-silk) 0.1s;
+  /* Slight delay */
+}
+
+.splash-powered-label {
+  font-family: var(--font-stack);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--splash-grey);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.splash-brand-text {
+  font-family: var(--font-stack);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 2rem;
+  line-height: 0.9;
+  color: var(--splash-red);
+  letter-spacing: -0.02em;
+}
+
+@media (min-width: 768px) {
+  .splash-powered-label {
+    font-size: 0.75rem;
   }
 
-  .splash-espn-title-box {
-    font-size: 3.5rem;
+  .splash-brand-text {
+    font-size: 3rem;
   }
+}
 
-  .splash-espn-underline {
-    width: 120px;
-  }
+/* --- FOOTER --- */
+.splash-footer {
+  position: absolute;
+  bottom: 15%;
+  font-family: var(--font-stack);
+  /* Use the same font stack */
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #444;
+  /* Darker grey for subtlety */
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(10px);
+}
 
-  .splash-espn-creator-text {
+.splash-footer.stage-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: all 1s ease-out 0.4s;
+}
+
+@media (min-width: 768px) {
+  .splash-footer {
     font-size: 0.8rem;
-    letter-spacing: 0.15em;
-  }
-
-  .splash-espn-tagline {
-    font-size: 0.65rem;
-  }
-}
-
-/* ============================================
-   ACCESSIBILITY
-   ============================================ */
-
-@media (prefers-reduced-motion: reduce) {
-  .splash-espn *,
-  .splash-espn *::before,
-  .splash-espn *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* ============================================
-   PERFORMANCE OPTIMIZATIONS
-   ============================================ */
-
-.splash-espn-logo,
-.splash-espn-title-box,
-.splash-espn-glow,
-.splash-espn-ring,
-.splash-espn-box {
-  will-change: transform, opacity;
-}
-
-/* Smooth floating effect after initial reveal */
-.splash-espn-logo-wrapper {
-  animation: 
-    splash-espn-logo-reveal 1.6s var(--ease-broadcast) forwards,
-    splash-espn-float 5s var(--ease-silk) 2s infinite;
-}
-
-@keyframes splash-espn-float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
+    bottom: 20%;
   }
 }
