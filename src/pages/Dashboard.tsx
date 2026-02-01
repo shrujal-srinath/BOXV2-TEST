@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { subscribeToAuth } from '../services/authService';
-import { getUserActiveGames, getOtherUsersLiveGames } from '../services/gameService';
+import { subscribeToUserGames, subscribeToOtherUsersGames } from '../services/gameService';
 import { BasketballGame } from '../types';
 import { User } from 'firebase/auth';
 import './Dashboard.css';
@@ -14,33 +14,33 @@ interface GameCardProps {
 }
 
 const GameCard: React.FC<GameCardProps> = ({ game, isOwner, onControl, onWatch }) => {
+  // Helper to format time
+  const formatTime = (minutes: number, seconds: number): string => {
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="game-card">
       <div className="game-card-header">
         <h3 className="game-card-title">
-          {game.homeTeam.name} vs {game.awayTeam.name}
+          {game.teamA.name} vs {game.teamB.name}
         </h3>
         <span className="game-card-badge">LIVE</span>
       </div>
 
       <div className="game-card-info">
         <div className="game-score">
-          <span className="score-home">{game.homeTeam.score}</span>
+          <span className="score-home">{game.teamA.score}</span>
           <span className="score-separator">-</span>
-          <span className="score-away">{game.awayTeam.score}</span>
+          <span className="score-away">{game.teamB.score}</span>
         </div>
         <div className="game-meta">
-          <span>Q{game.quarter}</span>
+          <span>Q{game.gameState.period}</span>
           <span className="separator">•</span>
-          <span>{game.clock}</span>
+          <span>{formatTime(game.gameState.gameTime.minutes, game.gameState.gameTime.seconds)}</span>
           <span className="separator">•</span>
           <span className="game-code">Code: {game.code}</span>
         </div>
-      </div>
-
-      <div className="game-card-host">
-        <span className="host-label">Host:</span>
-        <span className="host-name">{game.hostName}</span>
       </div>
 
       <div className="game-card-actions">
@@ -73,41 +73,40 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuth((currentUser) => {
+    const unsubscribeAuth = subscribeToAuth((currentUser) => {
       setUser(currentUser);
-
-      if (currentUser) {
-        // Get user's own games
-        const userGames = getUserActiveGames(currentUser.uid);
-        setMyGames(userGames);
-
-        // Get other users' live games
-        const otherGames = getOtherUsersLiveGames(currentUser.uid);
-        setLiveGames(otherGames);
-      } else {
-        setMyGames([]);
-        setLiveGames([]);
-      }
-
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
 
-  // Refresh games every 5 seconds
+  // Subscribe to user's games
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setMyGames([]);
+      return;
+    }
 
-    const interval = setInterval(() => {
-      const userGames = getUserActiveGames(user.uid);
-      setMyGames(userGames);
+    const unsubscribe = subscribeToUserGames(user.uid, (games) => {
+      setMyGames(games);
+    });
 
-      const otherGames = getOtherUsersLiveGames(user.uid);
-      setLiveGames(otherGames);
-    }, 5000);
+    return () => unsubscribe();
+  }, [user]);
 
-    return () => clearInterval(interval);
+  // Subscribe to other users' games
+  useEffect(() => {
+    if (!user) {
+      setLiveGames([]);
+      return;
+    }
+
+    const unsubscribe = subscribeToOtherUsersGames(user.uid, (games) => {
+      setLiveGames(games);
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
   const handleCreateGame = () => {
