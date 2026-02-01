@@ -1,232 +1,172 @@
-import { BasketballGame, TeamData, Player } from '../types';
+import { BasketballGame, Team, GameAction } from './types';
 
-export let gamesDatabase: { [key: string]: BasketballGame } = {};
-let liveGamesListeners: { [key: string]: ((games: BasketballGame[]) => void)[] } = {};
+// In-memory database (replace with Firebase in production)
+const gamesDatabase: Record<string, BasketballGame> = {};
 
+/**
+ * Generate a random 6-digit game code
+ */
 export const generateGameCode = (): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 
-// --- CORE: Initialize New Game (The missing function) ---
-export const initializeNewGame = async (
-  settings: any,
-  teamA: any,
-  teamB: any,
-  trackStats: boolean,
-  sportType: string
-): Promise<string> => {
+/**
+ * Create a new game
+ */
+export const createGame = (
+  homeTeam: Team,
+  awayTeam: Team,
+  hostId: string,
+  hostName: string
+): BasketballGame => {
   const code = generateGameCode();
+  const now = new Date().toISOString();
 
   const newGame: BasketballGame = {
+    id: code,
     code,
-    hostId: 'current-user',
-    teamA: {
-      ...teamA,
+    homeTeam: {
+      ...homeTeam,
       score: 0,
-      timeouts: 2,
-      timeoutsFirstHalf: 2,
-      timeoutsSecondHalf: 3,
       fouls: 0,
-      foulsThisQuarter: 0,
+      timeouts: 4,
     },
-    teamB: {
-      ...teamB,
+    awayTeam: {
+      ...awayTeam,
       score: 0,
-      timeouts: 2,
-      timeoutsFirstHalf: 2,
-      timeoutsSecondHalf: 3,
       fouls: 0,
-      foulsThisQuarter: 0,
+      timeouts: 4,
     },
-    gameState: {
-      period: 1,
-      gameTime: { minutes: settings.periodDuration, seconds: 0, tenths: 0 },
-      shotClock: settings.shotClockDuration,
-      gameRunning: false,
-      shotClockRunning: false,
-      possession: 'A',
-    },
-    settings: {
-      gameName: settings.gameName,
-      periodDuration: settings.periodDuration,
-      shotClockDuration: settings.shotClockDuration,
-      periodType: settings.periodType || 'quarter'
-    },
-    sport: sportType,
+    quarter: 1,
+    clock: '10:00',
     status: 'live',
-    gameType: 'online',
-    createdAt: Date.now(),
-    lastUpdate: Date.now(),
+    actions: [],
+    createdAt: now,
+    updatedAt: now,
+    hostId,
+    hostName,
   };
 
   gamesDatabase[code] = newGame;
-  notifyLiveGamesListeners();
-  return code;
-};
-
-// ... (Rest of existing service code) ...
-
-export const createGame = (code: string, gameType: 'local' | 'online'): BasketballGame => {
-  const createDefaultPlayer = (id: string): Player => ({
-    id,
-    name: '',
-    number: '',
-    position: '',
-    points: 0,
-    assists: 0,
-    rebounds: 0,
-    steals: 0,
-    blocks: 0,
-    turnovers: 0,
-    fouls: 0,
-    disqualified: false,
-    fieldGoalsMade: 0,
-    fieldGoalsAttempted: 0,
-    threePointsMade: 0,
-    threePointsAttempted: 0,
-    freeThrowsMade: 0,
-    freeThrowsAttempted: 0,
-  });
-
-  const createDefaultTeam = (name: string, color: string): TeamData => ({
-    name,
-    color,
-    score: 0,
-    timeouts: 2,
-    timeoutsFirstHalf: 2,
-    timeoutsSecondHalf: 3,
-    fouls: 0,
-    foulsThisQuarter: 0,
-    players: Array.from({ length: 12 }, (_, i) => createDefaultPlayer(`player-${i + 1}`)),
-  });
-
-  const newGame: BasketballGame = {
-    code,
-    teamA: createDefaultTeam('Team A', '#FF0000'),
-    teamB: createDefaultTeam('Team B', '#0000FF'),
-    gameState: {
-      period: 1,
-      gameTime: { minutes: 10, seconds: 0, tenths: 0 },
-      shotClock: 24,
-      gameRunning: false,
-      shotClockRunning: false,
-      possession: 'A',
-    },
-    settings: {
-      gameName: 'New Game',
-      periodDuration: 10,
-      shotClockDuration: 24,
-      periodType: 'quarter'
-    },
-    sport: 'basketball',
-    status: 'live',
-    createdAt: Date.now(),
-    lastUpdate: Date.now(),
-    gameType,
-  };
-
-  gamesDatabase[code] = newGame;
-  notifyLiveGamesListeners();
   return newGame;
 };
 
-export const createOnlineGame = async (code: string): Promise<BasketballGame> => {
-  return createGame(code, 'online');
+/**
+ * Get a game by code
+ */
+export const getGame = (code: string): BasketballGame | undefined => {
+  return gamesDatabase[code];
 };
 
-export const getGame = (code: string): BasketballGame | null => {
-  return gamesDatabase[code] || null;
+/**
+ * Update a game
+ */
+export const updateGame = (code: string, updates: Partial<BasketballGame>): BasketballGame | undefined => {
+  const game = gamesDatabase[code];
+  if (!game) return undefined;
+
+  const updatedGame = {
+    ...game,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  gamesDatabase[code] = updatedGame;
+  return updatedGame;
 };
 
-export const getLiveGames = (): BasketballGame[] => {
-  return Object.values(gamesDatabase).filter(game => game.gameType === 'online');
+/**
+ * Add an action to a game
+ */
+export const addGameAction = (code: string, action: GameAction): BasketballGame | undefined => {
+  const game = gamesDatabase[code];
+  if (!game) return undefined;
+
+  const updatedGame = {
+    ...game,
+    actions: [...game.actions, action],
+    updatedAt: new Date().toISOString(),
+  };
+
+  gamesDatabase[code] = updatedGame;
+  return updatedGame;
 };
 
-// FIXED: Now accepts arguments (userId) even if using mock data
-export const getUserActiveGames = (userId?: string): BasketballGame[] => {
+/**
+ * Get all games created by a specific user (THEIR OWN games only)
+ */
+export const getUserActiveGames = (userId: string): BasketballGame[] => {
+  return Object.values(gamesDatabase).filter(
+    game => game.hostId === userId && game.status === 'live'
+  );
+};
+
+/**
+ * Get all live games in the system (for browsing/watching)
+ */
+export const getAllLiveGames = (): BasketballGame[] => {
+  return Object.values(gamesDatabase).filter(
+    game => game.status === 'live'
+  );
+};
+
+/**
+ * Get all live games EXCEPT the ones created by a specific user
+ * (for showing "Other People's Games" section)
+ */
+export const getOtherUsersLiveGames = (userId: string): BasketballGame[] => {
+  return Object.values(gamesDatabase).filter(
+    game => game.hostId !== userId && game.status === 'live'
+  );
+};
+
+/**
+ * Check if a user is the owner of a game
+ */
+export const isGameOwner = (gameCode: string, userId: string): boolean => {
+  const game = gamesDatabase[gameCode];
+  return game ? game.hostId === userId : false;
+};
+
+/**
+ * Delete a game
+ */
+export const deleteGame = (code: string): boolean => {
+  if (gamesDatabase[code]) {
+    delete gamesDatabase[code];
+    return true;
+  }
+  return false;
+};
+
+/**
+ * End a game (set status to 'ended')
+ */
+export const endGame = (code: string): BasketballGame | undefined => {
+  return updateGame(code, { status: 'ended' });
+};
+
+/**
+ * Get all games (for admin purposes)
+ */
+export const getAllGames = (): BasketballGame[] => {
   return Object.values(gamesDatabase);
 };
 
-export const getUserLocalGames = (): BasketballGame[] => {
-  return Object.values(gamesDatabase).filter(game => game.gameType === 'local');
-};
-
-export const getUserOnlineGames = (): BasketballGame[] => {
-  return Object.values(gamesDatabase).filter(game => game.gameType === 'online');
-};
-
-export const subscribeToLiveGames = (callback: (games: BasketballGame[]) => void): (() => void) => {
-  const listenerId = Math.random().toString(36);
-  if (!liveGamesListeners[listenerId]) {
-    liveGamesListeners[listenerId] = [];
-  }
-  liveGamesListeners[listenerId].push(callback);
-  callback(getLiveGames());
+/**
+ * Subscribe to game updates (placeholder for real-time sync)
+ */
+export const subscribeToGame = (
+  code: string,
+  callback: (game: BasketballGame) => void
+): (() => void) => {
+  // In production, this would use Firebase onSnapshot
   const interval = setInterval(() => {
-    callback(getLiveGames());
-  }, 2000);
-  return () => {
-    clearInterval(interval);
-    delete liveGamesListeners[listenerId];
-  };
-};
-
-export const subscribeToUserGames = (callback: (games: BasketballGame[]) => void): (() => void) => {
-  callback(getUserActiveGames());
-  const interval = setInterval(() => {
-    callback(getUserActiveGames());
-  }, 2000);
-  return () => {
-    clearInterval(interval);
-  };
-};
-
-const notifyLiveGamesListeners = () => {
-  const liveGames = getLiveGames();
-  Object.values(liveGamesListeners).forEach(listeners => {
-    listeners.forEach(callback => callback(liveGames));
-  });
-};
-
-export const joinGame = async (code: string): Promise<BasketballGame | null> => {
-  return getGame(code);
-};
-
-export const updateGameField = (code: string, path: string, value: any): void => {
-  const game = gamesDatabase[code];
-  if (!game) return;
-
-  const keys = path.split('.');
-  let current: any = game;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (!current[keys[i]]) current[keys[i]] = {};
-    current = current[keys[i]];
-  }
-  const lastKey = keys[keys.length - 1];
-  current[lastKey] = value;
-
-  game.lastUpdate = Date.now();
-  notifyLiveGamesListeners();
-};
-
-export const subscribeToGame = (code: string, callback: (game: BasketballGame | null) => void): (() => void) => {
-  const game = gamesDatabase[code];
-  if (game) callback(game);
-  const interval = setInterval(() => {
-    const updatedGame = gamesDatabase[code];
-    if (updatedGame) callback(updatedGame);
+    const game = getGame(code);
+    if (game) {
+      callback(game);
+    }
   }, 1000);
-  return () => clearInterval(interval);
-};
 
-export const deleteGame = (code: string): void => {
-  if (gamesDatabase[code]) {
-    delete gamesDatabase[code];
-    notifyLiveGamesListeners();
-  }
+  return () => clearInterval(interval);
 };

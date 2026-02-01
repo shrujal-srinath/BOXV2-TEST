@@ -1,44 +1,41 @@
-// src/App.tsx
-import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
-import { LandingPage } from './pages/LandingPage';
-import { Dashboard } from './pages/Dashboard';
-import { GameSetup } from './pages/GameSetup';
-import { SpectatorView } from './pages/SpectatorView';
-import { TabletController } from './pages/TabletController';
-import { StandaloneTablet } from './pages/StandaloneTablet';
-import { Scoreboard } from './components/Scoreboard';
-import { startAutoSync } from './services/syncService';
-import { useEffect } from 'react';
-
-// Wrapper to pass params to Scoreboard
-const HostGameWrapper = () => {
-  const { gameCode } = useParams();
-  // Determine if local or online based on code prefix
-  const type = gameCode?.startsWith('LOCAL') ? 'local' : 'online';
-  return <Scoreboard gameCode={gameCode || 'DEMO'} gameType={type} />;
-};
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
+import Dashboard from './pages/Dashboard';
+import CreateGame from './pages/CreateGame';
+import HostGameWrapper from './pages/HostGameWrapper';
+import SpectatorView from './pages/SpectatorView';
+import ProtectedHostRoute from './components/ProtectedHostRoute';
+import './App.css';
 
 function App() {
-  useEffect(() => {
-    startAutoSync();
-  }, []);
-
   return (
     <Router>
-      <div className="min-h-screen bg-black text-white font-sans">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/setup" element={<GameSetup />} />
+      <Routes>
+        {/* Landing Page */}
+        <Route path="/" element={<LandingPage />} />
 
-          {/* Fixed: Use wrapper to pass props */}
-          <Route path="/host/:gameCode" element={<HostGameWrapper />} />
+        {/* Dashboard (requires login) */}
+        <Route path="/dashboard" element={<Dashboard />} />
 
-          <Route path="/tablet/standalone" element={<StandaloneTablet />} />
-          <Route path="/tablet/:gameCode" element={<TabletController />} />
-          <Route path="/watch/:gameCode" element={<SpectatorView />} />
-        </Routes>
-      </div>
+        {/* Create Game (requires login) */}
+        <Route path="/create-game" element={<CreateGame />} />
+
+        {/* Host Game - PROTECTED ROUTE (only game owner can access) */}
+        <Route
+          path="/host/:gameCode"
+          element={
+            <ProtectedHostRoute>
+              <HostGameWrapper />
+            </ProtectedHostRoute>
+          }
+        />
+
+        {/* Watch Game (public - anyone with code can watch) */}
+        <Route path="/watch/:gameCode" element={<SpectatorView />} />
+
+        {/* Catch all - redirect to landing */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </Router>
   );
 }
