@@ -33,20 +33,12 @@ if (missingFields.length > 0) {
   throw new Error(`Missing Firebase config: ${missingFields.join(', ')}`);
 }
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase (FIXED: Added 'export' so it can be imported as { app })
+export const app = initializeApp(firebaseConfig);
 
 // Initialize services
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// Analytics disabled temporarily to avoid API key errors
-// Uncomment when Analytics is properly configured in Firebase Console:
-// import { getAnalytics } from 'firebase/analytics';
-// let analytics;
-// if (typeof window !== 'undefined') {
-//   analytics = getAnalytics(app);
-// }
-// export { analytics };
-
+// Default export is still useful for some imports
 export default app;
