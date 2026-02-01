@@ -19,46 +19,51 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   const [loadingText, setLoadingText] = useState(LOADING_STATES[0]);
   const [isExiting, setIsExiting] = useState(false);
 
+  // 1. Lifecycle & Mount Animation
   useEffect(() => {
-    // 1. Start Entrance Animation
     const mountTimer = setTimeout(() => setIsMounted(true), 100);
+    return () => clearTimeout(mountTimer);
+  }, []);
 
-    // 2. Loading Simulation
-    const progressInterval = setInterval(() => {
+  // 2. Progress Simulation Timer
+  useEffect(() => {
+    const interval = setInterval(() => {
       setProgress(prev => {
-        if (prev >= 100) return 100;
-        // Random speed variations for realism
-        const increment = Math.random() * 2 + 0.5;
+        if (prev >= 100) {
+          clearInterval(interval);
+          return 100;
+        }
+        // Randomize speed: slower at start, faster at end
+        const increment = Math.random() * 1.5 + 0.5;
         return Math.min(prev + increment, 100);
       });
-    }, 30);
+    }, 30); // 30ms tick
 
-    // 3. Cycle Text based on progress
-    const textInterval = setInterval(() => {
-      setProgress(p => {
-        if (p < 30) setLoadingText(LOADING_STATES[0]);
-        else if (p < 70) setLoadingText(LOADING_STATES[1]);
-        else if (p < 90) setLoadingText(LOADING_STATES[2]);
-        else setLoadingText(LOADING_STATES[3]);
-        return p;
-      });
-    }, 100);
+    return () => clearInterval(interval);
+  }, []);
 
-    // 4. Exit Sequence
+  // 3. Reactive Text Updates (Safe way to sync state)
+  useEffect(() => {
+    if (progress < 30) setLoadingText(LOADING_STATES[0]);
+    else if (progress < 60) setLoadingText(LOADING_STATES[1]);
+    else if (progress < 85) setLoadingText(LOADING_STATES[2]);
+    else setLoadingText(LOADING_STATES[3]);
+  }, [progress]);
+
+  // 4. Exit Sequence Trigger
+  useEffect(() => {
+    // Total duration ~3.8s to match animation feel
     const exitTimer = setTimeout(() => {
       setIsExiting(true);
+
+      // Actual unmount happens after animation finishes
       setTimeout(() => {
         sessionStorage.setItem('BOX_SPLASH_SHOWN', 'true');
         onComplete();
-      }, 1000); // 1s exit
+      }, 1000); // 1s exit transition
     }, 3800);
 
-    return () => {
-      clearTimeout(mountTimer);
-      clearTimeout(exitTimer);
-      clearInterval(progressInterval);
-      clearInterval(textInterval);
-    };
+    return () => clearTimeout(exitTimer);
   }, [onComplete]);
 
   return (
