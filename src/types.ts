@@ -74,3 +74,25 @@ export interface GameAction {
   playerId?: string;
   data: any;
 }
+
+export interface LocalGameMetadata {
+  id: string;                    // LOCAL-ABC123
+  createdAt: number;             // Timestamp
+  lastModified: number;          // Timestamp
+  synced: boolean;               // Has been uploaded to cloud
+  cloudId: string | null;        // Firebase game code (if synced)
+  game: BasketballGame;          // Full game data
+}
+
+export interface LocalGameLibrary {
+  games: LocalGameMetadata[];
+  activeGameId: string | null;
+}
+
+export interface AppSettings {
+  autoSync: boolean;
+  keepSyncedGames: boolean;
+  vibrationEnabled: boolean;
+  defaultPeriodDuration: number;
+  defaultShotClock: number;
+}
