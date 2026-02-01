@@ -1,264 +1,272 @@
 /* src/components/SplashScreen.css */
 
 :root {
-  /* "Premium Broadcast" Palette */
-  --s-red-core: #DC2626;
-  /* Primary Signal Red */
-  --s-red-dark: #450A0A;
-  /* Deep Studio Background */
-  --s-black: #050505;
-  /* Rich Black */
-  --s-white: #FFFFFF;
-  --s-zinc: #71717A;
+  --sp-red: #DC2626;
+  --sp-black: #050505;
+  --sp-zinc: #27272a;
+  --sp-text-muted: #a1a1aa;
 
-  /* Cinematic Easing */
-  --ease-cinema: cubic-bezier(0.22, 1, 0.36, 1);
-  /* "Out Quart" - Smooth Landing */
-  --ease-exit: cubic-bezier(0.7, 0, 0.3, 1);
-  /* "In/Out" - Dramatic Exit */
-
-  --font-hero: 'Inter', system-ui, sans-serif;
+  /* Easing */
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
 }
 
-/* === LAYOUT & CONTAINER === */
 .splash-screen {
   position: fixed;
   inset: 0;
+  background-color: var(--sp-black);
+  color: white;
   z-index: 9999;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: var(--s-black);
-  color: var(--s-white);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   overflow: hidden;
-  font-family: var(--font-hero);
-  /* Force hardware acceleration for the whole layer */
-  transform: translateZ(0);
 }
 
-/* === BACKGROUND LAYERS === */
+/* === BACKGROUND === */
 .splash-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
 }
 
-/* Subtle gradient gives depth */
-.splash-vignette {
+.bg-gradient {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, transparent 0%, var(--s-black) 120%);
+  background: radial-gradient(circle at 50% 30%, #1a0505 0%, #000000 80%);
 }
 
-/* Deep Red Atmosphere */
-.splash-bg::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 50% 30%, var(--s-red-dark) 0%, var(--s-black) 70%);
-  opacity: 0.6;
-}
-
-/* Technical Grid (Very Subtle) */
-.splash-grid {
+.bg-grid {
   position: absolute;
   inset: 0;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 60px 60px;
-  mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black 30%, transparent 80%);
 }
 
-/* === HERO SECTION === */
-.splash-container {
+.bg-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* === CENTER CONTENT === */
+.splash-content {
   position: relative;
   z-index: 10;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
-}
-
-.splash-hero {
-  position: relative;
-}
-
-.hero-text {
-  font-size: clamp(4rem, 12vw, 9rem);
-  /* Responsive scaling */
-  font-weight: 900;
-  font-style: italic;
-  line-height: 0.9;
-  letter-spacing: -0.06em;
-  margin: 0;
-  opacity: 0;
-  transform: scale(1.1) translateY(20px);
-  /* Smooth texture */
-  background: linear-gradient(180deg, #fff 20%, #ccc 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.hero-glow {
-  position: absolute;
-  inset: 0;
-  background: var(--s-red-core);
-  filter: blur(60px);
-  opacity: 0;
-  z-index: -1;
-  transition: opacity 1.5s ease;
-}
-
-/* === ANIMATIONS: ENTRANCE === */
-.animate-reveal {
-  opacity: 1;
-  transform: scale(1) translateY(0);
-  transition:
-    opacity 1.2s ease-out,
-    transform 1.4s var(--ease-cinema);
-}
-
-.animate-glow {
-  opacity: 0.4;
-}
-
-/* === CREDITS SECTION === */
-.splash-credits {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: 1.5rem;
 }
 
-.separator-line {
-  width: 0px;
-  height: 2px;
-  background: var(--s-red-core);
-  box-shadow: 0 0 10px var(--s-red-core);
+/* Logo Typography */
+.logo-wrapper {
+  position: relative;
+  overflow: hidden;
+  padding: 0 1rem;
 }
 
-.animate-width {
-  width: 80px;
-  transition: width 1s var(--ease-cinema) 0.4s;
-}
-
-.credit-primary,
-.credit-secondary {
+.hero-logo {
+  font-size: clamp(3.5rem, 10vw, 7rem);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.04em;
+  margin: 0;
+  line-height: 1;
   opacity: 0;
-  transform: translateY(15px);
+  transform: translateY(20px);
+
+  /* Metallic Gradient Text */
+  background: linear-gradient(180deg, #FFFFFF 20%, #999999 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.1));
 }
 
-.animate-slide-up {
-  opacity: 1;
-  transform: translateY(0);
-  transition: all 1s var(--ease-cinema);
+.reveal-logo {
+  animation: logo-enter 1.2s var(--ease-out-expo) forwards;
 }
 
-.delay-1 {
-  transition-delay: 0.6s;
+@keyframes logo-enter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.delay-2 {
-  transition-delay: 0.8s;
+/* Logo Shine Effect */
+.logo-shine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 40%,
+      rgba(255, 255, 255, 0.4) 50%,
+      rgba(255, 255, 255, 0.1) 60%,
+      transparent 100%);
+  transform: translateX(-100%) skewX(-20deg);
+  pointer-events: none;
 }
 
-/* Typography for Credits */
-.credit-primary {
+.animate-shine {
+  animation: shine-pass 2.5s ease-in-out forwards;
+  animation-delay: 0.5s;
+}
+
+@keyframes shine-pass {
+  to {
+    transform: translateX(200%) skewX(-20deg);
+  }
+}
+
+/* Separator Line */
+.separator {
+  width: 0;
+  height: 2px;
+  background: var(--sp-red);
+  box-shadow: 0 0 10px var(--sp-red);
+  transition: width 1s var(--ease-out-expo);
+}
+
+.expand-line {
+  width: 60px;
+}
+
+/* Credits */
+.credits-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.credit-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-}
-
-.label {
+  gap: 0.6rem;
   font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.25em;
-  color: var(--s-zinc);
-  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--sp-text-muted);
+  opacity: 0;
+  transform: translateY(10px);
 }
 
-.brand {
-  font-size: 1.25rem;
-  font-weight: 800;
-  font-style: italic;
+.credit-bold {
   color: white;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
 }
 
-.credit-secondary {
-  font-family: 'Courier New', monospace;
-  font-size: 0.65rem;
+.credit-sub {
+  font-size: 0.6rem;
   letter-spacing: 0.15em;
   color: #555;
   text-transform: uppercase;
-  margin-top: 0.5rem;
+  opacity: 0;
+  transform: translateY(10px);
 }
 
-/* === LOADER (BOTTOM) === */
-.splash-loader {
+.fade-up {
+  animation: fade-up-anim 0.8s var(--ease-out-expo) forwards;
+}
+
+.delay-1 {
+  animation-delay: 0.4s;
+}
+
+.delay-2 {
+  animation-delay: 0.6s;
+}
+
+@keyframes fade-up-anim {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* === LOADER FOOTER === */
+.loader-container {
   position: absolute;
   bottom: 3rem;
   width: 100%;
-  max-width: 300px;
-  z-index: 10;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 20;
 }
 
-.loader-track {
-  width: 100%;
-  height: 2px;
-  background: #222;
-  overflow: hidden;
-  border-radius: 2px;
-}
-
-.loader-bar {
-  height: 100%;
-  background: var(--s-red-core);
-  box-shadow: 0 0 8px var(--s-red-core);
-  transition: width 0.1s linear;
-  /* Linear for smooth percentage updates */
-}
-
-.loader-meta {
+.loader-info {
   display: flex;
   justify-content: space-between;
-  margin-top: 0.5rem;
   font-family: 'Courier New', monospace;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 700;
-  color: #444;
-  letter-spacing: 0.1em;
+  color: var(--sp-text-muted);
+  letter-spacing: 0.05em;
 }
 
-.loader-percent {
-  color: var(--s-red-core);
+.status-percent {
+  color: white;
 }
 
-/* === EXIT TRANSITION === */
-/* Instead of a jarring fade, we do a "Cinematic Lift" */
-.splash-screen.is-exiting .splash-container {
+.progress-track {
+  width: 100%;
+  height: 2px;
+  background: var(--sp-zinc);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--sp-red);
+  position: relative;
+  transition: width 0.1s linear;
+}
+
+.progress-glow {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 4px;
+  background: white;
+  filter: blur(2px);
+  box-shadow: 0 0 10px white;
+}
+
+/* === EXIT STATE === */
+.is-exiting .splash-content {
   opacity: 0;
-  transform: translateY(-40px) scale(0.95);
+  transform: scale(0.95);
   filter: blur(10px);
-  transition: all 0.8s var(--ease-exit);
+  transition: all 0.8s var(--ease-out-expo);
 }
 
-.splash-screen.is-exiting .splash-bg {
+.is-exiting .loader-container {
   opacity: 0;
-  transition: opacity 1.2s ease-in-out 0.2s;
+  transform: translateY(20px);
+  transition: all 0.5s ease-in;
 }
 
-.splash-screen.is-exiting .splash-loader {
+.is-exiting .splash-bg {
   opacity: 0;
-  transform: translateY(10px);
-  transition: all 0.5s ease-out;
+  transition: opacity 1s ease 0.2s;
 }
 
-.splash-screen.is-exiting {
+.is-exiting {
   pointer-events: none;
-  background-color: transparent;
-  transition: background-color 1s ease 0.4s;
 }

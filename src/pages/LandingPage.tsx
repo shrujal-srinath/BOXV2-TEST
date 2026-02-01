@@ -1,5 +1,5 @@
-// src/pages/LandingPage.tsx (UPDATED WITH NEW SPLASH)
-import React, { useState, useEffect } from 'react';
+// src/pages/LandingPage.tsx (THEME UPDATE: RED SYSTEM / BLUE SPECTATOR)
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BasketballGame } from '../types';
 import { loginWithGoogle, loginWithEmail, registerWithEmail, subscribeToAuth } from '../services/authService';
@@ -8,11 +8,11 @@ import { SplashScreen } from '../components/SplashScreen';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  
+
   // State
   const [liveGames, setLiveGames] = useState<BasketballGame[]>([]);
   const [joinCode, setJoinCode] = useState('');
-  
+
   // UI & Animation
   const [showSplash, setShowSplash] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -21,7 +21,7 @@ export const LandingPage: React.FC = () => {
   const [showFreeHostWarning, setShowFreeHostWarning] = useState(false);
   const [selectedLiveGame, setSelectedLiveGame] = useState<BasketballGame | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
-  
+
   // Auth Form
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
@@ -30,7 +30,6 @@ export const LandingPage: React.FC = () => {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    // Auth Listener with REDIRECT TO DASHBOARD
     const unsubAuth = subscribeToAuth((u) => {
       if (u) {
         if (!showSplash) navigate('/dashboard');
@@ -38,16 +37,19 @@ export const LandingPage: React.FC = () => {
       }
     });
 
-    // Live Games
     const unsubLive = subscribeToLiveGames(setLiveGames);
 
-    return () => { 
-      unsubAuth(); 
-      unsubLive(); 
+    return () => {
+      unsubAuth();
+      unsubLive();
     };
   }, [navigate, showSplash]);
 
   // --- HANDLERS ---
+  const handleSplashComplete = useCallback(() => {
+    setShowSplash(false);
+  }, []);
+
   const handleWatchSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (joinCode.length === 6) navigate(`/watch/${joinCode}`);
@@ -65,20 +67,19 @@ export const LandingPage: React.FC = () => {
     }
   };
 
-  // --- RENDER: SPLASH SCREEN ---
   if (showSplash) {
-    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+    return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
-  // --- RENDER: MAIN LANDING PAGE ---
   return (
     <div className="min-h-screen bg-black font-sans text-white flex flex-col relative overflow-hidden animate-in">
-      
-      {/* HEADER */}
+
+      {/* HEADER (Changed to Red) */}
       <header className="flex justify-between items-center p-6 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-40 sticky top-0">
         <div className="flex items-center gap-4">
           <div className="relative w-10 h-10 flex items-center justify-center">
-            <svg className="w-8 h-8 text-blue-500 drop-shadow-[0_0_8px_rgba(59,130,246,0.6)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            {/* Red Icon */}
+            <svg className="w-8 h-8 text-red-600 drop-shadow-[0_0_8px_rgba(220,38,38,0.6)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
               <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
               <line x1="12" y1="22.08" x2="12" y2="12"></line>
@@ -92,12 +93,12 @@ export const LandingPage: React.FC = () => {
 
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-2 border border-zinc-800 bg-zinc-950 px-3 py-1.5 rounded-sm">
-             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_5px_#22c55e]"></div>
-             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Server Online</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_5px_#22c55e]"></div>
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Server Online</span>
           </div>
 
           <div className="relative">
-            <button 
+            <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="p-2 hover:bg-zinc-900 border border-zinc-800 rounded-sm transition-colors text-zinc-400 hover:text-white"
             >
@@ -114,7 +115,7 @@ export const LandingPage: React.FC = () => {
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">System Menu</p>
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => { setShowEmailModal(true); setShowUserMenu(false); }}
                     className="flex items-center gap-3 w-full px-4 py-4 text-left hover:bg-zinc-900 transition-colors"
                   >
@@ -132,19 +133,19 @@ export const LandingPage: React.FC = () => {
 
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col md:flex-row gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full mb-20">
-        
-        {/* LEFT: PUBLIC HOSTING OPTIONS */}
+
+        {/* LEFT: PUBLIC HOSTING OPTIONS (Changed to Red) */}
         <div className="flex-1 flex flex-col gap-6">
           <div className="flex-1 bg-zinc-900/40 border border-zinc-800 p-8 rounded-sm relative overflow-hidden flex flex-col justify-between">
             <div className="relative z-10">
-              <h2 className="text-blue-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                <span className="w-4 h-[1px] bg-blue-500"></span> Pro Access
+              <h2 className="text-red-600 text-[10px] font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <span className="w-4 h-[1px] bg-red-600"></span> Pro Access
               </h2>
               <h3 className="text-4xl font-black italic uppercase tracking-tighter text-white mb-4">Operator Login</h3>
               <p className="text-zinc-400 text-sm leading-relaxed max-w-sm mb-12">
                 Authenticate to access the dashboard. Save match data, manage rosters, and resume games.
               </p>
-              
+
               <div className="mt-auto space-y-4 pb-2">
                 <button onClick={loginWithGoogle} className="w-full bg-white hover:bg-zinc-200 text-black font-black py-3.5 uppercase tracking-widest flex items-center justify-center gap-3 transition-colors">
                   <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-4 h-4" alt="G" />
@@ -160,120 +161,122 @@ export const LandingPage: React.FC = () => {
 
           <button onClick={() => setShowFreeHostWarning(true)} className="bg-black border border-zinc-800 hover:border-zinc-500 p-5 flex items-center justify-between group transition-all">
             <div className="text-left">
-              <div className="text-zinc-200 font-bold text-lg group-hover:text-blue-400 transition-colors">Free Host Mode</div>
+              <div className="text-zinc-200 font-bold text-lg group-hover:text-red-500 transition-colors">Free Host Mode</div>
               <div className="text-[10px] text-zinc-600 uppercase tracking-widest mt-0.5">Quick Start • No Data Retention</div>
             </div>
             <div className="w-8 h-8 flex items-center justify-center text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all text-xl">&rarr;</div>
           </button>
         </div>
 
-        {/* RIGHT: WATCH OPTIONS */}
+        {/* RIGHT: WATCH OPTIONS (Kept Blue) */}
         <div className="flex-1 bg-gradient-to-br from-blue-950/20 to-black border border-zinc-800 p-10 flex flex-col justify-center relative overflow-hidden rounded-sm group">
-           <div className="absolute inset-0 opacity-20" 
-                style={{ 
-                  backgroundImage: 'linear-gradient(#1e40af 1px, transparent 1px), linear-gradient(90deg, #1e40af 1px, transparent 1px)', 
-                  backgroundSize: '40px 40px' 
-                }}>
-           </div>
-           
-           <div className="relative z-10 max-w-md mx-auto w-full">
-             <div className="text-blue-500 text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]"></span> Spectator Access
-             </div>
-             <h2 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter text-white mb-8 leading-tight">
-               Watch<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-white">Live Feed</span>
-             </h2>
-             
-             <form onSubmit={handleWatchSubmit} className="flex flex-col gap-6">
-               <div className="relative group/input">
-                 <div className="bg-black/40 backdrop-blur-sm border-2 border-zinc-700 group-focus-within/input:border-blue-500 transition-colors p-1 flex">
-                   <div className="bg-zinc-800/50 flex items-center justify-center px-5 border-r border-zinc-700">
-                     <span className="text-zinc-500 font-bold text-xl group-focus-within/input:text-blue-500 transition-colors">#</span>
-                   </div>
-                   <input 
-                     type="text" 
-                     placeholder="GAME ID" 
-                     maxLength={6}
-                     value={joinCode}
-                     onChange={(e) => setJoinCode(e.target.value)}
-                     className="w-full bg-transparent p-4 text-center text-4xl font-mono text-white placeholder-zinc-700 outline-none font-bold tracking-widest uppercase"
-                   />
-                 </div>
-               </div>
-               
-               <button 
-                 type="submit" 
-                 className="w-full bg-blue-700 hover:bg-blue-600 text-white font-black uppercase tracking-widest py-5 text-sm shadow-[0_0_20px_rgba(29,78,216,0.2)] hover:shadow-[0_0_30px_rgba(29,78,216,0.4)] transition-all hover:-translate-y-1"
-               >
-                 Connect Stream
-               </button>
-             </form>
-           </div>
+          <div className="absolute inset-0 opacity-20"
+            style={{
+              backgroundImage: 'linear-gradient(#1e40af 1px, transparent 1px), linear-gradient(90deg, #1e40af 1px, transparent 1px)',
+              backgroundSize: '40px 40px'
+            }}>
+          </div>
+
+          <div className="relative z-10 max-w-md mx-auto w-full">
+            <div className="text-blue-500 text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_#3b82f6]"></span> Spectator Access
+            </div>
+            <h2 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter text-white mb-8 leading-tight">
+              Watch<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-white">Live Feed</span>
+            </h2>
+
+            <form onSubmit={handleWatchSubmit} className="flex flex-col gap-6">
+              <div className="relative group/input">
+                <div className="bg-black/40 backdrop-blur-sm border-2 border-zinc-700 group-focus-within/input:border-blue-500 transition-colors p-1 flex">
+                  <div className="bg-zinc-800/50 flex items-center justify-center px-5 border-r border-zinc-700">
+                    <span className="text-zinc-500 font-bold text-xl group-focus-within/input:text-blue-500 transition-colors">#</span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="GAME ID"
+                    maxLength={6}
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    className="w-full bg-transparent p-4 text-center text-4xl font-mono text-white placeholder-zinc-700 outline-none font-bold tracking-widest uppercase"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-blue-700 hover:bg-blue-600 text-white font-black uppercase tracking-widest py-5 text-sm shadow-[0_0_20px_rgba(29,78,216,0.2)] hover:shadow-[0_0_30px_rgba(29,78,216,0.4)] transition-all hover:-translate-y-1"
+              >
+                Connect Stream
+              </button>
+            </form>
+          </div>
         </div>
       </main>
 
-      {/* FOOTER TICKER */}
+      {/* FOOTER TICKER (Changed to Red) */}
       <div className="fixed bottom-0 w-full bg-zinc-950 border-t border-zinc-900 h-14 flex items-center z-30">
-        <div className="bg-blue-600 h-full px-6 flex items-center justify-center font-black italic text-lg tracking-tighter shrink-0 shadow-[0_0_20px_rgba(59,130,246,0.4)] relative z-10">LIVE</div>
+        <div className="bg-red-600 h-full px-6 flex items-center justify-center font-black italic text-lg tracking-tighter shrink-0 shadow-[0_0_20px_rgba(220,38,38,0.4)] relative z-10">LIVE</div>
         <div className="flex-1 overflow-hidden relative flex items-center h-full group bg-black">
-           <div className="flex gap-12 px-6 animate-marquee whitespace-nowrap group-hover:[animation-play-state:paused]">
-             {liveGames.length === 0 ? (
-               <span className="text-zinc-700 text-xs font-mono tracking-widest uppercase">Waiting for active signals from server...</span>
-             ) : (
-               liveGames.map(g => (
-                 <button key={g.code} onClick={() => setSelectedLiveGame(g)} className="flex items-center gap-3 hover:bg-zinc-900 px-4 py-1.5 rounded-sm transition-colors border border-transparent hover:border-zinc-800">
-                   <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span></span>
-                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{g.gameState.period <= 4 ? `Q${g.gameState.period}` : 'OT'}</span>
-                   <span className="text-sm font-bold font-mono text-white">{g.teamA.name} <span className="text-blue-500 mx-1 text-lg">{g.teamA.score}</span> - <span className="text-blue-500 mx-1 text-lg">{g.teamB.score}</span> {g.teamB.name}</span>
-                 </button>
-               ))
-             )}
-           </div>
+          <div className="flex gap-12 px-6 animate-marquee whitespace-nowrap group-hover:[animation-play-state:paused]">
+            {liveGames.length === 0 ? (
+              <span className="text-zinc-700 text-xs font-mono tracking-widest uppercase">Waiting for active signals from server...</span>
+            ) : (
+              liveGames.map(g => (
+                <button key={g.code} onClick={() => setSelectedLiveGame(g)} className="flex items-center gap-3 hover:bg-zinc-900 px-4 py-1.5 rounded-sm transition-colors border border-transparent hover:border-zinc-800">
+                  <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span></span>
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{g.gameState.period <= 4 ? `Q${g.gameState.period}` : 'OT'}</span>
+                  <span className="text-sm font-bold font-mono text-white">{g.teamA.name} <span className="text-red-500 mx-1 text-lg">{g.teamA.score}</span> - <span className="text-red-500 mx-1 text-lg">{g.teamB.score}</span> {g.teamB.name}</span>
+                </button>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ALL MODALS (keeping existing modal code) */}
+      {/* MODAL: FREE HOST WARNING (Changed to Red) */}
       {showFreeHostWarning && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
-          <div className="bg-zinc-900 border border-blue-900/50 max-w-md w-full p-8 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
+          <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-red-600"></div>
             <h3 className="text-2xl font-black italic uppercase text-white mb-3">Data Loss Warning</h3>
             <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
               You are entering <strong>Free Host Mode</strong>. Game data will NOT be saved to an account. If you close this tab, the match state will be lost forever.
             </p>
             <div className="flex gap-4">
               <button onClick={() => setShowFreeHostWarning(false)} className="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors border border-transparent hover:border-zinc-700">Go Back</button>
-              <button onClick={() => navigate('/dashboard')} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 uppercase tracking-widest">Proceed Anyway</button>
+              <button onClick={() => navigate('/dashboard')} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 uppercase tracking-widest">Proceed Anyway</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* MODAL: SELECTED LIVE GAME (Changed to Red) */}
       {selectedLiveGame && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
-          <div className="bg-zinc-900 border border-blue-900/50 max-w-md w-full p-8 shadow-2xl relative">
-            <h3 className="text-blue-500 text-xs font-bold uppercase tracking-widest mb-2">Incoming Feed</h3>
+          <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative">
+            <h3 className="text-red-600 text-xs font-bold uppercase tracking-widest mb-2">Incoming Feed</h3>
             <h2 className="text-2xl font-black text-white italic uppercase mb-1">{selectedLiveGame.settings.gameName}</h2>
             <div className="bg-black border border-zinc-800 p-6 mb-8 mt-6">
-               <div className="flex justify-between items-center text-sm font-bold font-mono mb-2">
-                 <span style={{ color: selectedLiveGame.teamA.color }}>{selectedLiveGame.teamA.name}</span>
-                 <span className="text-zinc-600 text-xs">VS</span>
-                 <span style={{ color: selectedLiveGame.teamB.color }}>{selectedLiveGame.teamB.name}</span>
-               </div>
-               <div className="flex justify-between items-center text-3xl text-white font-mono font-bold">
-                 <span>{selectedLiveGame.teamA.score}</span>
-                 <span className="text-zinc-700 text-lg">-</span>
-                 <span>{selectedLiveGame.teamB.score}</span>
-               </div>
+              <div className="flex justify-between items-center text-sm font-bold font-mono mb-2">
+                <span style={{ color: selectedLiveGame.teamA.color }}>{selectedLiveGame.teamA.name}</span>
+                <span className="text-zinc-600 text-xs">VS</span>
+                <span style={{ color: selectedLiveGame.teamB.color }}>{selectedLiveGame.teamB.name}</span>
+              </div>
+              <div className="flex justify-between items-center text-3xl text-white font-mono font-bold">
+                <span>{selectedLiveGame.teamA.score}</span>
+                <span className="text-zinc-700 text-lg">-</span>
+                <span>{selectedLiveGame.teamB.score}</span>
+              </div>
             </div>
             <div className="flex gap-4">
               <button onClick={() => setSelectedLiveGame(null)} className="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors border border-transparent hover:border-zinc-700">Cancel</button>
-              <button onClick={() => navigate(`/watch/${selectedLiveGame.code}`)} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 uppercase tracking-widest">Connect</button>
+              <button onClick={() => navigate(`/watch/${selectedLiveGame.code}`)} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 uppercase tracking-widest">Connect</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* MODAL: EMAIL AUTH (Standard System Style) */}
       {showEmailModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm p-8 relative shadow-2xl">

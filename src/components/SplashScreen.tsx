@@ -6,97 +6,111 @@ interface SplashScreenProps {
   onComplete: () => void;
 }
 
+const LOADING_STATES = [
+  "INITIALIZING CORE...",
+  "CONNECTING TO SERVER...",
+  "LOADING ASSETS...",
+  "SYSTEM READY"
+];
+
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   const [isMounted, setIsMounted] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState(LOADING_STATES[0]);
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
-    // 1. Mount Trigger (Start Animations)
-    const mountTimer = setTimeout(() => setIsMounted(true), 50);
+    // 1. Start Entrance Animation
+    const mountTimer = setTimeout(() => setIsMounted(true), 100);
 
-    // 2. Simulated Loading Progress (Smooth interpolation)
+    // 2. Loading Simulation
     const progressInterval = setInterval(() => {
       setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        // Non-linear loading for realism (fast start, slow finish)
-        const increment = Math.max(1, (100 - prev) / 8);
-        return prev + increment;
+        if (prev >= 100) return 100;
+        // Random speed variations for realism
+        const increment = Math.random() * 2 + 0.5;
+        return Math.min(prev + increment, 100);
       });
-    }, 50);
+    }, 30);
 
-    // 3. Exit Sequence
+    // 3. Cycle Text based on progress
+    const textInterval = setInterval(() => {
+      setProgress(p => {
+        if (p < 30) setLoadingText(LOADING_STATES[0]);
+        else if (p < 70) setLoadingText(LOADING_STATES[1]);
+        else if (p < 90) setLoadingText(LOADING_STATES[2]);
+        else setLoadingText(LOADING_STATES[3]);
+        return p;
+      });
+    }, 100);
+
+    // 4. Exit Sequence
     const exitTimer = setTimeout(() => {
       setIsExiting(true);
-      // Wait for exit animation to finish before unmounting
       setTimeout(() => {
         sessionStorage.setItem('BOX_SPLASH_SHOWN', 'true');
         onComplete();
-      }, 1200); // 1.2s exit transition
-    }, 3500); // Total splash duration
+      }, 1000); // 1s exit
+    }, 3800);
 
     return () => {
       clearTimeout(mountTimer);
       clearTimeout(exitTimer);
       clearInterval(progressInterval);
+      clearInterval(textInterval);
     };
   }, [onComplete]);
 
   return (
     <div className={`splash-screen ${isExiting ? 'is-exiting' : ''}`}>
 
-      {/* LAYER 1: CINEMATIC BACKGROUND */}
+      {/* BACKGROUND */}
       <div className="splash-bg">
-        <div className="splash-noise"></div>
-        <div className="splash-vignette"></div>
-        <div className="splash-grid"></div>
+        <div className="bg-gradient"></div>
+        <div className="bg-grid"></div>
+        <div className="bg-noise"></div>
       </div>
 
-      {/* LAYER 2: MAIN CONTENT */}
-      <div className="splash-container">
+      {/* CENTER CONTENT */}
+      <div className="splash-content">
 
-        {/* HERO TITLE */}
-        <div className="splash-hero">
-          <h1 className={`hero-text ${isMounted ? 'animate-reveal' : ''}`}>
+        {/* Main Logo with Shimmer */}
+        <div className="logo-wrapper">
+          <h1 className={`hero-logo ${isMounted ? 'reveal-logo' : ''}`}>
             THE BOX
           </h1>
-          <div className={`hero-glow ${isMounted ? 'animate-glow' : ''}`}></div>
+          <div className={`logo-shine ${isMounted ? 'animate-shine' : ''}`}></div>
         </div>
 
-        {/* BRANDS & CREDITS */}
-        <div className="splash-credits">
+        {/* Separator */}
+        <div className={`separator ${isMounted ? 'expand-line' : ''}`}></div>
 
-          {/* Divider Line */}
-          <div className={`separator-line ${isMounted ? 'animate-width' : ''}`}></div>
-
-          {/* Primary Credit */}
-          <div className={`credit-primary ${isMounted ? 'animate-slide-up delay-1' : ''}`}>
-            <span className="label">POWERED BY</span>
-            <span className="brand">BMSCE</span>
+        {/* Credits */}
+        <div className="credits-container">
+          <div className={`credit-row ${isMounted ? 'fade-up delay-1' : ''}`}>
+            <span className="credit-label">POWERED BY</span>
+            <span className="credit-bold">BMSCE</span>
           </div>
-
-          {/* Secondary Credit */}
-          <div className={`credit-secondary ${isMounted ? 'animate-slide-up delay-2' : ''}`}>
-            A PRODUCT OF THE BMSCE SPORTS DEPARTMENT
+          <div className={`credit-sub ${isMounted ? 'fade-up delay-2' : ''}`}>
+            DEPARTMENT OF SPORTS
           </div>
-
         </div>
+
       </div>
 
-      {/* LAYER 3: SYSTEM LOADER (Bottom Locked) */}
-      <div className={`splash-loader ${isExiting ? 'fade-out' : ''}`}>
-        <div className="loader-track">
-          <div
-            className="loader-bar"
-            style={{ width: `${progress}%` }}
-          ></div>
+      {/* FOOTER LOADER (Glass Style) */}
+      <div className={`loader-container ${isExiting ? 'drop-down' : ''}`}>
+        <div className="loader-info">
+          <span className="status-text">{loadingText}</span>
+          <span className="status-percent">{Math.round(progress)}%</span>
         </div>
-        <div className="loader-meta">
-          <span>SYSTEM INITIALIZED</span>
-          <span className="loader-percent">{Math.round(progress)}%</span>
+        <div className="progress-track">
+          <div
+            className="progress-fill"
+            style={{ width: `${progress}%` }}
+          >
+            <div className="progress-glow"></div>
+          </div>
         </div>
       </div>
 
