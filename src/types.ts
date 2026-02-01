@@ -10,7 +10,7 @@ export interface Player {
   blocks: number;
   turnovers: number;
   fouls: number;
-  disqualified: boolean; // NEW: Track player disqualification at 5 fouls
+  disqualified: boolean;
   fieldGoalsMade: number;
   fieldGoalsAttempted: number;
   threePointsMade: number;
@@ -24,10 +24,10 @@ export interface TeamData {
   color: string;
   score: number;
   timeouts: number;
-  timeoutsFirstHalf: number; // NEW: Track first half timeouts (FIBA: 2)
-  timeoutsSecondHalf: number; // NEW: Track second half timeouts (FIBA: 3)
+  timeoutsFirstHalf: number;
+  timeoutsSecondHalf: number;
   fouls: number;
-  foulsThisQuarter: number; // NEW: Track fouls per quarter for bonus/penalty
+  foulsThisQuarter: number;
   players: Player[];
 }
 
@@ -43,16 +43,28 @@ export interface GameState {
   shotClock: number;
   gameRunning: boolean;
   shotClockRunning: boolean;
+  possession: 'A' | 'B';
+}
+
+export interface GameSettings {
+  gameName: string;
+  periodDuration: number;
+  shotClockDuration: number;
+  periodType: 'quarter' | 'half';
 }
 
 export interface BasketballGame {
-  gameCode: string;
+  code: string;       // Standardized ID field
+  hostId?: string;    // ID of the user hosting the game
   teamA: TeamData;
   teamB: TeamData;
   gameState: GameState;
+  settings: GameSettings; // Added settings
+  sport: string;      // Added sport type
+  status: 'live' | 'final' | 'scheduled';
   createdAt: number;
-  lastUpdated: number;
-  gameType: 'local' | 'online';
+  lastUpdate: number; // Standardized timestamp
+  gameType: 'local' | 'online' | 'pro';
 }
 
 export interface GameAction {
