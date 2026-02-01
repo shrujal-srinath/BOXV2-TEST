@@ -1,16 +1,27 @@
 /* src/components/SplashScreen.css */
-/* Reference Design Implementation - System Font Edition */
 
-/* Using the same system stack as index.css/LandingPage for perfect consistency */
 :root {
-  --splash-red: #E11C23;
-  --splash-grey: #666666;
-  --ease-silk: cubic-bezier(0.25, 0.8, 0.25, 1);
-  /* Smoother, premium ease */
-  --font-stack: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  /* "Premium Broadcast" Palette */
+  --s-red-core: #DC2626;
+  /* Primary Signal Red */
+  --s-red-dark: #450A0A;
+  /* Deep Studio Background */
+  --s-black: #050505;
+  /* Rich Black */
+  --s-white: #FFFFFF;
+  --s-zinc: #71717A;
+
+  /* Cinematic Easing */
+  --ease-cinema: cubic-bezier(0.22, 1, 0.36, 1);
+  /* "Out Quart" - Smooth Landing */
+  --ease-exit: cubic-bezier(0.7, 0, 0.3, 1);
+  /* "In/Out" - Dramatic Exit */
+
+  --font-hero: 'Inter', system-ui, sans-serif;
 }
 
-.splash-reference {
+/* === LAYOUT & CONTAINER === */
+.splash-screen {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -18,168 +29,236 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: #000000;
-  color: white;
-  font-family: var(--font-stack);
+  background-color: var(--s-black);
+  color: var(--s-white);
   overflow: hidden;
+  font-family: var(--font-hero);
+  /* Force hardware acceleration for the whole layer */
+  transform: translateZ(0);
 }
 
-.splash-exit {
-  opacity: 0;
-  transition: opacity 0.8s ease-out;
-  /* Slower fade out */
-  pointer-events: none;
-}
-
-/* Background */
+/* === BACKGROUND LAYERS === */
 .splash-bg {
   position: absolute;
   inset: 0;
-  background: #000000;
-  /* Pure flat black to match LandingPage exactly */
+  z-index: 0;
 }
 
-/* --- CENTER LOCKUP --- */
-.splash-lockup {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 32px;
-  /* Increased gap for standard fonts */
-  transform: scale(0.9);
+/* Subtle gradient gives depth */
+.splash-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 0%, var(--s-black) 120%);
 }
 
-@media (min-width: 768px) {
-  .splash-lockup {
-    transform: scale(1);
-  }
-}
-
-/* 1. LEFT TITLE */
-.splash-title-wrapper {
-  opacity: 0;
-  transform: translateX(30px);
-}
-
-.splash-title-wrapper.stage-active {
-  opacity: 1;
-  transform: translateX(0);
-  transition: all 0.8s var(--ease-silk);
-  /* Slower, silky slide */
-}
-
-.splash-title {
-  font-family: var(--font-stack);
-  font-weight: 900;
-  font-style: italic;
-  /* Kept italic for sports feel, but normal font */
-  font-size: 4rem;
-  line-height: 1;
-  color: #fff;
-  letter-spacing: -0.05em;
-  /* Tighter tracking for standard sans */
-  margin: 0;
-}
-
-@media (min-width: 768px) {
-  .splash-title {
-    font-size: 7rem;
-  }
-}
-
-/* 2. DIVIDER */
-.splash-divider {
-  width: 1px;
-  /* Thinner divider for cleaner look */
-  height: 0px;
-  background-color: #444;
+/* Deep Red Atmosphere */
+.splash-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 30%, var(--s-red-dark) 0%, var(--s-black) 70%);
   opacity: 0.6;
 }
 
-.splash-divider.stage-active {
-  height: 70px;
-  transition: height 0.6s var(--ease-silk);
+/* Technical Grid (Very Subtle) */
+.splash-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
 }
 
-@media (min-width: 768px) {
-  .splash-divider.stage-active {
-    height: 100px;
-  }
-}
-
-/* 3. RIGHT BRAND COLUMN */
-.splash-brand-col {
+/* === HERO SECTION === */
+.splash-container {
+  position: relative;
+  z-index: 10;
+  text-align: center;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  opacity: 0;
-  transform: translateX(-15px);
+  align-items: center;
+  gap: 2rem;
 }
 
-.splash-brand-col.stage-active {
-  opacity: 1;
-  transform: translateX(0);
-  transition: all 0.8s var(--ease-silk) 0.1s;
-  /* Slight delay */
+.splash-hero {
+  position: relative;
 }
 
-.splash-powered-label {
-  font-family: var(--font-stack);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  color: var(--splash-grey);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-.splash-brand-text {
-  font-family: var(--font-stack);
+.hero-text {
+  font-size: clamp(4rem, 12vw, 9rem);
+  /* Responsive scaling */
   font-weight: 900;
   font-style: italic;
-  font-size: 2rem;
   line-height: 0.9;
-  color: var(--splash-red);
+  letter-spacing: -0.06em;
+  margin: 0;
+  opacity: 0;
+  transform: scale(1.1) translateY(20px);
+  /* Smooth texture */
+  background: linear-gradient(180deg, #fff 20%, #ccc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-glow {
+  position: absolute;
+  inset: 0;
+  background: var(--s-red-core);
+  filter: blur(60px);
+  opacity: 0;
+  z-index: -1;
+  transition: opacity 1.5s ease;
+}
+
+/* === ANIMATIONS: ENTRANCE === */
+.animate-reveal {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  transition:
+    opacity 1.2s ease-out,
+    transform 1.4s var(--ease-cinema);
+}
+
+.animate-glow {
+  opacity: 0.4;
+}
+
+/* === CREDITS SECTION === */
+.splash-credits {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.separator-line {
+  width: 0px;
+  height: 2px;
+  background: var(--s-red-core);
+  box-shadow: 0 0 10px var(--s-red-core);
+}
+
+.animate-width {
+  width: 80px;
+  transition: width 1s var(--ease-cinema) 0.4s;
+}
+
+.credit-primary,
+.credit-secondary {
+  opacity: 0;
+  transform: translateY(15px);
+}
+
+.animate-slide-up {
+  opacity: 1;
+  transform: translateY(0);
+  transition: all 1s var(--ease-cinema);
+}
+
+.delay-1 {
+  transition-delay: 0.6s;
+}
+
+.delay-2 {
+  transition-delay: 0.8s;
+}
+
+/* Typography for Credits */
+.credit-primary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  color: var(--s-zinc);
+  text-transform: uppercase;
+}
+
+.brand {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-style: italic;
+  color: white;
   letter-spacing: -0.02em;
 }
 
-@media (min-width: 768px) {
-  .splash-powered-label {
-    font-size: 0.75rem;
-  }
-
-  .splash-brand-text {
-    font-size: 3rem;
-  }
+.credit-secondary {
+  font-family: 'Courier New', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  color: #555;
+  text-transform: uppercase;
+  margin-top: 0.5rem;
 }
 
-/* --- FOOTER --- */
-.splash-footer {
+/* === LOADER (BOTTOM) === */
+.splash-loader {
   position: absolute;
-  bottom: 15%;
-  font-family: var(--font-stack);
-  /* Use the same font stack */
-  font-size: 0.7rem;
-  font-weight: 600;
+  bottom: 3rem;
+  width: 100%;
+  max-width: 300px;
+  z-index: 10;
+}
+
+.loader-track {
+  width: 100%;
+  height: 2px;
+  background: #222;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.loader-bar {
+  height: 100%;
+  background: var(--s-red-core);
+  box-shadow: 0 0 8px var(--s-red-core);
+  transition: width 0.1s linear;
+  /* Linear for smooth percentage updates */
+}
+
+.loader-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
   color: #444;
-  /* Darker grey for subtlety */
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.loader-percent {
+  color: var(--s-red-core);
+}
+
+/* === EXIT TRANSITION === */
+/* Instead of a jarring fade, we do a "Cinematic Lift" */
+.splash-screen.is-exiting .splash-container {
+  opacity: 0;
+  transform: translateY(-40px) scale(0.95);
+  filter: blur(10px);
+  transition: all 0.8s var(--ease-exit);
+}
+
+.splash-screen.is-exiting .splash-bg {
+  opacity: 0;
+  transition: opacity 1.2s ease-in-out 0.2s;
+}
+
+.splash-screen.is-exiting .splash-loader {
   opacity: 0;
   transform: translateY(10px);
+  transition: all 0.5s ease-out;
 }
 
-.splash-footer.stage-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: all 1s ease-out 0.4s;
-}
-
-@media (min-width: 768px) {
-  .splash-footer {
-    font-size: 0.8rem;
-    bottom: 20%;
-  }
+.splash-screen.is-exiting {
+  pointer-events: none;
+  background-color: transparent;
+  transition: background-color 1s ease 0.4s;
 }

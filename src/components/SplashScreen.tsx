@@ -7,60 +7,97 @@ interface SplashScreenProps {
 }
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
-  const [stage, setStage] = useState(0);
+  const [isMounted, setIsMounted] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
-    // Check if already shown this session
-    const hasShown = sessionStorage.getItem('BOX_SPLASH_SHOWN');
-    if (hasShown) {
-      onComplete();
-      return;
-    }
+    // 1. Mount Trigger (Start Animations)
+    const mountTimer = setTimeout(() => setIsMounted(true), 50);
 
-    // Sequence for "The Box" Reference Style
-    const timers = [
-      setTimeout(() => setStage(1), 100),    // BG Init
-      setTimeout(() => setStage(2), 500),    // Title Slam
-      setTimeout(() => setStage(3), 1000),   // Divider Expand
-      setTimeout(() => setStage(4), 1400),   // Brand Slide + Footer Fade
-      setTimeout(() => setStage(5), 3500),   // Exit
+    // 2. Simulated Loading Progress (Smooth interpolation)
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(progressInterval);
+          return 100;
+        }
+        // Non-linear loading for realism (fast start, slow finish)
+        const increment = Math.max(1, (100 - prev) / 8);
+        return prev + increment;
+      });
+    }, 50);
+
+    // 3. Exit Sequence
+    const exitTimer = setTimeout(() => {
+      setIsExiting(true);
+      // Wait for exit animation to finish before unmounting
       setTimeout(() => {
         sessionStorage.setItem('BOX_SPLASH_SHOWN', 'true');
         onComplete();
-      }, 4100)
-    ];
+      }, 1200); // 1.2s exit transition
+    }, 3500); // Total splash duration
 
-    return () => timers.forEach(timer => clearTimeout(timer));
+    return () => {
+      clearTimeout(mountTimer);
+      clearTimeout(exitTimer);
+      clearInterval(progressInterval);
+    };
   }, [onComplete]);
 
   return (
-    <div className={`splash-reference ${stage >= 5 ? 'splash-exit' : ''}`}>
+    <div className={`splash-screen ${isExiting ? 'is-exiting' : ''}`}>
 
-      {/* Pure Black Background with Subtle Vignette */}
-      <div className="splash-bg"></div>
-
-      {/* Main Centered Lockup */}
-      <div className="splash-lockup">
-
-        {/* LEFT: THE BOX */}
-        <div className={`splash-title-wrapper ${stage >= 2 ? 'stage-active' : ''}`}>
-          <h1 className="splash-title">THE BOX</h1>
-        </div>
-
-        {/* DIVIDER */}
-        <div className={`splash-divider ${stage >= 3 ? 'stage-active' : ''}`}></div>
-
-        {/* RIGHT: POWERED BY BMSCE */}
-        <div className={`splash-brand-col ${stage >= 4 ? 'stage-active' : ''}`}>
-          <span className="splash-powered-label">POWERED BY</span>
-          <span className="splash-brand-text">BMSCE</span>
-        </div>
-
+      {/* LAYER 1: CINEMATIC BACKGROUND */}
+      <div className="splash-bg">
+        <div className="splash-noise"></div>
+        <div className="splash-vignette"></div>
+        <div className="splash-grid"></div>
       </div>
 
-      {/* FOOTER TAGLINE */}
-      <div className={`splash-footer ${stage >= 4 ? 'stage-active' : ''}`}>
-        THE OFFICIAL COLLEGE SPORTS APP
+      {/* LAYER 2: MAIN CONTENT */}
+      <div className="splash-container">
+
+        {/* HERO TITLE */}
+        <div className="splash-hero">
+          <h1 className={`hero-text ${isMounted ? 'animate-reveal' : ''}`}>
+            THE BOX
+          </h1>
+          <div className={`hero-glow ${isMounted ? 'animate-glow' : ''}`}></div>
+        </div>
+
+        {/* BRANDS & CREDITS */}
+        <div className="splash-credits">
+
+          {/* Divider Line */}
+          <div className={`separator-line ${isMounted ? 'animate-width' : ''}`}></div>
+
+          {/* Primary Credit */}
+          <div className={`credit-primary ${isMounted ? 'animate-slide-up delay-1' : ''}`}>
+            <span className="label">POWERED BY</span>
+            <span className="brand">BMSCE</span>
+          </div>
+
+          {/* Secondary Credit */}
+          <div className={`credit-secondary ${isMounted ? 'animate-slide-up delay-2' : ''}`}>
+            A PRODUCT OF THE BMSCE SPORTS DEPARTMENT
+          </div>
+
+        </div>
+      </div>
+
+      {/* LAYER 3: SYSTEM LOADER (Bottom Locked) */}
+      <div className={`splash-loader ${isExiting ? 'fade-out' : ''}`}>
+        <div className="loader-track">
+          <div
+            className="loader-bar"
+            style={{ width: `${progress}%` }}
+          ></div>
+        </div>
+        <div className="loader-meta">
+          <span>SYSTEM INITIALIZED</span>
+          <span className="loader-percent">{Math.round(progress)}%</span>
+        </div>
       </div>
 
     </div>
