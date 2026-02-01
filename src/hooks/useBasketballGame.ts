@@ -1,148 +1,240 @@
-import { useState, useEffect } from 'react';
-import type { BasketballGame } from '../types';
-import { subscribeToGame, updateGameField, createGame } from '../services/gameService';
+import { useState, useEffect, useCallback } from 'react';
+import { BasketballGame, Player, GameTime, TeamData } from '../types';
+import { updateGameField, subscribeToGame } from '../services/gameService';
 
-const INITIAL_GAME: BasketballGame = {
-  hostId: null,
-  code: "DEMO",
-  gameType: "friendly",
-  sport: "basketball",
-  status: "live",
-  settings: { gameName: "Demo Game", periodDuration: 10, shotClockDuration: 24, periodType: "quarter" },
-  teamA: { 
-    name: "Team A", color: "#EA4335", score: 0, timeouts: 5, fouls: 0, // FIBA Default: 5
-    players: [] 
-  },
-  teamB: { 
-    name: "Team B", color: "#4285F4", score: 0, timeouts: 5, fouls: 0, 
-    players: [] 
-  },
-  gameState: { 
-    period: 1, 
-    gameTime: { minutes: 10, seconds: 0, tenths: 0 }, 
-    shotClock: 24.0, 
-    possession: "A", 
-    gameRunning: false, 
-    shotClockRunning: false 
-  },
-  lastUpdate: Date.now()
-};
+const createDefaultPlayer = (id: string): Player => ({
+  id,
+  name: '',
+  number: '',
+  position: '',
+  points: 0,
+  assists: 0,
+  rebounds: 0,
+  steals: 0,
+  blocks: 0,
+  turnovers: 0,
+  fouls: 0,
+  disqualified: false, // NEW: Initialize disqualification status
+  fieldGoalsMade: 0,
+  fieldGoalsAttempted: 0,
+  threePointsMade: 0,
+  threePointsAttempted: 0,
+  freeThrowsMade: 0,
+  freeThrowsAttempted: 0,
+});
 
-export const useBasketballGame = (gameCode: string) => {
-  const [game, setGame] = useState<BasketballGame | null>(null);
+const createDefaultTeam = (name: string, color: string): TeamData => ({
+  name,
+  color,
+  score: 0,
+  timeouts: 2, // FIXED: FIBA starts with 2 timeouts in first half (was 7 - NBA)
+  timeoutsFirstHalf: 2, // NEW: Track first half allocation
+  timeoutsSecondHalf: 3, // NEW: Track second half allocation
+  fouls: 0,
+  foulsThisQuarter: 0, // NEW: Track quarter fouls for bonus/penalty
+  players: Array.from({ length: 12 }, (_, i) => createDefaultPlayer(`player-${i + 1}`)),
+});
 
+export const useBasketballGame = (gameCode: string, gameType: 'local' | 'online') => {
+  const [game, setGame] = useState<BasketballGame>({
+    gameCode,
+    teamA: createDefaultTeam('Team A', '#FF0000'),
+    teamB: createDefaultTeam('Team B', '#0000FF'),
+    gameState: {
+      period: 1,
+      gameTime: { minutes: 10, seconds: 0, tenths: 0 },
+      shotClock: 24,
+      gameRunning: false,
+      shotClockRunning: false,
+    },
+    createdAt: Date.now(),
+    lastUpdated: Date.now(),
+    gameType,
+  });
+
+  // Subscribe to game updates for online games
   useEffect(() => {
-    createGame(gameCode, INITIAL_GAME).catch((err) => console.log("Game check:", err));
-    const unsubscribe = subscribeToGame(gameCode, (data) => setGame(data));
-    return () => unsubscribe();
+    if (gameType === 'online') {
+      const unsubscribe = subscribeToGame(gameCode, (updatedGame) => {
+        if (updatedGame) {
+          setGame(updatedGame);
+        }
+      });
+      return unsubscribe;
+    }
+  }, [gameCode, gameType]);
+
+  // Toggle game timer
+  const toggleTimer = useCallback(() => {
+    updateGameField(gameCode, 'gameState.gameRunning', !game.gameState.gameRunning);
+  }, [gameCode, game.gameState.gameRunning]);
+
+  // Toggle shot clock
+  const toggleShotClock = useCallback(() => {
+    updateGameField(gameCode, 'gameState.shotClockRunning', !game.gameState.shotClockRunning);
+  }, [gameCode, game.gameState.shotClockRunning]);
+
+  // Update game time (called by Scoreboard timer)
+  const updateGameTime = useCallback((minutes: number, seconds: number, shotClock: number) => {
+    updateGameField(gameCode, 'gameState', {
+      ...game.gameState,
+      gameTime: { minutes, seconds, tenths: 0 },
+      shotClock: Math.max(0, shotClock),
+    });
+  }, [gameCode, game.gameState]);
+
+  // Reset shot clock
+  const resetShotClock = useCallback((value: number = 24) => {
+    updateGameField(gameCode, 'gameState.shotClock', value);
   }, [gameCode]);
 
-  if (!game) return { 
-    ...INITIAL_GAME, 
-    updateScore: () => {}, updateFouls: () => {}, updateTimeouts: () => {},
-    togglePossession: () => {}, setPeriod: () => {}, updateGameTime: () => {},
-    resetShotClock: () => {}, updatePlayerStats: () => {}, toggleTimer: () => {}, setGameTime: () => {}
-  };
+  // FIXED: Set period with proper FIBA rules
+  const setPeriod = useCallback((newPeriod: number) => {
+    const updates: any = {
+      'gameState.period': newPeriod,
+      'gameState.gameRunning': false,
+    };
 
-  // --- ACTIONS ---
-
-  const updateScore = (team: 'A' | 'B', points: number) => {
-    const teamKey = team === 'A' ? 'teamA' : 'teamB';
-    const newScore = Math.max(0, game[teamKey].score + points);
-    updateGameField(gameCode, `${teamKey}.score`, newScore);
-  };
-
-  const updateFouls = (team: 'A' | 'B', change: number) => {
-    const teamKey = team === 'A' ? 'teamA' : 'teamB';
-    const newFouls = Math.max(0, game[teamKey].fouls + change);
-    updateGameField(gameCode, `${teamKey}.fouls`, newFouls);
-  };
-
-  // FIBA Rule: Max 5 Timeouts (2 First Half, 3 Second Half)
-  const updateTimeouts = (team: 'A' | 'B', change: number) => {
-    const teamKey = team === 'A' ? 'teamA' : 'teamB';
-    const newTimeouts = Math.max(0, Math.min(5, game[teamKey].timeouts + change));
-    updateGameField(gameCode, `${teamKey}.timeouts`, newTimeouts);
-  };
-
-  const togglePossession = () => {
-    const newPoss = game.gameState.possession === 'A' ? 'B' : 'A';
-    updateGameField(gameCode, 'gameState.possession', newPoss);
-  };
-
-  const setPeriod = (newPeriod: number) => {
-    updateGameField(gameCode, 'gameState.period', newPeriod);
-  };
-
-  // 1. TICK: Used by the interval loop to count down
-  const updateGameTime = (m: number, s: number, t: number) => {
-    let newShotClock = game.gameState.shotClock;
-    if (game.gameState.shotClockRunning && newShotClock > 0) {
-      newShotClock = parseFloat((newShotClock - 1).toFixed(1)); // Tick down 1s
+    // Reset quarter fouls at the start of each quarter
+    if (newPeriod >= 1 && newPeriod <= 4) {
+      updates['teamA.foulsThisQuarter'] = 0;
+      updates['teamB.foulsThisQuarter'] = 0;
     }
-    updateGameField(gameCode, 'gameState', {
-      ...game.gameState,
-      gameTime: { minutes: m, seconds: s, tenths: t },
-      shotClock: Math.max(0, newShotClock)
+
+    // FIXED: Halftime timeout reset (Q3 starts)
+    if (newPeriod === 3) {
+      updates['teamA.timeouts'] = 3; // FIBA: 3 timeouts for second half
+      updates['teamB.timeouts'] = 3;
+      updates['teamA.timeoutsSecondHalf'] = 3;
+      updates['teamB.timeoutsSecondHalf'] = 3;
+    }
+
+    // FIXED: Overtime rules
+    if (newPeriod > 4) {
+      // Force 5-minute overtime period
+      updates['gameState.gameTime'] = { minutes: 5, seconds: 0, tenths: 0 };
+
+      // FIBA: 1 timeout per overtime period
+      updates['teamA.timeouts'] = 1;
+      updates['teamB.timeouts'] = 1;
+
+      // Reset quarter fouls for overtime
+      updates['teamA.foulsThisQuarter'] = 0;
+      updates['teamB.foulsThisQuarter'] = 0;
+
+      // NOTE: Total fouls carry over from regulation
+    }
+
+    // Regular period time (10 minutes for FIBA)
+    if (newPeriod >= 1 && newPeriod <= 4) {
+      updates['gameState.gameTime'] = { minutes: 10, seconds: 0, tenths: 0 };
+    }
+
+    // Apply all updates
+    Object.entries(updates).forEach(([path, value]) => {
+      updateGameField(gameCode, path as any, value);
     });
-  };
+  }, [gameCode]);
 
-  // 2. SET: Used by Edit Modal to force time without side effects
-  const setGameTime = (m: number, s: number, shot: number) => {
-    updateGameField(gameCode, 'gameState', {
-      ...game.gameState,
-      gameTime: { minutes: m, seconds: s, tenths: 0 },
-      shotClock: shot
-    });
-  };
+  // Update score
+  const updateScore = useCallback((team: 'A' | 'B', points: number) => {
+    const teamKey = `team${team}` as 'teamA' | 'teamB';
+    const currentScore = game[teamKey].score;
+    updateGameField(gameCode, `${teamKey}.score`, currentScore + points);
+  }, [gameCode, game]);
 
-  // 3. TOGGLE: Explicitly flips the running state
-  const toggleTimer = () => {
-    const newState = !game.gameState.gameRunning;
-    updateGameField(gameCode, 'gameState', {
-      ...game.gameState,
-      gameRunning: newState,
-      shotClockRunning: newState // Usually synced
-    });
-  };
+  // FIXED: Update fouls with quarter tracking and bonus indicator
+  const updateFouls = useCallback((team: 'A' | 'B', increment: number = 1) => {
+    const teamKey = `team${team}` as 'teamA' | 'teamB';
+    const currentFouls = game[teamKey].fouls;
+    const currentQuarterFouls = game[teamKey].foulsThisQuarter;
 
-  const resetShotClock = (seconds: number) => {
-    updateGameField(gameCode, 'gameState.shotClock', seconds);
-  };
+    // Update both total fouls and quarter fouls
+    updateGameField(gameCode, `${teamKey}.fouls`, currentFouls + increment);
+    updateGameField(gameCode, `${teamKey}.foulsThisQuarter`, currentQuarterFouls + increment);
 
-  const updatePlayerStats = (team: 'A' | 'B', playerId: string, points: number, fouls: number) => {
-    const teamKey = team === 'A' ? 'teamA' : 'teamB';
-    const currentTeam = game[teamKey];
-    
-    const updatedPlayers = currentTeam.players.map(p => {
-      if (p.id === playerId) {
-        return { ...p, points: p.points + points, fouls: p.fouls + fouls };
-      }
-      return p;
-    });
+    // FIBA: Bonus/penalty at 4 team fouls per quarter
+    const newQuarterFouls = currentQuarterFouls + increment;
+    if (newQuarterFouls >= 4) {
+      // Team is now in bonus/penalty situation
+      console.log(`Team ${team} is in penalty - ${newQuarterFouls} fouls this quarter`);
+    }
+  }, [gameCode, game]);
 
-    const newScore = Math.max(0, currentTeam.score + points);
-    const newTeamFouls = Math.max(0, currentTeam.fouls + fouls);
+  // Update timeouts with FIBA validation
+  const updateTimeouts = useCallback((team: 'A' | 'B', increment: number = -1) => {
+    const teamKey = `team${team}` as 'teamA' | 'teamB';
+    const currentTimeouts = game[teamKey].timeouts;
+    const newTimeouts = currentTimeouts + increment;
 
-    updateGameField(gameCode, teamKey, {
-      ...currentTeam,
-      score: newScore,
-      fouls: newTeamFouls,
-      players: updatedPlayers
-    });
-  };
+    // Prevent going negative or exceeding max
+    const period = game.gameState.period;
+    let maxTimeouts = 2; // Default first half
+
+    if (period >= 3 && period <= 4) {
+      maxTimeouts = 3; // Second half
+    } else if (period > 4) {
+      maxTimeouts = 1; // Overtime
+    }
+
+    if (newTimeouts >= 0 && newTimeouts <= maxTimeouts) {
+      updateGameField(gameCode, `${teamKey}.timeouts`, newTimeouts);
+    }
+  }, [gameCode, game]);
+
+  // FIXED: Update player stats with disqualification at 5 fouls
+  const updatePlayerStats = useCallback((
+    team: 'A' | 'B',
+    playerId: string,
+    stat: keyof Player,
+    value: number
+  ) => {
+    const teamKey = `team${team}` as 'teamA' | 'teamB';
+    const players = game[teamKey].players;
+    const playerIndex = players.findIndex(p => p.id === playerId);
+
+    if (playerIndex === -1) return;
+
+    const player = players[playerIndex];
+    const updatedPlayer = { ...player, [stat]: value };
+
+    // CRITICAL FIX: Auto-disqualify player at 5 fouls
+    if (stat === 'fouls' && value >= 5 && !player.disqualified) {
+      updatedPlayer.disqualified = true;
+
+      // Alert the user
+      alert(`Player Disqualified: ${player.name || player.number} - 5 Fouls`);
+
+      console.log(`🚨 PLAYER DISQUALIFIED: ${player.name} (#${player.number}) - 5 fouls`);
+    }
+
+    const updatedPlayers = [...players];
+    updatedPlayers[playerIndex] = updatedPlayer;
+
+    updateGameField(gameCode, `${teamKey}.players`, updatedPlayers);
+  }, [gameCode, game]);
+
+  // Update team data (name, color)
+  const updateTeamData = useCallback((
+    team: 'A' | 'B',
+    field: keyof TeamData,
+    value: any
+  ) => {
+    const teamKey = `team${team}` as 'teamA' | 'teamB';
+    updateGameField(gameCode, `${teamKey}.${field}`, value);
+  }, [gameCode]);
 
   return {
-    ...game,
+    game,
+    toggleTimer,
+    toggleShotClock,
+    updateGameTime,
+    resetShotClock,
+    setPeriod,
     updateScore,
     updateFouls,
     updateTimeouts,
-    togglePossession,
-    setPeriod,
-    updateGameTime,
-    setGameTime, // New export
-    toggleTimer, // New export
-    resetShotClock,
-    updatePlayerStats
+    updatePlayerStats,
+    updateTeamData,
   };
 };
