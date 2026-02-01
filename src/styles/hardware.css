@@ -1,81 +1,49 @@
 /* ============================================
    HARDWARE.CSS - ULTRA-COMPACT NO-SCROLL VERSION
-   FORCES LANDSCAPE + FITS EVERYTHING ON SCREEN
    ============================================ */
+
+/* REMOVED: Global Portrait Lock and Body Rotation.
+   This ensures the Landing Page works on mobile phones.
+*/
 
 /* ============================================
-   FORCE LANDSCAPE ORIENTATION
+   BASE STYLES
    ============================================ */
 
-/* Lock screen orientation via CSS */
-@media screen and (orientation: portrait) {
-  body {
-    transform: rotate(90deg);
-    transform-origin: left top;
-    width: 100vh;
-    height: 100vw;
-    overflow-x: hidden;
-    position: absolute;
-    top: 100%;
-    left: 0;
-  }
-}
-
-/* ============================================
-   BASE STYLES - NO SCROLL
-   ============================================ */
-   
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden; /* CRITICAL: Prevents scrolling */
-  position: fixed; /* CRITICAL: Locks viewport */
-  overscroll-behavior: none; /* Prevents bounce */
-}
-
-#root {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden; /* CRITICAL: No scroll in root */
-  display: flex;
-  flex-direction: column;
-}
-
+/* MOVED: Locking logic is now scoped to the container, not global body */
 .hardware-container {
   position: fixed;
   inset: 0;
   background: #000;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   overflow: hidden;
+  /* Locks content inside this container only */
   width: 100vw;
   height: 100vh;
   display: flex;
   flex-direction: column;
+  overscroll-behavior: none;
 }
 
 /* ============================================
    CRT OVERLAY EFFECT
    ============================================ */
-   
+
 .crt-overlay {
   position: fixed;
   inset: 0;
-  background: 
-    repeating-linear-gradient(
-      0deg,
+  background:
+    repeating-linear-gradient(0deg,
       rgba(0, 0, 0, 0.15),
       rgba(0, 0, 0, 0.15) 1px,
       transparent 1px,
-      transparent 2px
-    );
+      transparent 2px);
   pointer-events: none;
   z-index: 9999;
   opacity: 0.3;
@@ -84,12 +52,12 @@ html, body {
 /* ============================================
    METAL PANEL EFFECT
    ============================================ */
-   
+
 .metal-panel {
   background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
   border: 2px solid #333;
   border-radius: 6px;
-  box-shadow: 
+  box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 -1px 0 rgba(0, 0, 0, 0.5),
     0 2px 8px rgba(0, 0, 0, 0.5);
@@ -99,7 +67,7 @@ html, body {
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
   border: 2px solid #1a1a1a;
   border-radius: 4px;
-  box-shadow: 
+  box-shadow:
     inset 0 2px 8px rgba(0, 0, 0, 0.8),
     inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
@@ -107,12 +75,12 @@ html, body {
 /* ============================================
    LED INDICATORS
    ============================================ */
-   
+
 .led-indicator {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  box-shadow: 
+  box-shadow:
     0 0 4px currentColor,
     inset 0 -2px 4px rgba(0, 0, 0, 0.5);
   position: relative;
@@ -147,34 +115,28 @@ html, body {
 }
 
 /* ============================================
-   HARDWARE BUTTONS - COMPACT SIZE
+   HARDWARE BUTTONS
    ============================================ */
-   
+
 .hw-button {
-  /* Compact but still tappable */
   min-height: 48px;
   min-width: 60px;
   padding: 8px 12px;
-  
   background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
   border: 2px solid #404040;
   border-radius: 6px;
-  
   color: #fff;
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   line-height: 1.2;
-  
   cursor: pointer;
   transition: all 0.1s ease;
-  
-  box-shadow: 
+  box-shadow:
     0 2px 0 #0a0a0a,
     0 4px 8px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  
   position: relative;
   user-select: none;
   -webkit-user-select: none;
@@ -182,7 +144,7 @@ html, body {
 
 .hw-button:active {
   transform: translateY(2px);
-  box-shadow: 
+  box-shadow:
     0 1px 0 #0a0a0a,
     0 2px 4px rgba(0, 0, 0, 0.3);
 }
@@ -193,7 +155,6 @@ html, body {
   filter: grayscale(1);
 }
 
-/* Button Color Variants */
 .hw-button-green {
   background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
   border-color: #16a34a;
@@ -228,7 +189,6 @@ html, body {
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-/* Small buttons for compact layout */
 .hw-button-sm {
   min-height: 40px;
   min-width: 50px;
@@ -239,7 +199,7 @@ html, body {
 /* ============================================
    EMBOSSED LABELS
    ============================================ */
-   
+
 .embossed-label {
   font-size: 10px;
   font-weight: 900;
@@ -250,17 +210,15 @@ html, body {
 }
 
 /* ============================================
-   DIGITAL DISPLAY - COMPACT
+   DIGITAL DISPLAY
    ============================================ */
-   
+
 .digital-display {
   background: #000;
   border: 2px solid #1a1a1a;
   border-radius: 6px;
   padding: 8px;
-  box-shadow: 
-    inset 0 4px 12px rgba(0, 0, 0, 0.9),
-    0 0 20px rgba(34, 197, 94, 0.2);
+  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.9), 0 0 20px rgba(34, 197, 94, 0.2);
   font-family: 'Courier New', monospace;
   font-weight: 700;
   color: #22c55e;
@@ -268,63 +226,37 @@ html, body {
   line-height: 1;
 }
 
-/* Team Color Variants */
 .digital-display-team-a {
   color: #3b82f6;
   text-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
-  box-shadow: 
-    inset 0 4px 12px rgba(0, 0, 0, 0.9),
-    0 0 20px rgba(59, 130, 246, 0.2);
+  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.9), 0 0 20px rgba(59, 130, 246, 0.2);
 }
 
 .digital-display-team-b {
   color: #ef4444;
   text-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
-  box-shadow: 
-    inset 0 4px 12px rgba(0, 0, 0, 0.9),
-    0 0 20px rgba(239, 68, 68, 0.2);
+  box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.9), 0 0 20px rgba(239, 68, 68, 0.2);
 }
 
 /* ============================================
-   ANIMATIONS
+   UTILITIES
    ============================================ */
-   
+.animate-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 20px currentColor;
   }
+
   50% {
     box-shadow: 0 0 40px currentColor;
   }
 }
 
-@keyframes score-flash {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
-}
-
-.animate-pulse {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-.animate-score-flash {
-  animation: score-flash 0.3s ease-out;
-}
-
-/* ============================================
-   NO PORTRAIT MODE WARNING - AUTO ROTATE
-   ============================================ */
-
-/* Remove the portrait warning entirely since we auto-rotate */
-.portrait-warning {
-  display: none !important;
-}
-
-/* ============================================
-   UTILITY CLASSES
-   ============================================ */
-   
 .pointer-events-none {
   pointer-events: none;
 }
