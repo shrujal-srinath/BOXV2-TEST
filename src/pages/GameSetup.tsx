@@ -1,8 +1,10 @@
-// src/pages/GameSetup.tsx (Fixed missing Player props)
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { initializeNewGame } from '../services/gameService';
+import { auth, subscribeToAuth } from '../services/authService'; // Updated import
+import { SplashScreen } from '../components/SplashScreen';
 import type { Player } from '../types';
+import type { User } from 'firebase/auth';
 
 const TEAM_COLORS = [
   '#DC2626', '#2563EB', '#16A34A', '#F59E0B', '#FFFFFF', '#9333EA', '#EA580C', '#000000',
@@ -13,10 +15,18 @@ export const GameSetup: React.FC = () => {
   const location = useLocation();
   const sportType = location.state?.sport || 'basketball';
 
+  // --- STATE ---
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [step, setStep] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showTimeModal, setShowTimeModal] = useState(false);
+
+  // Launch State
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [isGameReady, setIsGameReady] = useState(false);
+  const [launchedGameCode, setLaunchedGameCode] = useState("");
+
+  // Config State
   const [editTarget, setEditTarget] = useState<'game' | 'shot' | null>(null);
   const [tempTimeValue, setTempTimeValue] = useState(0);
   const [trackStats, setTrackStats] = useState(true);
@@ -25,6 +35,8 @@ export const GameSetup: React.FC = () => {
   const [periodDuration, setPeriodDuration] = useState(10);
   const [shotClockEnabled, setShotClockEnabled] = useState(true);
   const [shotClockDuration, setShotClockDuration] = useState(24);
+
+  // Team State
   const [teamAName, setTeamAName] = useState("");
   const [teamBName, setTeamBName] = useState("");
   const [teamAColor, setTeamAColor] = useState(TEAM_COLORS[0]);
@@ -37,12 +49,23 @@ export const GameSetup: React.FC = () => {
   const [pPos, setPPos] = useState("PG");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // --- EFFECT: Ensure User is Loaded ---
+  useEffect(() => {
+    const unsub = subscribeToAuth((user) => {
+      if (user) setCurrentUser(user);
+      else {
+        // If user logs out or isn't found, redirect to home
+        navigate('/');
+      }
+    });
+    return () => unsub();
+  }, [navigate]);
+
+  // --- HANDLERS ---
+
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    if (/^\d*$/.test(val)) {
-      setPNumber(val);
-      setErrorMsg(null);
-    }
+    if (/^\d*$/.test(val)) { setPNumber(val); setErrorMsg(null); }
   };
 
   const openTimeEditor = (target: 'game' | 'shot') => {
@@ -58,44 +81,19 @@ export const GameSetup: React.FC = () => {
   };
 
   const addPlayer = () => {
-    setErrorMsg(null);
     if (!pName || !pNumber) return;
-
     const currentRoster = activeTab === 'A' ? rosterA : rosterB;
-    const exists = currentRoster.some(p => p.number === pNumber);
-    if (exists) {
-      setErrorMsg(`Jersey #${pNumber} is already taken!`);
-      return;
-    }
+    if (currentRoster.some(p => p.number === pNumber)) { setErrorMsg(`Jersey #${pNumber} is already taken!`); return; }
 
-    // FIXED: Added all missing properties to match Player interface
     const newPlayer: Player = {
-      id: `p-${Date.now()}`,
-      name: pName.toUpperCase(),
-      number: pNumber,
-      position: pPos,
-      points: 0,
-      fouls: 0,
-      assists: 0,
-      rebounds: 0,
-      steals: 0,
-      blocks: 0,
-      turnovers: 0,
-      disqualified: false,
-      fieldGoalsMade: 0,
-      fieldGoalsAttempted: 0,
-      threePointsMade: 0,
-      threePointsAttempted: 0,
-      freeThrowsMade: 0,
-      freeThrowsAttempted: 0
+      id: `p-${Date.now()}`, name: pName.toUpperCase(), number: pNumber, position: pPos,
+      points: 0, fouls: 0, assists: 0, rebounds: 0, steals: 0, blocks: 0, turnovers: 0,
+      disqualified: false, fieldGoalsMade: 0, fieldGoalsAttempted: 0, threePointsMade: 0,
+      threePointsAttempted: 0, freeThrowsMade: 0, freeThrowsAttempted: 0
     };
-
-    const sorter = (a: Player, b: Player) => parseInt(a.number) - parseInt(b.number);
-    if (activeTab === 'A') setRosterA([...rosterA, newPlayer].sort(sorter));
-    else setRosterB([...rosterB, newPlayer].sort(sorter));
-    setPName("");
-    setPNumber("");
-    document.getElementById('playerNumInput')?.focus();
+    if (activeTab === 'A') setRosterA([...rosterA, newPlayer]);
+    else setRosterB([...rosterB, newPlayer]);
+    setPName(""); setPNumber("");
   };
 
   const removePlayer = (team: 'A' | 'B', id: string) => {
@@ -110,10 +108,21 @@ export const GameSetup: React.FC = () => {
     setShowConfirmation(true);
   };
 
+  // --- FINAL LAUNCH LOGIC (Fixed) ---
   const finalizeAndLaunch = async () => {
-    setIsSubmitting(true);
-    setErrorMsg(null);
+    // 1. Double check user to prevent "Anonymous" games
+    if (!currentUser) {
+      alert("System Error: User session not found. Please refresh and log in.");
+      return;
+    }
+
+    // 2. Start Splash Screen
+    setShowConfirmation(false);
+    setIsLaunching(true);
+    setIsGameReady(false); // Keeps splash at 90%
+
     try {
+      // 3. Create Game with VALIDATED User ID
       const gameCode = await initializeNewGame(
         {
           gameName: gameName.trim() || "LEAGUE MATCH 01",
@@ -124,40 +133,64 @@ export const GameSetup: React.FC = () => {
         { name: teamAName || "TEAM A", color: teamAColor, players: trackStats ? rosterA : [] },
         { name: teamBName || "TEAM B", color: teamBColor, players: trackStats ? rosterB : [] },
         trackStats,
-        sportType
+        sportType,
+        currentUser.uid // <--- CRITICAL FIX: Passing verified ID
       );
-      navigate(`/host/${gameCode}`);
+
+      setLaunchedGameCode(gameCode);
+
+      // 4. Game is ready, tell Splash Screen to finish
+      // Small delay ensures database consistency
+      setTimeout(() => {
+        setIsGameReady(true);
+      }, 800);
+
     } catch (error: any) {
       console.error("Launch Error:", error);
-      alert(`Error: ${error.message || "Failed to launch game server."}`);
-      setIsSubmitting(false);
+      alert(`Error: ${error.message}`);
+      setIsLaunching(false);
+    }
+  };
+
+  // Called when splash animation hits 100%
+  const onSplashComplete = () => {
+    if (launchedGameCode) {
+      navigate(`/host/${launchedGameCode}`);
     }
   };
 
   const ColorPalette = ({ selected, onSelect }: any) => (
     <div className="flex gap-2 mt-3 justify-between">
       {TEAM_COLORS.map((c) => (
-        <button key={c} onClick={() => onSelect(c)} className={`w-6 h-6 rounded-full transition-all duration-200 ${selected === c ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-zinc-900 shadow-lg' : 'opacity-50 hover:opacity-100 hover:scale-110'}`} style={{ backgroundColor: c, border: c === '#000000' ? '1px solid #333' : 'none' }} />
+        <button key={c} onClick={() => onSelect(c)} className={`w-6 h-6 rounded-full transition-all ${selected === c ? 'scale-125 ring-2 ring-white' : 'opacity-50'}`} style={{ backgroundColor: c, border: c === '#000000' ? '1px solid #333' : 'none' }} />
       ))}
     </div>
   );
 
+  // --- RENDER ---
+
+  if (isLaunching) {
+    return <SplashScreen isReady={isGameReady} onComplete={onSplashComplete} />;
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans flex items-center justify-center p-4 md:p-8">
       <div className="w-full max-w-6xl bg-zinc-900 border border-zinc-800 shadow-2xl rounded-2xl overflow-hidden flex flex-col h-[90vh] max-h-[850px]">
+        {/* Header */}
         <div className="bg-zinc-950 border-b border-zinc-800 px-8 py-5 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-6">
-            <button onClick={() => navigate('/dashboard')} className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:bg-white hover:text-black hover:border-white transition-all text-xl" title="Exit Setup">←</button>
+            <button onClick={() => navigate('/dashboard')} className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:bg-white hover:text-black hover:border-white transition-all text-xl">←</button>
             <div>
               <h1 className="text-xl font-black tracking-tight uppercase italic text-white leading-none">{sportType} CONFIG</h1>
               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mt-1">{step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}</div>
             </div>
           </div>
           {step === 2 && (
-            <button onClick={handleLaunchRequest} className="px-8 py-3 rounded bg-green-600 hover:bg-green-500 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-green-900/20 transition-all hover:-translate-y-0.5">Launch Console 🚀</button>
+            <button onClick={handleLaunchRequest} className="px-8 py-3 rounded bg-green-600 hover:bg-green-500 text-white text-xs font-black uppercase tracking-widest shadow-lg hover:-translate-y-0.5">Launch Console 🚀</button>
           )}
         </div>
 
+        {/* Step 1 */}
         {step === 1 && (
           <div className="flex-1 p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-y-auto bg-black/20 custom-scrollbar">
             <div className="lg:col-span-7 flex flex-col gap-8">
@@ -168,6 +201,7 @@ export const GameSetup: React.FC = () => {
                     <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Match Title</label>
                     <input value={gameName} onChange={(e) => setGameName(e.target.value)} className="w-full bg-black border border-zinc-800 p-4 text-base font-bold text-white placeholder-zinc-700 outline-none rounded-lg focus:border-blue-500 transition-all uppercase" placeholder="E.G. CHAMPIONSHIP FINAL" />
                   </div>
+                  {/* RESTORED: Operation Mode */}
                   <div>
                     <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Operation Mode</label>
                     <div className="grid grid-cols-2 gap-4">
@@ -256,17 +290,18 @@ export const GameSetup: React.FC = () => {
           </div>
         )}
 
+        {/* Step 2 */}
         {step === 2 && (
           <div className="flex flex-col h-full animate-in slide-in-from-right-8 duration-500 bg-zinc-950">
             <div className="flex border-b border-zinc-800 bg-black/40 h-20 shrink-0">
-              <button onClick={() => setActiveTab('A')} className={`flex-1 relative transition-all flex items-center justify-center gap-3 group ${activeTab === 'A' ? 'bg-zinc-900' : 'hover:bg-zinc-900/40'}`}>
+              <button onClick={() => setActiveTab('A')} className={`flex-1 relative transition-all flex items-center justify-center gap-3 group ${activeTab === 'A' ? 'bg-zinc-900' : 'opacity-50'}`}>
                 <div className="w-3 h-3 rounded-full shadow border border-white/20" style={{ background: teamAColor }}></div>
                 <span className={`text-xl font-black italic uppercase ${activeTab === 'A' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>{teamAName || "TEAM A"}</span>
                 <span className="text-[10px] font-bold text-black bg-white px-2 py-0.5 rounded ml-2">{rosterA.length}</span>
                 {activeTab === 'A' && <div className="absolute bottom-0 left-0 w-full h-1" style={{ background: teamAColor }}></div>}
               </button>
               <div className="w-[1px] bg-zinc-800"></div>
-              <button onClick={() => setActiveTab('B')} className={`flex-1 relative transition-all flex items-center justify-center gap-3 group ${activeTab === 'B' ? 'bg-zinc-900' : 'hover:bg-zinc-900/40'}`}>
+              <button onClick={() => setActiveTab('B')} className={`flex-1 relative transition-all flex items-center justify-center gap-3 group ${activeTab === 'B' ? 'bg-zinc-900' : 'opacity-50'}`}>
                 <div className="w-3 h-3 rounded-full shadow border border-white/20" style={{ background: teamBColor }}></div>
                 <span className={`text-xl font-black italic uppercase ${activeTab === 'B' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`}>{teamBName || "TEAM B"}</span>
                 <span className="text-[10px] font-bold text-black bg-white px-2 py-0.5 rounded ml-2">{rosterB.length}</span>
@@ -325,6 +360,7 @@ export const GameSetup: React.FC = () => {
           </div>
         )}
       </div>
+
       {showTimeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm rounded-xl shadow-2xl p-6 relative">
@@ -337,6 +373,7 @@ export const GameSetup: React.FC = () => {
           </div>
         </div>
       )}
+
       {showConfirmation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border border-zinc-700 w-full max-w-3xl rounded-lg shadow-2xl flex flex-col overflow-hidden">
@@ -361,7 +398,7 @@ export const GameSetup: React.FC = () => {
             </div>
             <div className="p-6 bg-black border-t border-zinc-800 flex justify-end gap-4">
               <button onClick={() => setShowConfirmation(false)} className="px-6 py-3 rounded border border-zinc-700 text-zinc-400 hover:text-white text-xs font-bold uppercase tracking-widest transition-colors">Edit</button>
-              <button onClick={finalizeAndLaunch} disabled={isSubmitting} className="px-8 py-3 rounded bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black uppercase tracking-widest shadow-lg transition-transform hover:-translate-y-0.5">{isSubmitting ? "Booting..." : "Launch Match"}</button>
+              <button onClick={finalizeAndLaunch} disabled={isLaunching} className="px-8 py-3 rounded bg-green-600 hover:bg-green-500 text-white text-xs font-black uppercase tracking-widest shadow-lg transition-transform hover:-translate-y-0.5">{isLaunching ? "Booting..." : "Launch Match"}</button>
             </div>
           </div>
         </div>
