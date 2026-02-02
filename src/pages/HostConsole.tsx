@@ -1,145 +1,307 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { subscribeToAuth } from '../services/authService';
 import { useBasketballGame } from '../hooks/useBasketballGame';
-import { ControlDeckClassic } from '../components/ControlDeckClassic';
+import { useLocalGame } from '../hooks/useLocalGame';
 
 export const HostConsole: React.FC = () => {
-    const { gameCode } = useParams();
+    const { gameCode } = useParams<{ gameCode: string }>();
     const navigate = useNavigate();
+    const [currentUser, setCurrentUser] = useState<any>(null);
 
-    // Use the hook to get game state and actions
+    // Detect if this is a local game (starts with LOCAL-)
+    const isLocalGame = gameCode?.startsWith('LOCAL-');
+
+    console.log('[HostConsole] Game code:', gameCode, '| Is local:', isLocalGame);
+
+    // Use appropriate hook based on game type
+    const firebaseGame = useBasketballGame(
+        !isLocalGame && gameCode ? gameCode : '',
+        'online'
+    );
+
+    const localGame = useLocalGame(
+        isLocalGame && gameCode ? gameCode : ''
+    );
+
+    // Select the appropriate game data
     const {
         game,
-        handleAction,
         toggleTimer,
+        handleScoreAction,
+        handleFoulAction,
+        addTimeout,
+        handleSubstitution,
+        endPeriod,
         resetShotClock,
-        togglePossession,
-        setPeriod,
-        updateGameTime
-    } = useBasketballGame(gameCode || 'DEMO', 'online');
+        adjustShotClock,
+        recordStat,
+        syncState,
+        updateGameState,
+        handleAction
+    } = isLocalGame ? localGame : firebaseGame;
 
-    const [copyFeedback, setCopyFeedback] = useState(false);
-    const timerRef = useRef<number | null>(null);
-
-    // --- MASTER TIMER LOOP ---
     useEffect(() => {
-        if (timerRef.current) clearInterval(timerRef.current);
+        const unsub = subscribeToAuth((user) => {
+            setCurrentUser(user);
+        });
+        return () => unsub();
+    }, []);
 
-        if (game.gameState.gameRunning) {
-            timerRef.current = window.setInterval(() => {
-                const { gameTime, shotClock, shotClockRunning } = game.gameState;
-                const totalSec = (gameTime.minutes * 60) + gameTime.seconds;
-
-                if (totalSec > 0) {
-                    const newTotal = totalSec - 1;
-                    const newMin = Math.floor(newTotal / 60);
-                    const newSec = newTotal % 60;
-
-                    let newShot = shotClock;
-                    if (shotClockRunning && shotClock > 0) newShot -= 1;
-
-                    updateGameTime(newMin, newSec, newShot);
-                } else {
-                    toggleTimer(); // Stop if time is up
-                }
-            }, 1000);
-        }
-
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
-    }, [game.gameState.gameRunning, game.gameState.gameTime, game.gameState.shotClock]);
-
-    // --- HANDLERS ---
-    const formatTime = (m: number, s: number) => `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-
-    const copyLink = () => {
-        navigator.clipboard.writeText(`${window.location.origin}/watch/${gameCode}`);
-        setCopyFeedback(true);
-        setTimeout(() => setCopyFeedback(false), 2000);
-    };
+    if (!game) {
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="text-center">
+                    <div className="text-6xl mb-4">🏀</div>
+                    <div className="text-white font-bold text-xl mb-2">Loading Game...</div>
+                    <div className="text-zinc-500 text-sm">
+                        {isLocalGame ? '📱 Local Game' : '☁️ Cloud Game'} • {gameCode}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="h-screen bg-black text-white flex flex-col font-sans overflow-hidden">
+        <div className="min-h-screen bg-zinc-950 text-white font-sans">
 
-            {/* 1. TOP HEADER (Navigation) */}
-            <div className="h-14 bg-zinc-900 border-b border-zinc-800 flex justify-between items-center px-4 shrink-0 z-50">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/dashboard')} className="text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-                        <span>←</span> Exit
-                    </button>
-                    <div className="h-4 w-[1px] bg-zinc-700"></div>
-                    <div className="text-xs font-mono text-green-500 font-bold tracking-wider">{gameCode}</div>
+            {/* GUEST MODE BANNER - Show for localStorage games without auth */}
+            {isLocalGame && !currentUser && (
+                <div className="bg-gradient-to-r from-amber-900/30 to-amber-800/30 border-b border-amber-900/50 p-4 sticky top-0 z-50">
+                    <div className="max-w-7xl mx-auto flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <span className="text-xl">⚡</span>
+                            </div>
+                            <div>
+                                <div className="font-black text-white uppercase text-sm tracking-tight">
+                                    Guest Mode - Local Game
+                                </div>
+                                <div className="text-xs text-amber-400 leading-relaxed">
+                                    This game is saved locally on this device. Sign in to access from anywhere.
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => navigate('/', { state: { showSignIn: true } })}
+                            className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-widest rounded transition-all hover:-translate-y-0.5 shadow-lg"
+                        >
+                            Sign In & Sync
+                        </button>
+                    </div>
                 </div>
-                <div className="flex gap-3">
-                    <button onClick={copyLink} className="bg-black hover:bg-zinc-800 border border-zinc-700 text-white text-[10px] font-bold px-3 py-1.5 rounded uppercase tracking-widest transition-colors">
-                        {copyFeedback ? 'Copied!' : 'Copy Link 🔗'}
-                    </button>
-                    <Link to={`/watch/${gameCode}`} target="_blank" className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1.5 rounded uppercase tracking-widest transition-colors flex items-center gap-2">
-                        Spectator View ↗
-                    </Link>
-                </div>
-            </div>
+            )}
 
-            {/* 2. LIVE MONITOR (Top Half) */}
-            <div className="h-[40vh] bg-black border-b-4 border-zinc-800 flex items-center justify-center p-4 relative">
-                <div className="absolute top-2 left-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-                    <span className="text-[9px] font-bold uppercase text-zinc-500 tracking-widest">Live Output</span>
-                </div>
-
-                <div className="grid grid-cols-[1fr_auto_1fr] gap-8 w-full max-w-5xl items-center">
-                    {/* Home */}
-                    <div className="text-center">
-                        <h2 className="text-2xl font-black uppercase mb-1" style={{ color: game.teamA.color }}>{game.teamA.name}</h2>
-                        <div className="text-8xl font-mono font-bold text-white leading-none">{game.teamA.score}</div>
-                        <div className="flex justify-center gap-4 mt-2 text-zinc-500 text-xs font-bold uppercase tracking-widest">
-                            <div>Fouls: <span className="text-white text-lg">{game.teamA.foulsThisQuarter}</span></div>
-                            <div>TO: <span className="text-white text-lg">{game.teamA.timeouts}</span></div>
+            {/* HEADER */}
+            <header className="bg-black/90 backdrop-blur border-b border-zinc-800 p-4 sticky top-0 z-40">
+                <div className="max-w-7xl mx-auto flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => navigate(currentUser ? '/dashboard' : '/')}
+                            className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:bg-white hover:text-black hover:border-white transition-all text-xl"
+                        >
+                            ←
+                        </button>
+                        <div>
+                            <h1 className="text-xl font-black italic uppercase tracking-tight text-white">
+                                Host Console
+                            </h1>
+                            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+                                {isLocalGame ? '📱 Local Mode' : '☁️ Cloud Mode'} • {gameCode}
+                            </div>
                         </div>
                     </div>
 
-                    {/* Clock */}
-                    <div className="flex flex-col items-center">
-                        <div className="bg-zinc-800 px-3 py-0.5 rounded-full text-[10px] font-bold text-zinc-400 tracking-[0.2em] mb-2">
-                            PERIOD {game.gameState.period}
-                        </div>
-                        <div className={`text-7xl font-mono font-bold leading-none tracking-tight ${game.gameState.gameTime.minutes === 0 ? 'text-red-500' : 'text-white'}`}>
-                            {formatTime(game.gameState.gameTime.minutes, game.gameState.gameTime.seconds)}
-                        </div>
-                        <div className="mt-2 bg-zinc-900 border border-zinc-700 px-4 py-1 rounded text-center">
-                            <div className="text-[8px] uppercase font-bold text-zinc-500">Shot Clock</div>
-                            <div className="text-2xl font-mono font-bold text-amber-500">{game.gameState.shotClock}</div>
-                        </div>
+                    <div className="flex items-center gap-3">
+                        {/* Timer Controls */}
+                        <button
+                            onClick={toggleTimer}
+                            className={`px-6 py-2.5 rounded font-bold text-sm uppercase tracking-widest transition-all ${game.gameState.timerRunning
+                                    ? 'bg-red-600 hover:bg-red-500 text-white'
+                                    : 'bg-green-600 hover:bg-green-500 text-white'
+                                }`}
+                        >
+                            {game.gameState.timerRunning ? '⏸ Pause' : '▶ Start'}
+                        </button>
                     </div>
+                </div>
+            </header>
 
-                    {/* Away */}
-                    <div className="text-center">
-                        <h2 className="text-2xl font-black uppercase mb-1" style={{ color: game.teamB.color }}>{game.teamB.name}</h2>
-                        <div className="text-8xl font-mono font-bold text-white leading-none">{game.teamB.score}</div>
-                        <div className="flex justify-center gap-4 mt-2 text-zinc-500 text-xs font-bold uppercase tracking-widest">
-                            <div>Fouls: <span className="text-white text-lg">{game.teamB.foulsThisQuarter}</span></div>
-                            <div>TO: <span className="text-white text-lg">{game.teamB.timeouts}</span></div>
+            {/* MAIN SCOREBOARD */}
+            <main className="max-w-7xl mx-auto p-6">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 mb-6">
+                    <div className="grid grid-cols-3 gap-8 items-center">
+
+                        {/* Team A */}
+                        <div className="text-center">
+                            <div
+                                className="text-sm font-bold uppercase tracking-widest mb-2"
+                                style={{ color: game.teamA.color }}
+                            >
+                                {game.teamA.name}
+                            </div>
+                            <div className="text-7xl font-black text-white font-mono">
+                                {game.teamA.score}
+                            </div>
+                        </div>
+
+                        {/* Center - Time & Period */}
+                        <div className="text-center">
+                            <div className="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-2">
+                                {game.gameState.period <= 4 ? `Quarter ${game.gameState.period}` : `OT ${game.gameState.period - 4}`}
+                            </div>
+                            <div className="text-5xl font-mono font-black text-white mb-2">
+                                {Math.floor(game.gameState.timeRemaining / 60)}:{String(game.gameState.timeRemaining % 60).padStart(2, '0')}
+                            </div>
+                            {game.settings.shotClockDuration > 0 && (
+                                <div className="flex items-center justify-center gap-2 mt-4">
+                                    <span className="text-xs text-zinc-500 uppercase tracking-widest">Shot Clock:</span>
+                                    <span className="text-2xl font-mono font-bold text-amber-500">
+                                        {game.gameState.shotClockTime}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Team B */}
+                        <div className="text-center">
+                            <div
+                                className="text-sm font-bold uppercase tracking-widest mb-2"
+                                style={{ color: game.teamB.color }}
+                            >
+                                {game.teamB.name}
+                            </div>
+                            <div className="text-7xl font-black text-white font-mono">
+                                {game.teamB.score}
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* 3. CONTROL DECK (Bottom Half) */}
-            <div className="flex-1 bg-zinc-950 overflow-y-auto">
-                <ControlDeckClassic
-                    teamA={game.teamA}
-                    teamB={game.teamB}
-                    gameState={game.gameState}
-                    onAction={handleAction}
-                    onGameClock={(action) => action === 'toggle' && toggleTimer()}
-                    onShotClock={(action) => resetShotClock(action === 'reset-24' ? 24 : 14)}
-                    onPossession={togglePossession}
-                    onUndo={() => { }}
-                    onSwitchMode={() => setPeriod(game.gameState.period + 1)}
-                />
-            </div>
+                {/* QUICK CONTROLS */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
 
+                    {/* Team A Controls */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                        <h3
+                            className="text-lg font-black uppercase mb-4"
+                            style={{ color: game.teamA.color }}
+                        >
+                            {game.teamA.name} Controls
+                        </h3>
+                        <div className="grid grid-cols-3 gap-3">
+                            <button
+                                onClick={() => handleScoreAction('teamA', 1)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                            >
+                                +1
+                            </button>
+                            <button
+                                onClick={() => handleScoreAction('teamA', 2)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                            >
+                                +2
+                            </button>
+                            <button
+                                onClick={() => handleScoreAction('teamA', 3)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                            >
+                                +3
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => handleFoulAction('teamA')}
+                            className="w-full mt-3 bg-amber-900/30 hover:bg-amber-900/50 border border-amber-900 text-amber-400 font-bold py-3 rounded uppercase transition-all"
+                        >
+                            Add Foul ({game.teamA.fouls})
+                        </button>
+                    </div>
+
+                    {/* Team B Controls */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                        <h3
+                            className="text-lg font-black uppercase mb-4"
+                            style={{ color: game.teamB.color }}
+                        >
+                            {game.teamB.name} Controls
+                        </h3>
+                        <div className="grid grid-cols-3 gap-3">
+                            <button
+                                onClick={() => handleScoreAction('teamB', 1)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                            >
+                                +1
+                            </button>
+                            <button
+                                onClick={() => handleScoreAction('teamB', 2)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                            >
+                                +2
+                            </button>
+                            <button
+                                onClick={() => handleScoreAction('teamB', 3)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                            >
+                                +3
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => handleFoulAction('teamB')}
+                            className="w-full mt-3 bg-amber-900/30 hover:bg-amber-900/50 border border-amber-900 text-amber-400 font-bold py-3 rounded uppercase transition-all"
+                        >
+                            Add Foul ({game.teamB.fouls})
+                        </button>
+                    </div>
+                </div>
+
+                {/* GAME CONTROLS */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                    <h3 className="text-lg font-black uppercase mb-4 text-white">Game Controls</h3>
+                    <div className="grid grid-cols-4 gap-3">
+                        <button
+                            onClick={resetShotClock}
+                            disabled={game.settings.shotClockDuration === 0}
+                            className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 text-white font-bold py-4 rounded uppercase transition-all"
+                        >
+                            Reset Shot Clock
+                        </button>
+                        <button
+                            onClick={() => addTimeout('teamA')}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                        >
+                            Timeout A
+                        </button>
+                        <button
+                            onClick={() => addTimeout('teamB')}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded uppercase transition-all"
+                        >
+                            Timeout B
+                        </button>
+                        <button
+                            onClick={endPeriod}
+                            className="bg-red-900/30 hover:bg-red-900/50 border border-red-900 text-red-400 font-bold py-4 rounded uppercase transition-all"
+                        >
+                            End Period
+                        </button>
+                    </div>
+                </div>
+
+                {/* INFO BANNER */}
+                <div className="mt-6 bg-blue-900/20 border border-blue-900/50 rounded-xl p-4 text-center">
+                    <div className="text-xs text-blue-400">
+                        {isLocalGame ? (
+                            <>
+                                💾 <strong>Local Game</strong> - Data saved on this device only.
+                                {!currentUser && <span className="ml-2">Spectators can watch using game code.</span>}
+                            </>
+                        ) : (
+                            <>
+                                ☁️ <strong>Cloud Game</strong> - Data synced in real-time. Access from any device.
+                            </>
+                        )}
+                    </div>
+                </div>
+            </main>
         </div>
     );
 };

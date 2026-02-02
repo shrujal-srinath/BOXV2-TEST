@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { initializeNewGame } from '../services/gameService';
-import { auth, subscribeToAuth } from '../services/authService'; // Updated import
+import { createLocalGame } from '../services/localGameService';
+import { auth, subscribeToAuth } from '../services/authService';
 import { SplashScreen } from '../components/SplashScreen';
 import type { Player } from '../types';
 import type { User } from 'firebase/auth';
@@ -49,17 +50,14 @@ export const GameSetup: React.FC = () => {
   const [pPos, setPPos] = useState("PG");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // --- EFFECT: Ensure User is Loaded ---
+  // --- EFFECT: Load User State ---
   useEffect(() => {
     const unsub = subscribeToAuth((user) => {
-      if (user) setCurrentUser(user);
-      else {
-        // If user logs out or isn't found, redirect to home
-        navigate('/');
-      }
+      setCurrentUser(user);
+      console.log('[GameSetup] Auth state:', user ? `Signed in as ${user.email}` : 'Guest user');
     });
     return () => unsub();
-  }, [navigate]);
+  }, []);
 
   // --- HANDLERS ---
 
@@ -108,54 +106,78 @@ export const GameSetup: React.FC = () => {
     setShowConfirmation(true);
   };
 
-  // --- FINAL LAUNCH LOGIC (Fixed) ---
+  // --- UNIFIED LAUNCH LOGIC (Works for both signed-in and guest users) ---
   const finalizeAndLaunch = async () => {
-    // 1. Double check user to prevent "Anonymous" games
-    if (!currentUser) {
-      alert("System Error: User session not found. Please refresh and log in.");
-      return;
-    }
-
-    // 2. Start Splash Screen
     setShowConfirmation(false);
     setIsLaunching(true);
-    setIsGameReady(false); // Keeps splash at 90%
+    setIsGameReady(false);
 
     try {
-      // 3. Create Game with VALIDATED User ID
-      const gameCode = await initializeNewGame(
-        {
-          gameName: gameName.trim() || "LEAGUE MATCH 01",
+      let gameCode: string;
+
+      if (currentUser) {
+        // SIGNED-IN USER: Save to Firebase
+        console.log('[GameSetup] Creating Firebase game for user:', currentUser.uid);
+        gameCode = await initializeNewGame(
+          {
+            gameName: gameName.trim() || "LEAGUE MATCH 01",
+            periodDuration,
+            shotClockDuration: shotClockEnabled ? shotClockDuration : 0,
+            periodType
+          },
+          { name: teamAName || "TEAM A", color: teamAColor, players: trackStats ? rosterA : [] },
+          { name: teamBName || "TEAM B", color: teamBColor, players: trackStats ? rosterB : [] },
+          trackStats,
+          sportType,
+          currentUser.uid
+        );
+        console.log('[GameSetup] ✅ Firebase game created:', gameCode);
+      } else {
+        // GUEST USER: Save to localStorage
+        console.log('[GameSetup] Creating local game for guest user');
+        const result = createLocalGame(
+          teamAName || "TEAM A",
+          teamBName || "TEAM B",
           periodDuration,
-          shotClockDuration: shotClockEnabled ? shotClockDuration : 0,
-          periodType
-        },
-        { name: teamAName || "TEAM A", color: teamAColor, players: trackStats ? rosterA : [] },
-        { name: teamBName || "TEAM B", color: teamBColor, players: trackStats ? rosterB : [] },
-        trackStats,
-        sportType,
-        currentUser.uid // <--- CRITICAL FIX: Passing verified ID
-      );
+          shotClockEnabled ? shotClockDuration : 24,
+          teamAColor,
+          teamBColor,
+          trackStats ? rosterA : [],
+          trackStats ? rosterB : []
+        );
+
+        if (!result || !result.id) {
+          throw new Error('Failed to create local game');
+        }
+
+        gameCode = result.id;
+        console.log('[GameSetup] ✅ Local game created:', gameCode);
+      }
 
       setLaunchedGameCode(gameCode);
 
-      // 4. Game is ready, tell Splash Screen to finish
-      // Small delay ensures database consistency
+      // Wait a bit for localStorage to settle
       setTimeout(() => {
         setIsGameReady(true);
-      }, 800);
+      }, 500);
 
     } catch (error: any) {
-      console.error("Launch Error:", error);
-      alert(`Error: ${error.message}`);
+      console.error('[GameSetup] Launch Error:', error);
+      alert(`Error creating game: ${error.message}`);
       setIsLaunching(false);
+      setIsGameReady(false);
     }
   };
 
-  // Called when splash animation hits 100%
+  // Called when splash animation completes
   const onSplashComplete = () => {
+    console.log('[GameSetup] Splash complete, navigating to:', `/host/${launchedGameCode}`);
     if (launchedGameCode) {
       navigate(`/host/${launchedGameCode}`);
+    } else {
+      console.error('[GameSetup] No game code available!');
+      alert('Error: Game code not available');
+      setIsLaunching(false);
     }
   };
 
@@ -179,10 +201,13 @@ export const GameSetup: React.FC = () => {
         {/* Header */}
         <div className="bg-zinc-950 border-b border-zinc-800 px-8 py-5 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-6">
-            <button onClick={() => navigate('/dashboard')} className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:bg-white hover:text-black hover:border-white transition-all text-xl">←</button>
+            <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:bg-white hover:text-black hover:border-white transition-all text-xl">←</button>
             <div>
               <h1 className="text-xl font-black tracking-tight uppercase italic text-white leading-none">{sportType} CONFIG</h1>
-              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mt-1">{step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}</div>
+              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mt-1">
+                {step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}
+                {!currentUser && <span className="ml-3 text-amber-500">• Guest Mode</span>}
+              </div>
             </div>
           </div>
           {step === 2 && (
@@ -201,7 +226,6 @@ export const GameSetup: React.FC = () => {
                     <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Match Title</label>
                     <input value={gameName} onChange={(e) => setGameName(e.target.value)} className="w-full bg-black border border-zinc-800 p-4 text-base font-bold text-white placeholder-zinc-700 outline-none rounded-lg focus:border-blue-500 transition-all uppercase" placeholder="E.G. CHAMPIONSHIP FINAL" />
                   </div>
-                  {/* RESTORED: Operation Mode */}
                   <div>
                     <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Operation Mode</label>
                     <div className="grid grid-cols-2 gap-4">
@@ -290,7 +314,7 @@ export const GameSetup: React.FC = () => {
           </div>
         )}
 
-        {/* Step 2 */}
+        {/* Step 2 - Roster Management (same as before, truncated for brevity) */}
         {step === 2 && (
           <div className="flex flex-col h-full animate-in slide-in-from-right-8 duration-500 bg-zinc-950">
             <div className="flex border-b border-zinc-800 bg-black/40 h-20 shrink-0">

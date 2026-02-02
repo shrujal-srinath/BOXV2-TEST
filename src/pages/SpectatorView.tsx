@@ -1,64 +1,242 @@
-import React from 'react';
-import { useParams } from 'react-router-dom';
-import { useBasketballGame } from '../hooks/useBasketballGame';
-import { TeamScoreCard } from '../components/TeamScoreCard';
-import { ShotClock } from '../components/ShotClock';
-
-const SpectatorClock = ({ minutes, seconds, tenths }: any) => {
-  const showTenths = minutes === 0 && seconds < 60;
-  const formatTime = (n: number) => n.toString().padStart(2, '0');
-
-  return (
-    <div className="flex flex-col items-center bg-gray-900 border-4 border-gray-800 rounded-xl p-6 w-full max-w-sm mx-auto shadow-2xl">
-      <div className="text-7xl font-mono font-bold tracking-widest text-white">
-        {showTenths ? <span>{seconds}.{tenths}</span> : <span>{formatTime(minutes)}:{formatTime(seconds)}</span>}
-      </div>
-    </div>
-  );
-};
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { subscribeToGame } from '../services/gameService';
+import { loadLocalGame } from '../services/localGameService';
+import { BasketballGame } from '../types';
 
 export const SpectatorView: React.FC = () => {
-  const { gameCode } = useParams();
+  const { gameCode } = useParams<{ gameCode: string }>();
+  const navigate = useNavigate();
+  const [game, setGame] = useState<BasketballGame | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // FIXED: Destructure the hook return to get the game state object
-  const { game } = useBasketballGame(gameCode || "DEMO", 'online');
+  // Detect if this is a local game
+  const isLocalGame = gameCode?.startsWith('LOCAL-');
 
-  const getPeriodName = (p: number) => (p <= 4 ? `Q${p}` : `OT${p - 4}`);
+  useEffect(() => {
+    if (!gameCode) {
+      setError('No game code provided');
+      setLoading(false);
+      return;
+    }
+
+    if (isLocalGame) {
+      // LOCAL GAME: Poll localStorage for updates
+      console.log(`[SpectatorView] Loading local game: ${gameCode}`);
+
+      const loadGame = () => {
+        const localGame = loadLocalGame(gameCode);
+        if (localGame) {
+          setGame(localGame);
+          setLoading(false);
+          setError(null);
+        } else if (loading) {
+          setError('Game not found');
+          setLoading(false);
+        }
+      };
+
+      // Initial load
+      loadGame();
+
+      // Poll every second for updates (localStorage doesn't have real-time sync)
+      const interval = setInterval(loadGame, 1000);
+
+      return () => clearInterval(interval);
+
+    } else {
+      // FIREBASE GAME: Real-time subscription
+      console.log(`[SpectatorView] Subscribing to Firebase game: ${gameCode}`);
+
+      const unsubscribe = subscribeToGame(gameCode, (gameData) => {
+        if (gameData) {
+          setGame(gameData);
+          setLoading(false);
+          setError(null);
+        } else {
+          setError('Game not found');
+          setLoading(false);
+        }
+      });
+
+      return () => unsubscribe();
+    }
+  }, [gameCode, isLocalGame, loading]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🏀</div>
+          <div className="text-white font-bold text-xl mb-2">Connecting to Game...</div>
+          <div className="text-zinc-500 text-sm">
+            {isLocalGame ? 'Local Game' : 'Cloud Game'} • {gameCode}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !game) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <div className="text-6xl mb-4 opacity-30">⚠️</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Game Not Found</h2>
+          <p className="text-zinc-500 mb-6">
+            {error || `Unable to find game with code: ${gameCode}`}
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded transition-all"
+          >
+            Return to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-sans flex flex-col items-center justify-center">
-      <div className="mb-8 text-center">
-        <div className="text-gray-500 text-sm tracking-[0.5em] uppercase mb-2">Live Broadcast</div>
-        {/* FIXED: Access properties via game object */}
-        <h1 className="text-4xl font-bold text-white tracking-widest">{game.settings.gameName}</h1>
-      </div>
+    <div className="min-h-screen bg-zinc-950 text-white font-sans">
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-12 items-center w-full max-w-7xl">
-        <TeamScoreCard name={game.teamA.name} color={game.teamA.color} score={game.teamA.score} readonly={true} />
+      {/* HEADER */}
+      <header className="bg-black/90 backdrop-blur border-b border-zinc-800 p-4 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/')}
+              className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:bg-white hover:text-black hover:border-white transition-all text-xl"
+            >
+              ←
+            </button>
+            <div>
+              <h1 className="text-xl font-black italic uppercase tracking-tight text-white">
+                Spectator View
+              </h1>
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold flex items-center gap-2">
+                {isLocalGame ? (
+                  <>
+                    <span className="text-amber-500">📱 Local Game</span>
+                    <span>•</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-blue-500">☁️ Cloud Game</span>
+                    <span>•</span>
+                  </>
+                )}
+                <span>{gameCode}</span>
+              </div>
+            </div>
+          </div>
 
-        <div className="flex flex-col items-center gap-8">
-          <div className="bg-gray-800 px-8 py-2 rounded-full text-2xl font-bold border border-gray-700">
-            {getPeriodName(game.gameState.period)}
+          {/* Live Indicator */}
+          {game.gameState.timerRunning && (
+            <div className="flex items-center gap-2 bg-red-900/30 border border-red-900 px-4 py-2 rounded">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+              </span>
+              <span className="text-xs font-bold uppercase tracking-widest text-red-400">
+                Live
+              </span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* MAIN SCOREBOARD */}
+      <main className="max-w-7xl mx-auto p-6">
+
+        {/* Game Title */}
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-black italic uppercase text-white mb-2">
+            {game.settings.gameName}
+          </h2>
+          <div className="text-sm text-zinc-500 uppercase tracking-widest">
+            {game.gameState.period <= 4 ? `Quarter ${game.gameState.period}` : `Overtime ${game.gameState.period - 4}`}
           </div>
-          <SpectatorClock minutes={game.gameState.gameTime.minutes} seconds={game.gameState.gameTime.seconds} tenths={game.gameState.gameTime.tenths} />
-          <div className="scale-125">
-            <ShotClock seconds={game.gameState.shotClock} readonly={true} />
-          </div>
-          <div className="mt-4 flex flex-col items-center">
-            <span className="text-gray-600 text-xs tracking-widest mb-2">POSSESSION</span>
-            <div className="text-5xl" style={{ color: game.gameState.possession === 'A' ? game.teamA.color : game.teamB.color }}>
-              {game.gameState.possession === 'A' ? '◄' : '►'}
+        </div>
+
+        {/* Score Display */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 mb-6">
+          <div className="grid grid-cols-3 gap-8 items-center">
+
+            {/* Team A */}
+            <div className="text-center">
+              <div
+                className="text-lg font-bold uppercase tracking-widest mb-3"
+                style={{ color: game.teamA.color }}
+              >
+                {game.teamA.name}
+              </div>
+              <div className="text-8xl font-black text-white font-mono mb-2">
+                {game.teamA.score}
+              </div>
+              <div className="text-xs text-zinc-600 uppercase tracking-widest">
+                Fouls: {game.teamA.fouls} | Timeouts: {game.teamA.timeouts}
+              </div>
+            </div>
+
+            {/* Center - Timer */}
+            <div className="text-center">
+              <div className="text-6xl font-mono font-black text-white mb-4">
+                {Math.floor(game.gameState.timeRemaining / 60)}:{String(game.gameState.timeRemaining % 60).padStart(2, '0')}
+              </div>
+
+              {game.settings.shotClockDuration > 0 && (
+                <div className="bg-black border border-zinc-800 rounded-lg p-4 inline-block">
+                  <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1">
+                    Shot Clock
+                  </div>
+                  <div className="text-3xl font-mono font-bold text-amber-500">
+                    {game.gameState.shotClockTime}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Team B */}
+            <div className="text-center">
+              <div
+                className="text-lg font-bold uppercase tracking-widest mb-3"
+                style={{ color: game.teamB.color }}
+              >
+                {game.teamB.name}
+              </div>
+              <div className="text-8xl font-black text-white font-mono mb-2">
+                {game.teamB.score}
+              </div>
+              <div className="text-xs text-zinc-600 uppercase tracking-widest">
+                Fouls: {game.teamB.fouls} | Timeouts: {game.teamB.timeouts}
+              </div>
             </div>
           </div>
         </div>
 
-        <TeamScoreCard name={game.teamB.name} color={game.teamB.color} score={game.teamB.score} readonly={true} />
-      </div>
+        {/* Game Status */}
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 text-center">
+          <div className="text-sm text-zinc-400 uppercase tracking-widest">
+            {game.gameState.timerRunning ? (
+              <span className="text-green-500">⏱ Game in Progress</span>
+            ) : (
+              <span className="text-amber-500">⏸ Paused</span>
+            )}
+          </div>
+        </div>
 
-      <div className="mt-16 flex gap-20 text-gray-400 font-mono text-xl">
-        <div>{game.teamA.name} FOULS: <span className="text-white">{game.teamA.fouls}</span></div>
-        <div>{game.teamB.name} FOULS: <span className="text-white">{game.teamB.fouls}</span></div>
-      </div>
+        {/* Local Game Notice */}
+        {isLocalGame && (
+          <div className="mt-6 bg-amber-900/20 border border-amber-900/50 rounded-xl p-4 text-center">
+            <div className="text-xs text-amber-400">
+              📱 <strong>Local Game</strong> - This game is hosted on the organizer's device.
+              Updates refresh automatically every second.
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 };

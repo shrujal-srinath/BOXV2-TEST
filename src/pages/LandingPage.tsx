@@ -1,4 +1,4 @@
-// src/pages/LandingPage.tsx (THEME UPDATE: RED SYSTEM / BLUE SPECTATOR)
+// src/pages/LandingPage.tsx - FIXED VERSION
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BasketballGame } from '../types';
@@ -18,7 +18,6 @@ export const LandingPage: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Modals
-  const [showFreeHostWarning, setShowFreeHostWarning] = useState(false);
   const [selectedLiveGame, setSelectedLiveGame] = useState<BasketballGame | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
 
@@ -74,11 +73,10 @@ export const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-black font-sans text-white flex flex-col relative overflow-hidden animate-in">
 
-      {/* HEADER (Changed to Red) */}
+      {/* HEADER */}
       <header className="flex justify-between items-center p-6 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-40 sticky top-0">
         <div className="flex items-center gap-4">
           <div className="relative w-10 h-10 flex items-center justify-center">
-            {/* Red Icon */}
             <svg className="w-8 h-8 text-red-600 drop-shadow-[0_0_8px_rgba(220,38,38,0.6)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
               <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
@@ -134,41 +132,70 @@ export const LandingPage: React.FC = () => {
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col md:flex-row gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full mb-20">
 
-        {/* LEFT: PUBLIC HOSTING OPTIONS (Changed to Red) */}
+        {/* LEFT: CREATE GAME */}
         <div className="flex-1 flex flex-col gap-6">
+
+          {/* HOST GAME SECTION */}
           <div className="flex-1 bg-zinc-900/40 border border-zinc-800 p-8 rounded-sm relative overflow-hidden flex flex-col justify-between">
             <div className="relative z-10">
               <h2 className="text-red-600 text-[10px] font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                <span className="w-4 h-[1px] bg-red-600"></span> Pro Access
+                <span className="w-4 h-[1px] bg-red-600"></span> Create Game
               </h2>
-              <h3 className="text-4xl font-black italic uppercase tracking-tighter text-white mb-4">Operator Login</h3>
+              <h3 className="text-4xl font-black italic uppercase tracking-tighter text-white mb-4">Start Hosting</h3>
               <p className="text-zinc-400 text-sm leading-relaxed max-w-sm mb-12">
-                Authenticate to access the dashboard. Save match data, manage rosters, and resume games.
+                Create and manage basketball games with full control.
               </p>
 
-              <div className="mt-auto space-y-4 pb-2">
-                <button onClick={loginWithGoogle} className="w-full bg-white hover:bg-zinc-200 text-black font-black py-3.5 uppercase tracking-widest flex items-center justify-center gap-3 transition-colors">
-                  <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-4 h-4" alt="G" />
-                  Sign In with Google
+              {/* UNIFIED BUTTONS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+
+                {/* SIGN IN (Recommended) */}
+                <button
+                  onClick={loginWithGoogle}
+                  className="bg-zinc-900/80 hover:bg-zinc-800 border-2 border-red-600/30 hover:border-red-600 p-6 text-left group transition-all"
+                >
+                  <div className="text-4xl mb-3">🔐</div>
+                  <div className="font-black text-lg text-white uppercase mb-2">Sign In</div>
+                  <div className="text-xs text-zinc-500 leading-relaxed">
+                    Save to cloud, access anywhere
+                  </div>
+                  <div className="mt-4 inline-block bg-red-600/10 text-red-500 text-[9px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                    Recommended
+                  </div>
                 </button>
-                <button onClick={() => setShowEmailModal(true)} className="w-full bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 font-bold py-3.5 uppercase tracking-widest transition-colors flex items-center justify-center gap-3">
+
+                {/* GUEST MODE */}
+                <button
+                  onClick={() => navigate('/setup')}
+                  className="bg-black hover:bg-zinc-900 border-2 border-zinc-700 hover:border-zinc-500 p-6 text-left group transition-all"
+                >
+                  <div className="text-4xl mb-3">⚡</div>
+                  <div className="font-black text-lg text-white uppercase mb-2">Guest Mode</div>
+                  <div className="text-xs text-zinc-500 leading-relaxed">
+                    Quick start, no account needed
+                  </div>
+                  <div className="mt-4 inline-block bg-zinc-800 text-zinc-400 text-[9px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                    Local Only
+                  </div>
+                </button>
+
+              </div>
+
+              {/* Email Sign In */}
+              <div className="mt-6 pt-6 border-t border-zinc-800">
+                <button
+                  onClick={() => setShowEmailModal(true)}
+                  className="w-full bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 font-bold py-3.5 uppercase tracking-widest transition-colors flex items-center justify-center gap-3"
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                   Sign In with Email
                 </button>
               </div>
             </div>
           </div>
-
-          <button onClick={() => setShowFreeHostWarning(true)} className="bg-black border border-zinc-800 hover:border-zinc-500 p-5 flex items-center justify-between group transition-all">
-            <div className="text-left">
-              <div className="text-zinc-200 font-bold text-lg group-hover:text-red-500 transition-colors">Free Host Mode</div>
-              <div className="text-[10px] text-zinc-600 uppercase tracking-widest mt-0.5">Quick Start • No Data Retention</div>
-            </div>
-            <div className="w-8 h-8 flex items-center justify-center text-zinc-600 group-hover:text-white group-hover:translate-x-1 transition-all text-xl">&rarr;</div>
-          </button>
         </div>
 
-        {/* RIGHT: WATCH OPTIONS (Kept Blue) */}
+        {/* RIGHT: WATCH GAME */}
         <div className="flex-1 bg-gradient-to-br from-blue-950/20 to-black border border-zinc-800 p-10 flex flex-col justify-center relative overflow-hidden rounded-sm group">
           <div className="absolute inset-0 opacity-20"
             style={{
@@ -196,7 +223,7 @@ export const LandingPage: React.FC = () => {
                     placeholder="GAME ID"
                     maxLength={6}
                     value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value)}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                     className="w-full bg-transparent p-4 text-center text-4xl font-mono text-white placeholder-zinc-700 outline-none font-bold tracking-widest uppercase"
                   />
                 </div>
@@ -209,11 +236,15 @@ export const LandingPage: React.FC = () => {
                 Connect Stream
               </button>
             </form>
+
+            <div className="mt-6 text-center text-xs text-zinc-600">
+              Works with both cloud and local games
+            </div>
           </div>
         </div>
       </main>
 
-      {/* FOOTER TICKER (Changed to Red) */}
+      {/* FOOTER TICKER */}
       <div className="fixed bottom-0 w-full bg-zinc-950 border-t border-zinc-900 h-14 flex items-center z-30">
         <div className="bg-red-600 h-full px-6 flex items-center justify-center font-black italic text-lg tracking-tighter shrink-0 shadow-[0_0_20px_rgba(220,38,38,0.4)] relative z-10">LIVE</div>
         <div className="flex-1 overflow-hidden relative flex items-center h-full group bg-black">
@@ -233,24 +264,7 @@ export const LandingPage: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL: FREE HOST WARNING (Changed to Red) */}
-      {showFreeHostWarning && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
-          <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-red-600"></div>
-            <h3 className="text-2xl font-black italic uppercase text-white mb-3">Data Loss Warning</h3>
-            <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
-              You are entering <strong>Free Host Mode</strong>. Game data will NOT be saved to an account. If you close this tab, the match state will be lost forever.
-            </p>
-            <div className="flex gap-4">
-              <button onClick={() => setShowFreeHostWarning(false)} className="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors border border-transparent hover:border-zinc-700">Go Back</button>
-              <button onClick={() => navigate('/dashboard')} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 uppercase tracking-widest">Proceed Anyway</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: SELECTED LIVE GAME (Changed to Red) */}
+      {/* MODAL: SELECTED LIVE GAME */}
       {selectedLiveGame && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative">
@@ -276,7 +290,7 @@ export const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: EMAIL AUTH (Standard System Style) */}
+      {/* MODAL: EMAIL AUTH */}
       {showEmailModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-zinc-700 w-full max-w-sm p-8 relative shadow-2xl">
