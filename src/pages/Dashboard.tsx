@@ -28,18 +28,17 @@ export const Dashboard: React.FC = () => {
 
     setLoading(true);
 
-    const unsubMy = getUserActiveGames(currentUser.uid, (games) => {
-      setMyGames(games);
+    setLoading(true);
+
+    // Subscribe to ALL live games and filter locally
+    const unsub = subscribeToLiveGames((games) => {
+      setMyGames(games.filter(g => g.hostId === currentUser.uid));
+      setLiveGames(games.filter(g => g.hostId !== currentUser.uid));
       setLoading(false);
     });
 
-    const unsubLive = subscribeToLiveGames((games) => {
-      setLiveGames(games.filter(g => g.hostUserId !== currentUser.uid));
-    });
-
     return () => {
-      unsubMy();
-      unsubLive();
+      unsub();
     };
   }, [currentUser]);
 
@@ -162,8 +161,8 @@ export const Dashboard: React.FC = () => {
             <button
               onClick={() => setSelectedTab('my')}
               className={`flex-1 px-6 py-4 font-bold text-sm uppercase tracking-widest transition-all relative ${selectedTab === 'my'
-                  ? 'text-white bg-zinc-900'
-                  : 'text-zinc-500 hover:text-zinc-300'
+                ? 'text-white bg-zinc-900'
+                : 'text-zinc-500 hover:text-zinc-300'
                 }`}
             >
               My Games
@@ -179,8 +178,8 @@ export const Dashboard: React.FC = () => {
             <button
               onClick={() => setSelectedTab('live')}
               className={`flex-1 px-6 py-4 font-bold text-sm uppercase tracking-widest transition-all relative ${selectedTab === 'live'
-                  ? 'text-white bg-zinc-900'
-                  : 'text-zinc-500 hover:text-zinc-300'
+                ? 'text-white bg-zinc-900'
+                : 'text-zinc-500 hover:text-zinc-300'
                 }`}
             >
               Live Games
@@ -238,7 +237,8 @@ export const Dashboard: React.FC = () => {
                         {game.gameState.period <= 4 ? `Q${game.gameState.period}` : `OT${game.gameState.period - 4}`}
                       </div>
                       <div className="flex items-center gap-2">
-                        {game.gameState.timerRunning && (
+                        {/* FIX: timerRunning -> gameRunning */}
+                        {game.gameState.gameRunning && (
                           <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
@@ -275,7 +275,8 @@ export const Dashboard: React.FC = () => {
 
                     <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
                       <span className="text-xs text-zinc-600 font-mono">
-                        {Math.floor(game.gameState.timeRemaining / 60)}:{String(game.gameState.timeRemaining % 60).padStart(2, '0')}
+                        {/* FIX: Time formatting using gameTime struct */}
+                        {game.gameState.gameTime.minutes}:{String(game.gameState.gameTime.seconds).padStart(2, '0')}
                       </span>
                       <span className="text-zinc-600 group-hover:text-white text-xl transition-transform group-hover:translate-x-1">
                         →

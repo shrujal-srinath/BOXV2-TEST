@@ -135,7 +135,11 @@ export const createLocalGame = (
   teamAName: string,
   teamBName: string,
   periodDuration: number = 10,
-  shotClockDuration: number = 24
+  shotClockDuration: number = 24,
+  teamAColor: string = '#DC2626',
+  teamBColor: string = '#2563EB',
+  teamARoster: any[] = [],
+  teamBRoster: any[] = []
 ): LocalGameMetadata | null => {
   const gameId = generateLocalGameId();
   const now = Date.now();
@@ -154,25 +158,25 @@ export const createLocalGame = (
     },
     teamA: {
       name: teamAName || 'HOME',
-      color: '#DC2626',
+      color: teamAColor,
       score: 0,
       timeouts: 2,
       timeoutsFirstHalf: 2,
       timeoutsSecondHalf: 3,
       fouls: 0,
       foulsThisQuarter: 0,
-      players: [],
+      players: teamARoster,
     },
     teamB: {
       name: teamBName || 'AWAY',
-      color: '#2563EB',
+      color: teamBColor,
       score: 0,
       timeouts: 2,
       timeoutsFirstHalf: 2,
       timeoutsSecondHalf: 3,
       fouls: 0,
       foulsThisQuarter: 0,
-      players: [],
+      players: teamBRoster,
     },
     gameState: {
       period: 1,

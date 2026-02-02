@@ -44,7 +44,6 @@ export const ControlDeckClassic: React.FC<ControlDeckProps> = ({
 
          {/* TEAMS ROW */}
          <div className="grid grid-cols-2 gap-4 md:gap-8">
-
             {/* Team A Controls */}
             <div className="bg-zinc-900/50 border border-zinc-800 p-3 md:p-4 rounded-xl flex flex-col gap-3">
                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
@@ -84,7 +83,6 @@ export const ControlDeckClassic: React.FC<ControlDeckProps> = ({
                   <button onClick={() => onAction('B', 'timeout', -1)} className="bg-yellow-900/20 hover:bg-yellow-900/40 text-yellow-500 font-bold rounded py-3 text-[10px] md:text-xs uppercase">Timeout</button>
                </div>
             </div>
-
          </div>
 
          <button onClick={onSwitchMode} className="w-full py-4 bg-zinc-800 hover:bg-blue-900 text-zinc-400 hover:text-white font-bold uppercase text-xs tracking-widest rounded-lg transition-colors border border-zinc-700">

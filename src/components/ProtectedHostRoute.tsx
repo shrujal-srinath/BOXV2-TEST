@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { subscribeToAuth } from '../services/authService';
-import { loadLocalGame } from '../services/localGameService';
+import { getLocalGame } from '../services/localGameService';
 
 interface ProtectedHostRouteProps {
     children: React.ReactElement;
@@ -34,7 +34,7 @@ const ProtectedHostRoute: React.FC<ProtectedHostRouteProps> = ({ children }) => 
 
     if (isLocalGame) {
         // For local games, verify the game exists in localStorage
-        const game = loadLocalGame(gameCode);
+        const game = getLocalGame(gameCode);
         if (!game) {
             console.warn(`[ProtectedHostRoute] Local game ${gameCode} not found`);
             return <Navigate to="/" replace />;

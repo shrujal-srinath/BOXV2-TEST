@@ -24,22 +24,44 @@ export const HostConsole: React.FC = () => {
         isLocalGame && gameCode ? gameCode : ''
     );
 
-    // Select the appropriate game data
-    const {
-        game,
-        toggleTimer,
-        handleScoreAction,
-        handleFoulAction,
-        addTimeout,
-        handleSubstitution,
-        endPeriod,
-        resetShotClock,
-        adjustShotClock,
-        recordStat,
-        syncState,
-        updateGameState,
-        handleAction
-    } = isLocalGame ? localGame : firebaseGame;
+    // UNIFY THE INTERFACE
+    // We need to map both hooks to a common interface that the UI expects
+    const game = isLocalGame ? localGame.game : firebaseGame.game;
+
+    // Actions - Adapter
+    const handleAction = isLocalGame ? localGame.handleAction : firebaseGame.handleAction;
+
+    // Timer
+    const toggleTimer = isLocalGame ? localGame.toggleGameClock : firebaseGame.toggleTimer;
+
+    // Shot Clock
+    const resetShotClockIn = isLocalGame ? localGame.resetShotClock : firebaseGame.resetShotClock;
+    const resetShotClock = () => resetShotClockIn(24); // Fix signature mismatch
+
+    // Helper Wrappers for UI (restoring missing helpers using handleAction)
+    const handleScoreAction = (team: 'teamA' | 'teamB', points: number) => {
+        const teamCode = team === 'teamA' ? 'A' : 'B';
+        handleAction(teamCode, 'points', points);
+    };
+
+    const handleFoulAction = (team: 'teamA' | 'teamB') => {
+        const teamCode = team === 'teamA' ? 'A' : 'B';
+        handleAction(teamCode, 'foul', 1);
+    };
+
+    const addTimeout = (team: 'teamA' | 'teamB') => {
+        const teamCode = team === 'teamA' ? 'A' : 'B';
+        handleAction(teamCode, 'timeout', -1); // Decrement available timeouts
+    };
+
+    const endPeriod = () => {
+        if (isLocalGame) {
+            localGame.nextPeriod();
+        } else {
+            // Online game might need explicit period setting or different handling
+            if (game) firebaseGame.setPeriod(game.gameState.period + 1);
+        }
+    };
 
     useEffect(() => {
         const unsub = subscribeToAuth((user) => {
@@ -116,12 +138,12 @@ export const HostConsole: React.FC = () => {
                         {/* Timer Controls */}
                         <button
                             onClick={toggleTimer}
-                            className={`px-6 py-2.5 rounded font-bold text-sm uppercase tracking-widest transition-all ${game.gameState.timerRunning
-                                    ? 'bg-red-600 hover:bg-red-500 text-white'
-                                    : 'bg-green-600 hover:bg-green-500 text-white'
+                            className={`px-6 py-2.5 rounded font-bold text-sm uppercase tracking-widest transition-all ${game.gameState.gameRunning
+                                ? 'bg-red-600 hover:bg-red-500 text-white'
+                                : 'bg-green-600 hover:bg-green-500 text-white'
                                 }`}
                         >
-                            {game.gameState.timerRunning ? '⏸ Pause' : '▶ Start'}
+                            {game.gameState.gameRunning ? '⏸ Pause' : '▶ Start'}
                         </button>
                     </div>
                 </div>
@@ -151,13 +173,13 @@ export const HostConsole: React.FC = () => {
                                 {game.gameState.period <= 4 ? `Quarter ${game.gameState.period}` : `OT ${game.gameState.period - 4}`}
                             </div>
                             <div className="text-5xl font-mono font-black text-white mb-2">
-                                {Math.floor(game.gameState.timeRemaining / 60)}:{String(game.gameState.timeRemaining % 60).padStart(2, '0')}
+                                {game.gameState.gameTime.minutes}:{String(game.gameState.gameTime.seconds).padStart(2, '0')}
                             </div>
                             {game.settings.shotClockDuration > 0 && (
                                 <div className="flex items-center justify-center gap-2 mt-4">
                                     <span className="text-xs text-zinc-500 uppercase tracking-widest">Shot Clock:</span>
                                     <span className="text-2xl font-mono font-bold text-amber-500">
-                                        {game.gameState.shotClockTime}
+                                        {game.gameState.shotClock}
                                     </span>
                                 </div>
                             )}
