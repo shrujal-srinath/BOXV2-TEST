@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { subscribeToAuth, logoutUser } from '../services/authService';
-import { getUserActiveGames, subscribeToLiveGames } from '../services/gameService';
+import { subscribeToLiveGames } from '../services/gameService';
 import { BasketballGame } from '../types';
 
 export const Dashboard: React.FC = () => {
@@ -28,12 +28,15 @@ export const Dashboard: React.FC = () => {
 
     setLoading(true);
 
-    setLoading(true);
-
-    // Subscribe to ALL live games and filter locally
+    // Subscribe to ALL live games and filter locally to populate both tabs
     const unsub = subscribeToLiveGames((games) => {
-      setMyGames(games.filter(g => g.hostId === currentUser.uid));
-      setLiveGames(games.filter(g => g.hostId !== currentUser.uid));
+      // Filter games where the current user is the host
+      const mine = games.filter(g => g.hostId === currentUser.uid);
+      // Filter games where the current user is NOT the host
+      const others = games.filter(g => g.hostId !== currentUser.uid);
+
+      setMyGames(mine);
+      setLiveGames(others);
       setLoading(false);
     });
 
