@@ -130,7 +130,6 @@ button,
 }
 
 /* === SAFETY OVERRIDE FOR MOBILE === */
-/* Ensures the app is always visible and scrollable in portrait mode */
 @media screen and (orientation: portrait) {
 
   html,

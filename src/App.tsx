@@ -19,17 +19,16 @@ function App() {
     <Router>
       <div className="min-h-screen bg-black text-white font-sans">
         <Routes>
-          {/* PUBLIC ROUTES */}
+          {/* 1. ENTRY POINT: LANDING PAGE */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/watch/:gameCode" element={<SpectatorView />} />
 
-          {/* GAME CREATION ROUTE - Works for both signed-in and guest users */}
-          <Route path="/setup" element={<GameSetup />} />
-
-          {/* AUTHENTICATED ROUTES */}
+          {/* 2. THE HUB: DASHBOARD (Accessible to Guest & Pro) */}
           <Route path="/dashboard" element={<Dashboard />} />
 
-          {/* HOST ROUTE - Works for both Firebase and localStorage games */}
+          {/* 3. CONFIGURATION: GAME SETUP */}
+          <Route path="/setup" element={<GameSetup />} />
+
+          {/* 4. ACTION: HOST CONSOLE (Protected) */}
           <Route
             path="/host/:gameCode"
             element={
@@ -39,7 +38,10 @@ function App() {
             }
           />
 
-          {/* TABLET MODE (Optional secondary feature) */}
+          {/* PUBLIC SPECTATOR ROUTES */}
+          <Route path="/watch/:gameCode" element={<SpectatorView />} />
+
+          {/* TABLET ROUTES */}
           <Route path="/tablet/standalone" element={<StandaloneTablet />} />
           <Route path="/tablet/:gameCode" element={<TabletController />} />
 
