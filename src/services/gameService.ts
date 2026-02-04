@@ -1,7 +1,12 @@
 import { BasketballGame, TeamData, Player } from '../types';
 
 export let gamesDatabase: { [key: string]: BasketballGame } = {};
+// New storage for archived games (older than 48h)
+export let archivedGamesDatabase: { [key: string]: BasketballGame } = {};
+
 let liveGamesListeners: { [key: string]: ((games: BasketballGame[]) => void)[] } = {};
+
+const ARCHIVE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 Hours
 
 export const generateGameCode = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -12,12 +17,7 @@ export const generateGameCode = (): string => {
   return code;
 };
 
-// --- SUBSCRIPTIONS ---
-const notifyGameListeners = (code: string) => {
-  // ... (notify logic logic same as before, simplified for brevity in this view)
-  notifyLiveListListeners();
-};
-
+// --- INTERNAL HELPERS ---
 const notifyLiveListListeners = () => {
   const liveGames = Object.values(gamesDatabase).filter(g => g.status === 'live');
   Object.values(liveGamesListeners).forEach(listeners => {
@@ -25,11 +25,24 @@ const notifyLiveListListeners = () => {
   });
 };
 
+// Move a game from Active to Archive
+const archiveGame = (code: string) => {
+  const game = gamesDatabase[code];
+  if (game) {
+    console.log(`[System] Archiving game ${code} due to age.`);
+    archivedGamesDatabase[code] = { ...game, status: 'finished' };
+    delete gamesDatabase[code];
+    notifyLiveListListeners();
+  }
+};
+
+// --- SUBSCRIPTIONS ---
+
 export const subscribeToGame = (code: string, callback: (game: BasketballGame | null) => void): (() => void) => {
-  // (Existing subscription logic)
   const interval = setInterval(() => {
     if (gamesDatabase[code]) callback(gamesDatabase[code]);
   }, 1000);
+
   if (gamesDatabase[code]) callback(gamesDatabase[code]);
   return () => clearInterval(interval);
 };
@@ -39,9 +52,20 @@ export const subscribeToLiveGames = (callback: (games: BasketballGame[]) => void
   if (!liveGamesListeners[id]) liveGamesListeners[id] = [];
   liveGamesListeners[id].push(callback);
 
+  // Initial call
   callback(Object.values(gamesDatabase).filter(g => g.status === 'live'));
 
   const interval = setInterval(() => {
+    const now = Date.now();
+
+    // 1. Check for games to Auto-Archive (Older than 48h)
+    Object.values(gamesDatabase).forEach(game => {
+      if (now - game.createdAt > ARCHIVE_THRESHOLD_MS) {
+        archiveGame(game.code);
+      }
+    });
+
+    // 2. Broadcast updates
     callback(Object.values(gamesDatabase).filter(g => g.status === 'live'));
   }, 2000);
 
@@ -66,13 +90,10 @@ export const updateGameField = (code: string, path: string, value: any): void =>
   current[lastKey] = value;
 
   game.lastUpdate = Date.now();
-  // We don't notify here to avoid spamming, the intervals handle it for now
-  // or you can call notifyLiveListListeners() if you want instant updates
 };
 
-// --- CREATION & FETCHING ---
+// --- CREATION ---
 
-// UPDATED: Now accepts hostId to assign ownership
 export const createGame = (code: string, gameType: 'local' | 'online', hostId: string = 'anonymous'): BasketballGame => {
   const createDefaultPlayer = (id: string): Player => ({
     id, name: '', number: '', position: '', points: 0, assists: 0, rebounds: 0,
@@ -89,7 +110,7 @@ export const createGame = (code: string, gameType: 'local' | 'online', hostId: s
 
   const newGame: BasketballGame = {
     code,
-    hostId, // <--- SAVING THE OWNER
+    hostId,
     teamA: createDefaultTeam('HOME', '#DC2626'),
     teamB: createDefaultTeam('AWAY', '#2563EB'),
     gameState: {
@@ -118,14 +139,13 @@ export const createGame = (code: string, gameType: 'local' | 'online', hostId: s
   return newGame;
 };
 
-// UPDATED: Accepts hostId
 export const initializeNewGame = async (
   settings: any,
   teamA: any,
   teamB: any,
   trackStats: boolean,
   sportType: string,
-  hostId: string = 'anonymous' // <--- Added param
+  hostId: string = 'anonymous'
 ): Promise<string> => {
   const code = generateGameCode();
   const game = createGame(code, 'online', hostId);
@@ -134,7 +154,6 @@ export const initializeNewGame = async (
   game.gameState.gameTime.minutes = settings.periodDuration;
   game.gameState.shotClock = settings.shotClockDuration;
 
-  // Merge team data
   if (teamA.name) game.teamA.name = teamA.name;
   if (teamA.color) game.teamA.color = teamA.color;
   if (teamA.players) game.teamA.players = teamA.players;
@@ -150,23 +169,20 @@ export const initializeNewGame = async (
   return code;
 };
 
-// --- NEW FILTERS FOR DASHBOARD ---
+// --- FILTERS ---
 
-// 1. Get games owned by user
 export const getUserActiveGames = (userId: string): BasketballGame[] => {
   return Object.values(gamesDatabase).filter(
     game => game.hostId === userId && game.status === 'live'
   );
 };
 
-// 2. Get games NOT owned by user (Public)
 export const getOtherUsersLiveGames = (userId: string): BasketballGame[] => {
   return Object.values(gamesDatabase).filter(
     game => game.hostId !== userId && game.status === 'live'
   );
 };
 
-// 3. Check ownership
 export const isGameOwner = (code: string, userId: string): boolean => {
   const game = gamesDatabase[code];
   return game ? game.hostId === userId : false;
@@ -174,7 +190,11 @@ export const isGameOwner = (code: string, userId: string): boolean => {
 
 export const getGame = (code: string) => gamesDatabase[code] || null;
 export const joinGame = async (code: string) => gamesDatabase[code] || null;
+
+// Manually delete a game
 export const deleteGame = (code: string) => {
-  delete gamesDatabase[code];
-  notifyLiveListListeners();
+  if (gamesDatabase[code]) {
+    delete gamesDatabase[code];
+    notifyLiveListListeners();
+  }
 };

@@ -104,7 +104,7 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
       setGame(gameMetadata.game);
       setMetadata(gameMetadata);
       gameRef.current = gameMetadata.game;
-      
+
       setActiveLocalGame(gameId);
 
       // Track last active game
@@ -153,15 +153,15 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
       // Clear any "future" actions when making a new action
       const newHistory = prev.slice(0, historyIndex + 1);
       const updated = [...newHistory, action];
-      
+
       // Limit history size
       if (updated.length > MAX_HISTORY) {
         return updated.slice(-MAX_HISTORY);
       }
-      
+
       return updated;
     });
-    
+
     setHistoryIndex(prev => Math.min(prev + 1, MAX_HISTORY - 1));
   }, [historyIndex]);
 
@@ -186,7 +186,7 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     if (success) {
       // Auto-add to sync queue
       addToSyncQueue(gameId, updatedGame);
-      
+
       // Update last active timestamp
       try {
         localStorage.setItem(LAST_GAME_KEY, JSON.stringify({
@@ -206,8 +206,8 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
   // UNIFIED ACTION HANDLER
   // ============================================
   const handleAction = useCallback((
-    team: 'A' | 'B', 
-    type: 'points' | 'foul' | 'timeout', 
+    team: 'A' | 'B',
+    type: 'points' | 'foul' | 'timeout',
     value: number
   ) => {
     if (!gameRef.current) return;
@@ -249,10 +249,10 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     });
 
     recordAction(
-      'clock', 
-      undefined, 
-      undefined, 
-      wasRunning ? 'Clock STOP' : 'Clock START', 
+      'clock',
+      undefined,
+      undefined,
+      wasRunning ? 'Clock STOP' : 'Clock START',
       previousState
     );
   }, [updateGameState, recordAction]);
@@ -274,8 +274,8 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
 
     const previousState = JSON.parse(JSON.stringify(gameRef.current));
     const newPossession = gameRef.current.gameState.possession === 'A' ? 'B' : 'A';
-    const teamName = newPossession === 'A' 
-      ? gameRef.current.teamA.name 
+    const teamName = newPossession === 'A'
+      ? gameRef.current.teamA.name
       : gameRef.current.teamB.name;
 
     updateGameState((game) => {
@@ -320,7 +320,7 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     addToSyncQueue(gameId, restoredState);
 
     setHistoryIndex(prev => prev - 1);
-    
+
     console.log(`[useLocalGame] Undo: ${action.description}`);
   }, [historyIndex, actionHistory, gameId]);
 
@@ -333,13 +333,13 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     // Move forward in history
     const nextIndex = historyIndex + 1;
     const nextAction = actionHistory[nextIndex + 1]; // The action that was undone
-    
+
     if (nextAction && nextAction.previousState) {
       // Find the state AFTER this action (which is the previousState of the NEXT action)
       // Or if there's no next action, we need to reconstruct
       // For now, we'll move the index forward
       setHistoryIndex(nextIndex);
-      
+
       console.log(`[useLocalGame] Redo to index ${nextIndex}`);
     }
   }, [historyIndex, actionHistory]);

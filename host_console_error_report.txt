@@ -1,0 +1,41 @@
+HOST CONSOLE ERROR REPORT
+=========================
+
+Issue 1: Broken Timer in Local Games
+------------------------------------
+Location: src/pages/HostConsole.tsx (Lines 94-96 of the checked version) & src/hooks/useLocalGame.ts
+
+Description:
+The HostConsole contains an interval loop (useEffect) that calculates the new time every second. To save this calculation, it calls `updateGameTime`.
+
+However, for local games (identified by "LOCAL-" prefix), the `useLocalGame` hook was NOT returning this function.
+
+const updateGameTime = isLocalGame ? localGame.updateGameTime : firebaseGame.updateGameTime;
+
+Because `localGame.updateGameTime` was undefined:
+1. The interval runs.
+2. It calculates the next second (e.g., 9:59).
+3. It tries to call `updateGameTime`, but it doesn't exist or do anything.
+4. The state never updates.
+5. On the next tick, it reads the *old* state (10:00) again and calculates 9:59 again.
+6. The clock appears "stuck" or frozen.
+
+Fix Required:
+You must add `updateGameTime` to the returned object in `useLocalGame.ts` so that the console can correctly write the new time to the local state.
+
+Issue 2: Missing FIBA Compliance (Auto-Stop)
+--------------------------------------------
+Location: src/pages/HostConsole.tsx
+
+Description:
+The User Request asked for FIBA standard behavior.
+FIBA Rules state that the game clock must stop whenever the official signals a foul or an interruption (timeout).
+
+In the current code:
+- `handleFoul` adds a foul but does NOT stop the timer.
+- `handleTimeout` adds a timeout but does NOT stop the timer.
+
+This requires the referee to manually hit "Pause" every time, which is prone to human error and inaccurate timing.
+
+Fix Required:
+Modify `handleFoul` and `handleTimeout` to check if the game is running, and if so, call `toggleTimer()` to stop it immediately upon the action.

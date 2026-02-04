@@ -19,33 +19,17 @@ function App() {
     <Router>
       <div className="min-h-screen bg-black text-white font-sans">
         <Routes>
-          {/* 1. ENTRY POINT: LANDING PAGE */}
           <Route path="/" element={<LandingPage />} />
-
-          {/* 2. THE HUB: DASHBOARD (Accessible to Guest & Pro) */}
           <Route path="/dashboard" element={<Dashboard />} />
-
-          {/* 3. CONFIGURATION: GAME SETUP */}
           <Route path="/setup" element={<GameSetup />} />
-
-          {/* 4. ACTION: HOST CONSOLE (Protected) */}
-          <Route
-            path="/host/:gameCode"
-            element={
-              <ProtectedHostRoute>
-                <HostConsole />
-              </ProtectedHostRoute>
-            }
-          />
-
-          {/* PUBLIC SPECTATOR ROUTES */}
+          <Route path="/host/:gameCode" element={
+            <ProtectedHostRoute>
+              <HostConsole />
+            </ProtectedHostRoute>
+          } />
           <Route path="/watch/:gameCode" element={<SpectatorView />} />
-
-          {/* TABLET ROUTES */}
           <Route path="/tablet/standalone" element={<StandaloneTablet />} />
           <Route path="/tablet/:gameCode" element={<TabletController />} />
-
-          {/* Catch all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
