@@ -1,200 +1,265 @@
-import { BasketballGame, TeamData, Player } from '../types';
+// src/services/gameService.ts (FIXED - REAL FIREBASE)
+/**
+ * GAME SERVICE - FIREBASE IMPLEMENTATION
+ * 
+ * This replaces the mock in-memory database with actual Firebase operations
+ */
 
-export let gamesDatabase: { [key: string]: BasketballGame } = {};
-// New storage for archived games (older than 48h)
-export let archivedGamesDatabase: { [key: string]: BasketballGame } = {};
+import { doc, setDoc, updateDoc, getDoc, onSnapshot, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { db } from './firebase';
+import type { BasketballGame, Player, TeamData } from '../types';
 
-let liveGamesListeners: { [key: string]: ((games: BasketballGame[]) => void)[] } = {};
+// ============================================
+// FIREBASE OPERATIONS
+// ============================================
 
-const ARCHIVE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 Hours
-
-export const generateGameCode = (): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+/**
+ * Subscribe to a specific game (real-time updates)
+ */
+export const subscribeToGame = (
+  code: string,
+  callback: (game: BasketballGame | null) => void
+): (() => void) => {
+  if (!code) {
+    console.warn('[GameService] No game code provided');
+    callback(null);
+    return () => { };
   }
-  return code;
-};
 
-// --- INTERNAL HELPERS ---
-const notifyLiveListListeners = () => {
-  const liveGames = Object.values(gamesDatabase).filter(g => g.status === 'live');
-  Object.values(liveGamesListeners).forEach(listeners => {
-    listeners.forEach(callback => callback(liveGames));
-  });
-};
+  const gameRef = doc(db, 'games', code);
 
-// Move a game from Active to Archive
-const archiveGame = (code: string) => {
-  const game = gamesDatabase[code];
-  if (game) {
-    console.log(`[System] Archiving game ${code} due to age.`);
-    archivedGamesDatabase[code] = { ...game, status: 'finished' };
-    delete gamesDatabase[code];
-    notifyLiveListListeners();
-  }
-};
-
-// --- SUBSCRIPTIONS ---
-
-export const subscribeToGame = (code: string, callback: (game: BasketballGame | null) => void): (() => void) => {
-  const interval = setInterval(() => {
-    if (gamesDatabase[code]) callback(gamesDatabase[code]);
-  }, 1000);
-
-  if (gamesDatabase[code]) callback(gamesDatabase[code]);
-  return () => clearInterval(interval);
-};
-
-export const subscribeToLiveGames = (callback: (games: BasketballGame[]) => void): (() => void) => {
-  const id = Math.random().toString();
-  if (!liveGamesListeners[id]) liveGamesListeners[id] = [];
-  liveGamesListeners[id].push(callback);
-
-  // Initial call
-  callback(Object.values(gamesDatabase).filter(g => g.status === 'live'));
-
-  const interval = setInterval(() => {
-    const now = Date.now();
-
-    // 1. Check for games to Auto-Archive (Older than 48h)
-    Object.values(gamesDatabase).forEach(game => {
-      if (now - game.createdAt > ARCHIVE_THRESHOLD_MS) {
-        archiveGame(game.code);
+  const unsubscribe = onSnapshot(
+    gameRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        const gameData = snapshot.data() as BasketballGame;
+        callback(gameData);
+      } else {
+        console.warn(`[GameService] Game ${code} not found`);
+        callback(null);
       }
+    },
+    (error) => {
+      console.error('[GameService] Subscription error:', error);
+      callback(null);
+    }
+  );
+
+  return unsubscribe;
+};
+
+/**
+ * Subscribe to all live games
+ */
+export const subscribeToLiveGames = (
+  callback: (games: BasketballGame[]) => void
+): (() => void) => {
+  const gamesQuery = query(
+    collection(db, 'games'),
+    where('status', '==', 'live')
+  );
+
+  const unsubscribe = onSnapshot(
+    gamesQuery,
+    (snapshot) => {
+      const games: BasketballGame[] = [];
+      snapshot.forEach((doc) => {
+        games.push(doc.data() as BasketballGame);
+      });
+      callback(games);
+    },
+    (error) => {
+      console.error('[GameService] Live games subscription error:', error);
+      callback([]);
+    }
+  );
+
+  return unsubscribe;
+};
+
+/**
+ * Update a specific field in Firebase (CRITICAL FIX)
+ */
+export const updateGameField = async (code: string, path: string, value: any): Promise<void> => {
+  if (!code) {
+    console.error('[GameService] No game code provided');
+    return;
+  }
+
+  try {
+    const gameRef = doc(db, 'games', code);
+
+    // Update Firebase with the field change
+    await updateDoc(gameRef, {
+      [path]: value,
+      lastUpdate: Date.now()
     });
 
-    // 2. Broadcast updates
-    callback(Object.values(gamesDatabase).filter(g => g.status === 'live'));
-  }, 2000);
-
-  return () => {
-    clearInterval(interval);
-    delete liveGamesListeners[id];
-  };
-};
-
-// --- UPDATES ---
-export const updateGameField = (code: string, path: string, value: any): void => {
-  const game = gamesDatabase[code];
-  if (!game) return;
-
-  const keys = path.split('.');
-  let current: any = game;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (!current[keys[i]]) current[keys[i]] = {};
-    current = current[keys[i]];
+    console.log(`[GameService] ✅ Updated ${path} in game ${code}`);
+  } catch (error) {
+    console.error(`[GameService] ❌ Failed to update ${path}:`, error);
+    throw error;
   }
-  const lastKey = keys[keys.length - 1];
-  current[lastKey] = value;
-
-  game.lastUpdate = Date.now();
 };
 
-// --- CREATION ---
+/**
+ * Delete a game
+ */
+export const deleteGame = async (code: string): Promise<void> => {
+  if (!code) return;
 
-export const createGame = (code: string, gameType: 'local' | 'online', hostId: string = 'anonymous'): BasketballGame => {
-  const createDefaultPlayer = (id: string): Player => ({
-    id, name: '', number: '', position: '', points: 0, assists: 0, rebounds: 0,
-    steals: 0, blocks: 0, turnovers: 0, fouls: 0, disqualified: false,
-    fieldGoalsMade: 0, fieldGoalsAttempted: 0, threePointsMade: 0,
-    threePointsAttempted: 0, freeThrowsMade: 0, freeThrowsAttempted: 0,
-  });
-
-  const createDefaultTeam = (name: string, color: string): TeamData => ({
-    name, color, score: 0, timeouts: 2, timeoutsFirstHalf: 2, timeoutsSecondHalf: 3,
-    fouls: 0, foulsThisQuarter: 0,
-    players: Array.from({ length: 12 }, (_, i) => createDefaultPlayer(`player-${i + 1}`)),
-  });
-
-  const newGame: BasketballGame = {
-    code,
-    hostId,
-    teamA: createDefaultTeam('HOME', '#DC2626'),
-    teamB: createDefaultTeam('AWAY', '#2563EB'),
-    gameState: {
-      period: 1,
-      gameTime: { minutes: 10, seconds: 0, tenths: 0 },
-      shotClock: 24,
-      gameRunning: false,
-      shotClockRunning: false,
-      possession: 'A',
-    },
-    settings: {
-      gameName: 'New Game',
-      periodDuration: 10,
-      shotClockDuration: 24,
-      periodType: 'quarter'
-    },
-    sport: 'basketball',
-    status: 'live',
-    gameType,
-    createdAt: Date.now(),
-    lastUpdate: Date.now(),
-  };
-
-  gamesDatabase[code] = newGame;
-  notifyLiveListListeners();
-  return newGame;
+  try {
+    const gameRef = doc(db, 'games', code);
+    await deleteDoc(gameRef);
+    console.log(`[GameService] ✅ Deleted game ${code}`);
+  } catch (error) {
+    console.error('[GameService] Failed to delete game:', error);
+    throw error;
+  }
 };
 
+// ============================================
+// GAME CREATION
+// ============================================
+
+const generateGameCode = (): string => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const createDefaultPlayer = (id: string): Player => ({
+  id,
+  name: '',
+  number: '',
+  position: '',
+  points: 0,
+  assists: 0,
+  rebounds: 0,
+  steals: 0,
+  blocks: 0,
+  turnovers: 0,
+  fouls: 0,
+  disqualified: false,
+  fieldGoalsMade: 0,
+  fieldGoalsAttempted: 0,
+  threePointsMade: 0,
+  threePointsAttempted: 0,
+  freeThrowsMade: 0,
+  freeThrowsAttempted: 0,
+});
+
+const createDefaultTeam = (name: string, color: string): TeamData => ({
+  name,
+  color,
+  score: 0,
+  timeouts: 2,
+  timeoutsFirstHalf: 2,
+  timeoutsSecondHalf: 3,
+  fouls: 0,
+  foulsThisQuarter: 0,
+  players: Array.from({ length: 12 }, (_, i) => createDefaultPlayer(`player-${i + 1}`)),
+});
+
+/**
+ * Initialize a new game in Firebase
+ */
 export const initializeNewGame = async (
   settings: any,
   teamA: any,
   teamB: any,
   trackStats: boolean,
   sportType: string,
-  hostId: string = 'anonymous'
+  hostId: string
 ): Promise<string> => {
   const code = generateGameCode();
-  const game = createGame(code, 'online', hostId);
 
-  game.settings = { ...game.settings, ...settings };
-  game.gameState.gameTime.minutes = settings.periodDuration;
-  game.gameState.shotClock = settings.shotClockDuration;
+  const newGame: BasketballGame = {
+    code,
+    hostId,
+    sport: sportType,
+    status: 'live',
+    gameType: 'online',
+    createdAt: Date.now(),
+    lastUpdate: Date.now(),
+    settings: {
+      gameName: settings.gameName || `${teamA.name} vs ${teamB.name}`,
+      periodDuration: settings.periodDuration || 10,
+      shotClockDuration: settings.shotClockDuration || 24,
+      periodType: settings.periodType || 'quarter',
+    },
+    gameState: {
+      period: 1,
+      gameTime: {
+        minutes: settings.periodDuration || 10,
+        seconds: 0,
+        tenths: 0,
+      },
+      shotClock: settings.shotClockDuration || 24,
+      gameRunning: false,
+      shotClockRunning: false,
+      possession: 'A',
+    },
+    teamA: {
+      ...createDefaultTeam(teamA.name, teamA.color),
+      players: trackStats ? teamA.players || [] : [],
+    },
+    teamB: {
+      ...createDefaultTeam(teamB.name, teamB.color),
+      players: trackStats ? teamB.players || [] : [],
+    },
+  };
 
-  if (teamA.name) game.teamA.name = teamA.name;
-  if (teamA.color) game.teamA.color = teamA.color;
-  if (teamA.players) game.teamA.players = teamA.players;
+  // Save to Firebase
+  const gameRef = doc(db, 'games', code);
+  await setDoc(gameRef, newGame);
 
-  if (teamB.name) game.teamB.name = teamB.name;
-  if (teamB.color) game.teamB.color = teamB.color;
-  if (teamB.players) game.teamB.players = teamB.players;
-
-  game.sport = sportType;
-
-  gamesDatabase[code] = game;
-  notifyLiveListListeners();
+  console.log(`[GameService] ✅ Created game ${code}`);
   return code;
 };
 
-// --- FILTERS ---
+/**
+ * Get a game by code (one-time fetch)
+ */
+export const getGameByCode = async (code: string): Promise<BasketballGame | null> => {
+  if (!code) return null;
 
-export const getUserActiveGames = (userId: string): BasketballGame[] => {
-  return Object.values(gamesDatabase).filter(
-    game => game.hostId === userId && game.status === 'live'
-  );
+  try {
+    const gameRef = doc(db, 'games', code);
+    const snapshot = await getDoc(gameRef);
+
+    if (snapshot.exists()) {
+      return snapshot.data() as BasketballGame;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[GameService] Failed to get game:', error);
+    return null;
+  }
 };
 
-export const getOtherUsersLiveGames = (userId: string): BasketballGame[] => {
-  return Object.values(gamesDatabase).filter(
-    game => game.hostId !== userId && game.status === 'live'
-  );
-};
+/**
+ * Get all games for a specific host
+ */
+export const getGamesByHost = async (hostId: string): Promise<BasketballGame[]> => {
+  if (!hostId) return [];
 
-export const isGameOwner = (code: string, userId: string): boolean => {
-  const game = gamesDatabase[code];
-  return game ? game.hostId === userId : false;
-};
+  try {
+    const gamesQuery = query(
+      collection(db, 'games'),
+      where('hostId', '==', hostId),
+      where('status', '==', 'live')
+    );
 
-export const getGame = (code: string) => gamesDatabase[code] || null;
-export const joinGame = async (code: string) => gamesDatabase[code] || null;
+    const snapshot = await getDocs(gamesQuery);
+    const games: BasketballGame[] = [];
 
-// Manually delete a game
-export const deleteGame = (code: string) => {
-  if (gamesDatabase[code]) {
-    delete gamesDatabase[code];
-    notifyLiveListListeners();
+    snapshot.forEach((doc) => {
+      games.push(doc.data() as BasketballGame);
+    });
+
+    return games;
+  } catch (error) {
+    console.error('[GameService] Failed to get games by host:', error);
+    return [];
   }
 };

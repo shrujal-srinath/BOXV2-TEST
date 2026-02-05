@@ -1,6 +1,6 @@
-// src/hooks/useLocalGame.ts (V3 - COMPLETE WITH UNDO/REDO)
+// src/hooks/useLocalGame.ts (V4 - FIXED WITH updateGameTime)
 /**
- * USE LOCAL GAME HOOK - COMPLETE VERSION WITH UNDO/REDO
+ * USE LOCAL GAME HOOK - COMPLETE VERSION WITH TIMER FIX
  * 
  * FEATURES:
  * ✅ Full undo/redo support
@@ -8,6 +8,7 @@
  * ✅ Auto-save on every update
  * ✅ Offline queue integration
  * ✅ Timer management
+ * ✅ updateGameTime function (FIX FOR TIMER BUG)
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -51,6 +52,9 @@ export interface UseLocalGameReturn {
   resetShotClock: (seconds: number) => void;
   togglePossession: () => void;
   nextPeriod: () => void;
+
+  // Timer function (CRITICAL FIX)
+  updateGameTime: (minutes: number, seconds: number, shotClock: number) => void;
 
   // Undo/Redo
   undo: () => void;
@@ -223,6 +227,7 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
         description = `${teamName} ${value > 0 ? '+' : ''}${value} PTS`;
       } else if (type === 'foul') {
         game[teamKey].fouls = Math.max(0, game[teamKey].fouls + value);
+        game[teamKey].foulsThisQuarter = Math.max(0, game[teamKey].foulsThisQuarter + value);
         description = `${teamName} ${value > 0 ? '+' : ''}${value} FOUL`;
       } else if (type === 'timeout') {
         game[teamKey].timeouts = Math.max(0, Math.min(7, game[teamKey].timeouts + value));
@@ -303,6 +308,23 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
   }, [updateGameState, recordAction]);
 
   // ============================================
+  // UPDATE GAME TIME (CRITICAL FIX FOR TIMER)
+  // ============================================
+  const updateGameTime = useCallback((minutes: number, seconds: number, shotClock: number) => {
+    if (!gameRef.current) return;
+
+    updateGameState((game) => {
+      game.gameState.gameTime.minutes = minutes;
+      game.gameState.gameTime.seconds = seconds;
+      game.gameState.gameTime.tenths = 0;
+      game.gameState.shotClock = Math.max(0, shotClock);
+    });
+
+    // Note: We don't recordAction here since it's automatic timer updates
+    // Recording every second would flood the history
+  }, [updateGameState]);
+
+  // ============================================
   // UNDO/REDO
   // ============================================
   const undo = useCallback(() => {
@@ -373,6 +395,9 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     resetShotClock,
     togglePossession,
     nextPeriod,
+
+    // Timer function (CRITICAL FIX)
+    updateGameTime,
 
     // Undo/Redo
     undo,

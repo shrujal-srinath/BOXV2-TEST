@@ -1,8 +1,11 @@
+// src/pages/HostConsole.tsx (DEBUG VERSION)
+// Add this temporarily to find the issue
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToAuth } from '../services/authService';
 import { useBasketballGame } from '../hooks/useBasketballGame';
-import { useLocalGame } from '../hooks/useLocalGame';
+import { deleteGame } from '../services/gameService';
 
 // --- ICONS ---
 const Icons = {
@@ -14,9 +17,8 @@ const Icons = {
     Power: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
 };
 
-// Sound Effects Stub
 const playSound = (type: 'horn' | 'whistle') => {
-    // Implement Audio() here if needed
+    console.log(`🔊 Sound: ${type}`);
 };
 
 export const HostConsole: React.FC = () => {
@@ -25,46 +27,75 @@ export const HostConsole: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [copied, setCopied] = useState(false);
 
-    // --- GAME CONNECTION ---
-    const isLocalGame = gameCode?.startsWith('LOCAL-');
+    // ============================================
+    // GAME CONNECTION (FIREBASE ONLY)
+    // ============================================
+    const hookResult = useBasketballGame(gameCode || '', 'online');
 
-    // Hooks
-    const firebaseGame = useBasketballGame(!isLocalGame && gameCode ? gameCode : '', 'online');
-    const localGame = useLocalGame(isLocalGame && gameCode ? gameCode : '');
+    // 🐛 DEBUG: Log what we get from the hook
+    useEffect(() => {
+        console.log('=== HOOK RESULT DEBUG ===');
+        console.log('Game Code:', gameCode);
+        console.log('Hook Result:', hookResult);
+        console.log('Game Object:', hookResult.game);
+        console.log('toggleTimer type:', typeof hookResult.toggleTimer);
+        console.log('updateGameTime type:', typeof hookResult.updateGameTime);
+        console.log('resetShotClock type:', typeof hookResult.resetShotClock);
+        console.log('handleAction type:', typeof hookResult.handleAction);
+        console.log('togglePossession type:', typeof hookResult.togglePossession);
+        console.log('========================');
+    }, [gameCode, hookResult]);
 
-    // Adapter
-    const game = isLocalGame ? localGame.game : firebaseGame.game;
-    const updateGameTime = isLocalGame ? localGame.updateGameTime : firebaseGame.updateGameTime;
-    const toggleTimer = isLocalGame ? localGame.toggleGameClock : firebaseGame.toggleTimer;
-    const resetShotClockIn = isLocalGame ? localGame.resetShotClock : firebaseGame.resetShotClock;
-    const handleAction = isLocalGame ? localGame.handleAction : firebaseGame.handleAction;
+    const {
+        game,
+        toggleTimer,
+        updateGameTime,
+        resetShotClock,
+        handleAction,
+        togglePossession
+    } = hookResult;
 
-    // Toggle Possession Logic
-    const handleTogglePossession = useCallback(() => {
-        if (!game) return;
-        // Manual toggle logic to ensure we control the state update
-        const nextPos = game.gameState.possession === 'A' ? 'B' : 'A';
-        // Use direct update if available, or assume handleAction might support it (or add custom logic)
-        // For now, we update via the specific hook method if available
-        if (isLocalGame) localGame.togglePossession();
-        else if (firebaseGame.togglePossession) firebaseGame.togglePossession();
-    }, [game, isLocalGame, localGame, firebaseGame]);
+    // 🐛 DEBUG: Log game state changes
+    useEffect(() => {
+        if (game) {
+            console.log('=== GAME STATE ===');
+            console.log('Team A Score:', game.teamA.score);
+            console.log('Team B Score:', game.teamB.score);
+            console.log('Game Running:', game.gameState.gameRunning);
+            console.log('Shot Clock:', game.gameState.shotClock);
+            console.log('==================');
+        }
+    }, [game]);
 
-    // --- CLOCK DRIVER ---
-    // Using a ref to hold the latest game state avoids closure staleness in the interval
+    // Auth subscription
+    useEffect(() => {
+        const unsubscribe = subscribeToAuth((user) => {
+            setCurrentUser(user);
+        });
+        return unsubscribe;
+    }, []);
+
+    // ============================================
+    // CLOCK DRIVER (TIMER INTERVAL)
+    // ============================================
     const gameRef = useRef(game);
-    useEffect(() => { gameRef.current = game; }, [game]);
+    useEffect(() => {
+        gameRef.current = game;
+    }, [game]);
 
     useEffect(() => {
         let interval: any = null;
 
         if (game?.gameState?.gameRunning) {
+            console.log('⏱️ Timer interval started');
             interval = setInterval(() => {
                 const g = gameRef.current;
                 if (!g || !g.gameState.gameRunning) return;
 
                 let { minutes, seconds } = g.gameState.gameTime;
                 let { shotClock } = g.gameState;
+
+                console.log(`⏱️ Tick: ${minutes}:${seconds} | Shot: ${shotClock}`);
 
                 // Game Clock Logic
                 if (seconds > 0) {
@@ -75,6 +106,7 @@ export const HostConsole: React.FC = () => {
                         seconds = 59;
                     } else {
                         // Time Expired
+                        console.log('⏱️ TIME EXPIRED');
                         toggleTimer();
                         playSound('horn');
                         return;
@@ -85,51 +117,102 @@ export const HostConsole: React.FC = () => {
                 if (g.gameState.shotClockRunning && shotClock > 0) {
                     shotClock--;
                     if (shotClock === 0) {
+                        console.log('⏱️ SHOT CLOCK EXPIRED');
                         toggleTimer();
                         playSound('whistle');
                     }
                 }
 
-                // Sync
+                // Update Firebase
                 if (updateGameTime) {
+                    console.log(`📤 Updating time: ${minutes}:${seconds} | ${shotClock}`);
                     updateGameTime(minutes, seconds, shotClock);
+                } else {
+                    console.error('❌ updateGameTime is undefined!');
                 }
             }, 1000);
+        } else {
+            console.log('⏱️ Timer stopped or game not running');
         }
 
         return () => {
-            if (interval) clearInterval(interval);
+            if (interval) {
+                console.log('⏱️ Clearing interval');
+                clearInterval(interval);
+            }
         };
-    }, [game?.gameState?.gameRunning]); // Only re-run when running state changes
+    }, [game?.gameState?.gameRunning, toggleTimer, updateGameTime]);
 
-    // --- ACTIONS HANDLERS (With Anti-Bubble) ---
-    // The e: React.MouseEvent is crucial to stop propagation
+    // ============================================
+    // ACTION HANDLERS
+    // ============================================
     const handleScore = (e: React.MouseEvent, team: 'A' | 'B', points: number) => {
         e.stopPropagation();
-        handleAction(team, 'points', points);
+        console.log(`🏀 Score clicked: Team ${team} +${points}`);
+        console.log('handleAction type:', typeof handleAction);
+        if (handleAction) {
+            handleAction(team, 'points', points);
+            console.log('✅ handleAction called');
+        } else {
+            console.error('❌ handleAction is undefined!');
+        }
     };
 
     const handleFoul = (e: React.MouseEvent, team: 'A' | 'B') => {
         e.stopPropagation();
-        handleAction(team, 'foul', 1);
+        console.log(`🚨 Foul clicked: Team ${team}`);
+        if (handleAction) {
+            handleAction(team, 'foul', 1);
+        } else {
+            console.error('❌ handleAction is undefined!');
+        }
     };
 
     const handleTimeout = (e: React.MouseEvent, team: 'A' | 'B') => {
         e.stopPropagation();
-        handleAction(team, 'timeout', -1);
+        console.log(`⏸️ Timeout clicked: Team ${team}`);
+        if (handleAction) {
+            handleAction(team, 'timeout', -1);
+        } else {
+            console.error('❌ handleAction is undefined!');
+        }
     };
 
     const handleResetShot = (e: React.MouseEvent, val: number) => {
         e.stopPropagation();
-        resetShotClockIn(val);
+        console.log(`🔄 Shot clock reset: ${val}`);
+        if (resetShotClock) {
+            resetShotClock(val);
+        } else {
+            console.error('❌ resetShotClock is undefined!');
+        }
     };
 
     const handleTimerToggle = (e: React.MouseEvent) => {
         e.stopPropagation();
-        toggleTimer();
+        console.log('⏯️ Timer toggle clicked');
+        console.log('Current gameRunning:', game?.gameState?.gameRunning);
+        if (toggleTimer) {
+            toggleTimer();
+            console.log('✅ toggleTimer called');
+        } else {
+            console.error('❌ toggleTimer is undefined!');
+        }
     };
 
-    // --- HEADER ACTIONS ---
+    const handleTogglePossession = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        console.log('🔄 Possession toggle clicked');
+        if (togglePossession) {
+            togglePossession();
+        } else {
+            console.error('❌ togglePossession is undefined!');
+        }
+    };
+
+    // ============================================
+    // HEADER ACTIONS
+    // ============================================
     const copyGameCode = () => {
         if (gameCode) {
             navigator.clipboard.writeText(gameCode);
@@ -145,149 +228,126 @@ export const HostConsole: React.FC = () => {
 
     const handleEndGame = async () => {
         if (window.confirm("Are you sure you want to END this game? This will stop the session.")) {
-            navigate('/dashboard');
+            try {
+                await deleteGame(gameCode!);
+                navigate('/dashboard');
+            } catch (error) {
+                console.error("Failed to end game:", error);
+                alert("Failed to end game. Please try again.");
+            }
         }
     };
 
-    useEffect(() => {
-        const unsub = subscribeToAuth((user) => setCurrentUser(user));
-        return () => unsub();
-    }, []);
-
-    if (!game) return (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center">
-            <div className="text-center animate-pulse">
-                <div className="text-4xl mb-4">📡</div>
-                <div className="text-sm font-bold uppercase tracking-widest">Connecting to Console...</div>
+    // ============================================
+    // LOADING & ERROR STATES
+    // ============================================
+    if (!game) {
+        console.log('⏳ Game is null, showing loading screen');
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <div className="text-white text-xl font-bold">Loading Game...</div>
+                    <div className="text-zinc-500 text-sm mt-2">{gameCode}</div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
 
+    console.log('✅ Rendering game interface');
+
+    // ============================================
+    // MAIN RENDER
+    // ============================================
     return (
-        <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
+        <div className="min-h-screen bg-black text-white">
+            {/* DEBUG PANEL */}
+            <div className="fixed top-0 right-0 bg-red-900 text-white text-xs p-2 z-50 max-w-xs">
+                <div>Game: {game.code}</div>
+                <div>A: {game.teamA.score} | B: {game.teamB.score}</div>
+                <div>Running: {game.gameState.gameRunning ? 'YES' : 'NO'}</div>
+                <div>Time: {game.gameState.gameTime.minutes}:{game.gameState.gameTime.seconds}</div>
+                <div>Shot: {game.gameState.shotClock}</div>
+            </div>
 
-            {/* NEW HEADER BAR */}
-            <header className="bg-zinc-900/80 backdrop-blur-md border-b border-zinc-800 p-3 sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-
-                    {/* LEFT: NAV & INFO */}
-                    <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-                        <button onClick={() => navigate('/dashboard')} className="w-9 h-9 rounded-full bg-black border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">←</button>
-
-                        <div className="h-6 w-[1px] bg-zinc-700 hidden md:block"></div>
-
-                        <button className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Settings">
-                            <Icons.Settings />
-                        </button>
-
-                        <button
-                            onClick={copyGameCode}
-                            className="flex items-center gap-2 bg-black hover:bg-zinc-800 border border-zinc-700 px-3 py-1.5 rounded-lg transition-colors group cursor-pointer active:scale-95"
-                        >
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-400">CODE:</span>
-                            <span className="text-sm font-mono font-black text-white tracking-wider">{gameCode}</span>
-                            <span className="text-zinc-500 group-hover:text-white">
-                                {copied ? <span className="text-green-500 text-xs font-bold">✓</span> : <Icons.Copy />}
-                            </span>
-                        </button>
-
-                        <button onClick={openWatchLink} className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-blue-900/20 rounded-lg transition-colors" title="Open Spectator View">
-                            <Icons.Link />
-                        </button>
+            {/* HEADER */}
+            <header className="bg-zinc-900 border-b border-zinc-800 p-4">
+                <div className="max-w-7xl mx-auto flex justify-between items-center">
+                    <div>
+                        <h1 className="text-2xl font-black uppercase tracking-tight">{game.settings.gameName}</h1>
+                        <div className="flex items-center gap-3 mt-1">
+                            <span className="text-xs text-zinc-500 uppercase tracking-wider">Game Code:</span>
+                            <code className="text-sm font-mono bg-black px-3 py-1 rounded border border-zinc-800 text-white">{gameCode}</code>
+                            <button onClick={copyGameCode} className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1">
+                                <Icons.Copy />
+                                {copied ? 'Copied!' : 'Copy'}
+                            </button>
+                        </div>
                     </div>
-
-                    {/* RIGHT: TOOLS */}
-                    <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-                        <button className="flex items-center gap-2 text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 px-3 py-2 rounded-lg transition-colors uppercase tracking-wider">
-                            <Icons.Download /> <span className="hidden md:inline">Export Stats</span>
+                    <div className="flex items-center gap-3">
+                        <button onClick={openWatchLink} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-bold uppercase tracking-wide transition-colors flex items-center gap-2">
+                            <Icons.Link />
+                            Open Viewer
                         </button>
-
-                        <button className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors" title="Help">
-                            <Icons.Help />
-                        </button>
-
-                        <div className="h-6 w-[1px] bg-zinc-700 mx-1"></div>
-
-                        <button
-                            onClick={handleEndGame}
-                            className="flex items-center gap-2 bg-red-900/20 hover:bg-red-600 border border-red-900 hover:border-red-500 text-red-500 hover:text-white px-4 py-2 rounded-lg transition-all text-xs font-black uppercase tracking-widest"
-                        >
-                            <Icons.Power /> End
+                        <button onClick={handleEndGame} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold uppercase tracking-wide transition-colors flex items-center gap-2">
+                            <Icons.Power />
+                            End Game
                         </button>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 flex flex-col gap-6">
+            <main className="max-w-7xl mx-auto p-6">
+                {/* SCOREBOARD */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 mb-6">
+                    <div className="grid grid-cols-3 gap-8 items-center">
+                        {/* TEAM A */}
+                        <div className="text-center">
+                            <h2 className="text-3xl font-black uppercase mb-2" style={{ color: game.teamA.color }}>{game.teamA.name}</h2>
+                            <div className="text-8xl font-black font-mono">{game.teamA.score}</div>
+                            <div className="text-sm text-zinc-500 mt-2">Fouls: {game.teamA.fouls} | Timeouts: {game.teamA.timeouts}</div>
+                        </div>
 
-                {/* 1. HERO SCOREBOARD (Display Only) */}
-                <div className="bg-black border border-zinc-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent opacity-30"></div>
-
-                    <div className="flex justify-between items-center relative z-10">
-                        {/* TEAM A SCORE */}
-                        <div className="text-center w-1/3">
-                            <div className="text-sm font-bold uppercase tracking-widest mb-1 opacity-80" style={{ color: game.teamA.color }}>{game.teamA.name}</div>
-                            <div className="text-8xl md:text-9xl font-black text-white leading-none tracking-tighter drop-shadow-2xl">{game.teamA.score}</div>
-                            <div className="flex flex-wrap justify-center gap-2 mt-4 opacity-70">
-                                <span className="text-[10px] font-mono bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-zinc-400">FLS: {game.teamA.fouls}</span>
-                                <span className="text-[10px] font-mono bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-zinc-400">T.O: {game.teamA.timeouts}</span>
+                        {/* CENTER - CLOCK */}
+                        <div className="text-center">
+                            <div className="text-sm text-zinc-500 uppercase tracking-widest mb-2">Period {game.gameState.period}</div>
+                            <div className="text-6xl font-mono font-black mb-4">
+                                {String(game.gameState.gameTime.minutes).padStart(2, '0')}:{String(game.gameState.gameTime.seconds).padStart(2, '0')}
+                            </div>
+                            <div className="text-2xl font-mono text-amber-500 mb-4">Shot Clock: {game.gameState.shotClock}</div>
+                            <div className="flex justify-center gap-2">
+                                <div className={`w-3 h-3 rounded-full ${game.gameState.possession === 'A' ? 'bg-white animate-pulse' : 'bg-zinc-700'}`}></div>
+                                <span className="text-xs text-zinc-500">POSSESSION</span>
+                                <div className={`w-3 h-3 rounded-full ${game.gameState.possession === 'B' ? 'bg-white animate-pulse' : 'bg-zinc-700'}`}></div>
                             </div>
                         </div>
 
-                        {/* CENTER CLOCK DISPLAY */}
-                        <div className="flex-1 flex flex-col items-center justify-center">
-                            <div className="bg-zinc-900/80 px-4 py-1 rounded-full border border-zinc-800 text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-4">
-                                {game.gameState.period <= 4 ? `Quarter ${game.gameState.period}` : `OT ${game.gameState.period - 4}`}
-                            </div>
-                            <div className={`text-7xl md:text-8xl font-mono font-black tracking-widest tabular-nums leading-none ${game.gameState.gameRunning ? 'text-white' : 'text-red-500'}`}>
-                                {game.gameState.gameTime.minutes}:{String(game.gameState.gameTime.seconds).padStart(2, '0')}
-                            </div>
-                            <div className="mt-4 flex items-center gap-3">
-                                <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Shot Clock</div>
-                                <div className={`text-4xl font-mono font-bold ${game.gameState.shotClock <= 5 ? 'text-red-500' : 'text-amber-400'}`}>
-                                    {game.gameState.shotClock}
-                                </div>
-                            </div>
+                        {/* TEAM B */}
+                        <div className="text-center">
+                            <h2 className="text-3xl font-black uppercase mb-2" style={{ color: game.teamB.color }}>{game.teamB.name}</h2>
+                            <div className="text-8xl font-black font-mono">{game.teamB.score}</div>
+                            <div className="text-sm text-zinc-500 mt-2">Fouls: {game.teamB.fouls} | Timeouts: {game.teamB.timeouts}</div>
                         </div>
-
-                        {/* TEAM B SCORE */}
-                        <div className="text-center w-1/3">
-                            <div className="text-sm font-bold uppercase tracking-widest mb-1 opacity-80" style={{ color: game.teamB.color }}>{game.teamB.name}</div>
-                            <div className="text-8xl md:text-9xl font-black text-white leading-none tracking-tighter drop-shadow-2xl">{game.teamB.score}</div>
-                            <div className="flex flex-wrap justify-center gap-2 mt-4 opacity-70">
-                                <span className="text-[10px] font-mono bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-zinc-400">FLS: {game.teamB.fouls}</span>
-                                <span className="text-[10px] font-mono bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-zinc-400">T.O: {game.teamB.timeouts}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* POSSESSION INDICATOR */}
-                    <div className="absolute bottom-0 left-0 w-full h-2 bg-zinc-900 flex">
-                        <div className={`flex-1 transition-colors duration-300 ${game.gameState.possession === 'A' ? 'bg-white shadow-[0_0_15px_white]' : 'bg-transparent'}`}></div>
-                        <div className={`flex-1 transition-colors duration-300 ${game.gameState.possession === 'B' ? 'bg-white shadow-[0_0_15px_white]' : 'bg-transparent'}`}></div>
                     </div>
                 </div>
 
-                {/* 2. MAIN CONTROLS GRID */}
+                {/* CONTROLS */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
                     {/* TEAM A PANEL */}
-                    <div className="lg:col-span-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4 relative overflow-hidden group">
-                        <div className="absolute top-0 left-0 w-2 h-full" style={{ background: game.teamA.color }}></div>
-                        <div className="flex justify-between items-center pl-3">
-                            <h3 className="font-black italic uppercase text-white text-xl">{game.teamA.name}</h3>
-                            <button onClick={(e) => handleTimeout(e, 'A')} className="px-3 py-1.5 bg-black hover:bg-zinc-800 border border-zinc-800 rounded text-[10px] font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors active:scale-95">Timeout</button>
+                    <div className="lg:col-span-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+                        <div className="flex justify-between items-center">
+                            <h3 className="font-black uppercase text-white text-xl">{game.teamA.name}</h3>
+                            <button onClick={(e) => handleTimeout(e, 'A')} className="px-3 py-1.5 bg-black hover:bg-zinc-800 border border-zinc-800 rounded text-xs font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors">Timeout</button>
                         </div>
 
                         <div className="grid grid-cols-3 gap-3">
                             {[1, 2, 3].map(pts => (
-                                <button key={pts} onClick={(e) => handleScore(e, 'A', pts)} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-white font-black py-6 rounded-xl text-2xl shadow-lg transition-all active:scale-95 active:bg-zinc-600">
+                                <button key={pts} onClick={(e) => handleScore(e, 'A', pts)} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-white font-black py-6 rounded-xl text-2xl shadow-lg transition-all active:scale-95">
                                     +{pts}
                                 </button>
                             ))}
                         </div>
-                        <div className="grid grid-cols-2 gap-3 mt-auto">
+                        <div className="grid grid-cols-2 gap-3">
                             <button onClick={(e) => handleScore(e, 'A', -1)} className="bg-black/40 hover:bg-red-900/20 border border-zinc-800 hover:border-red-900/50 text-zinc-500 hover:text-red-400 font-bold py-3 rounded-lg text-xs uppercase transition-colors">
                                 −1 Point
                             </button>
@@ -297,49 +357,52 @@ export const HostConsole: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* CENTER: CLOCK & GAME MANAGEMENT */}
+                    {/* CENTER - CLOCK CONTROLS */}
                     <div className="lg:col-span-4 flex flex-col gap-4">
-                        {/* Primary Clock Control */}
+                        {/* Main Timer */}
                         <button
                             onClick={handleTimerToggle}
-                            className={`flex-1 min-h-[100px] rounded-2xl font-black text-2xl uppercase tracking-[0.2em] shadow-2xl transition-all active:scale-[0.98] border-b-4 ${game.gameState.gameRunning
-                                ? 'bg-red-600 hover:bg-red-500 border-red-800 text-white shadow-red-900/20'
-                                : 'bg-green-600 hover:bg-green-500 border-green-800 text-white shadow-green-900/20'
+                            className={`flex-1 min-h-[100px] rounded-2xl font-black text-2xl uppercase tracking-wider shadow-2xl transition-all active:scale-95 border-b-4 ${game.gameState.gameRunning
+                                ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
+                                : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
                                 }`}
                         >
-                            {game.gameState.gameRunning ? 'STOP GAME' : 'START GAME'}
+                            {game.gameState.gameRunning ? '⏸ STOP' : '▶ START'}
                         </button>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <button onClick={(e) => handleResetShot(e, 24)} className="bg-zinc-800 hover:bg-amber-600 hover:text-white hover:border-amber-500 border border-zinc-700 text-amber-500 font-bold py-4 rounded-xl uppercase tracking-widest text-sm transition-all active:scale-95 shadow-lg">
-                                Reset 24
+                        {/* Shot Clock Controls */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <button onClick={(e) => handleResetShot(e, 24)} className="bg-zinc-800 hover:bg-amber-900/30 border border-zinc-700 hover:border-amber-600 text-white font-black py-4 rounded-xl text-xl transition-all active:scale-95">
+                                24
                             </button>
-                            <button onClick={(e) => handleResetShot(e, 14)} className="bg-zinc-800 hover:bg-amber-600 hover:text-white hover:border-amber-500 border border-zinc-700 text-amber-500 font-bold py-4 rounded-xl uppercase tracking-widest text-sm transition-all active:scale-95 shadow-lg">
-                                Reset 14
+                            <button onClick={(e) => handleResetShot(e, 14)} className="bg-zinc-800 hover:bg-orange-900/30 border border-zinc-700 hover:border-orange-600 text-white font-black py-4 rounded-xl text-xl transition-all active:scale-95">
+                                14
                             </button>
                         </div>
 
-                        <button onClick={handleTogglePossession} className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-bold py-3 rounded-xl uppercase tracking-widest text-xs transition-all active:scale-95">
-                            Switch Possession ↔
+                        {/* Possession Toggle */}
+                        <button onClick={handleTogglePossession} className="bg-black hover:bg-zinc-900 border border-zinc-700 hover:border-white text-zinc-400 hover:text-white font-bold py-3 rounded-lg text-sm uppercase tracking-wide transition-all flex items-center justify-center gap-3">
+                            <span className={`text-xl ${game.gameState.possession === 'A' ? 'text-white' : 'text-zinc-700'}`}>◀</span>
+                            SWAP POSSESSION
+                            <span className={`text-xl ${game.gameState.possession === 'B' ? 'text-white' : 'text-zinc-700'}`}>▶</span>
                         </button>
                     </div>
 
                     {/* TEAM B PANEL */}
-                    <div className="lg:col-span-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-2 h-full" style={{ background: game.teamB.color }}></div>
-                        <div className="flex justify-between items-center pr-3 flex-row-reverse">
-                            <h3 className="font-black italic uppercase text-white text-xl">{game.teamB.name}</h3>
-                            <button onClick={(e) => handleTimeout(e, 'B')} className="px-3 py-1.5 bg-black hover:bg-zinc-800 border border-zinc-800 rounded text-[10px] font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors active:scale-95">Timeout</button>
+                    <div className="lg:col-span-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+                        <div className="flex justify-between items-center">
+                            <h3 className="font-black uppercase text-white text-xl">{game.teamB.name}</h3>
+                            <button onClick={(e) => handleTimeout(e, 'B')} className="px-3 py-1.5 bg-black hover:bg-zinc-800 border border-zinc-800 rounded text-xs font-bold text-zinc-400 hover:text-white uppercase tracking-wider transition-colors">Timeout</button>
                         </div>
 
                         <div className="grid grid-cols-3 gap-3">
                             {[1, 2, 3].map(pts => (
-                                <button key={pts} onClick={(e) => handleScore(e, 'B', pts)} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-white font-black py-6 rounded-xl text-2xl shadow-lg transition-all active:scale-95 active:bg-zinc-600">
+                                <button key={pts} onClick={(e) => handleScore(e, 'B', pts)} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-white font-black py-6 rounded-xl text-2xl shadow-lg transition-all active:scale-95">
                                     +{pts}
                                 </button>
                             ))}
                         </div>
-                        <div className="grid grid-cols-2 gap-3 mt-auto">
+                        <div className="grid grid-cols-2 gap-3">
                             <button onClick={(e) => handleScore(e, 'B', -1)} className="bg-black/40 hover:bg-red-900/20 border border-zinc-800 hover:border-red-900/50 text-zinc-500 hover:text-red-400 font-bold py-3 rounded-lg text-xs uppercase transition-colors">
                                 −1 Point
                             </button>
@@ -348,7 +411,6 @@ export const HostConsole: React.FC = () => {
                             </button>
                         </div>
                     </div>
-
                 </div>
             </main>
         </div>
