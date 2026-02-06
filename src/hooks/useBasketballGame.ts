@@ -19,6 +19,7 @@ export const useBasketballGame = (code: string, gameType: 'local' | 'online' = '
   // Initial state (safe default)
   const [game, setGame] = useState<BasketballGame>({
     code,
+    hostId: 'loading', // FIXED: Added required hostId field
     teamA: createDefaultTeam('HOME', '#DC2626'),
     teamB: createDefaultTeam('AWAY', '#2563EB'),
     gameState: {

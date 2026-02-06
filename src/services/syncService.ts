@@ -88,10 +88,10 @@ const saveSyncQueue = (queue: SyncQueueItem[]): boolean => {
  */
 export const addToSyncQueue = (localGameId: string, gameData: BasketballGame): boolean => {
   const queue = getSyncQueue();
-  
+
   // Check if already in queue
   const existingIndex = queue.findIndex(item => item.localGameId === localGameId);
-  
+
   if (existingIndex !== -1) {
     // Update existing item
     queue[existingIndex] = {
@@ -181,7 +181,7 @@ const uploadGameToCloud = async (
   localGameId: string,
   gameData: BasketballGame
 ): Promise<{ success: boolean; cloudId?: string; error?: string }> => {
-  
+
   if (!db) {
     return { success: false, error: 'Firebase not initialized' };
   }
@@ -193,13 +193,13 @@ const uploadGameToCloud = async (
   try {
     // Generate cloud game code (6 digits)
     const cloudGameId = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     // Prepare cloud data (convert LOCAL-XXX to regular code)
     const cloudGameData: BasketballGame = {
       ...gameData,
       code: cloudGameId,
       hostId: auth.currentUser.uid,
-      gameType: 'pro', // Convert local to pro when syncing
+      gameType: 'online', // FIXED: Changed 'pro' to 'online' to match type definition
       lastUpdate: Date.now(),
     };
 
@@ -208,9 +208,9 @@ const uploadGameToCloud = async (
     await setDoc(gameRef, cloudGameData);
 
     console.log(`[SyncService] ✅ Uploaded ${localGameId} → ${cloudGameId}`);
-    
+
     return { success: true, cloudId: cloudGameId };
-    
+
   } catch (error: any) {
     console.error(`[SyncService] ❌ Upload failed for ${localGameId}:`, error);
     return { success: false, error: error.message || 'Upload failed' };
@@ -228,7 +228,7 @@ const checkForConflict = async (
   cloudGameId: string,
   localGameData: BasketballGame
 ): Promise<{ hasConflict: boolean; cloudData?: BasketballGame }> => {
-  
+
   if (!db) return { hasConflict: false };
 
   try {
@@ -237,7 +237,7 @@ const checkForConflict = async (
 
     if (gameSnap.exists()) {
       const cloudData = gameSnap.data() as BasketballGame;
-      
+
       // Compare timestamps
       if (cloudData.lastUpdate > localGameData.lastUpdate) {
         console.warn(`[SyncService] ⚠️ Conflict detected for ${cloudGameId}`);
@@ -246,7 +246,7 @@ const checkForConflict = async (
     }
 
     return { hasConflict: false };
-    
+
   } catch (error) {
     console.error('[SyncService] Conflict check failed:', error);
     return { hasConflict: false };
@@ -261,7 +261,7 @@ const resolveConflict = async (
   localData: BasketballGame,
   cloudData: BasketballGame
 ): Promise<BasketballGame> => {
-  
+
   // Simple: Use most recent timestamp
   if (cloudData.lastUpdate > localData.lastUpdate) {
     console.log(`[SyncService] Using cloud version (newer)`);
@@ -311,13 +311,13 @@ export const syncSingleGame = async (localGameId: string): Promise<boolean> => {
   if (result.success && result.cloudId) {
     // Mark as synced
     markGameAsSynced(localGameId, result.cloudId);
-    
+
     // Remove from queue
     removeFromSyncQueue(localGameId);
-    
+
     console.log(`[SyncService] ✅ Sync complete: ${localGameId} → ${result.cloudId}`);
     return true;
-    
+
   } else {
     // Handle failure
     if (queueItem.attempts >= MAX_RETRY_ATTEMPTS) {
@@ -330,12 +330,12 @@ export const syncSingleGame = async (localGameId: string): Promise<boolean> => {
     } else {
       // Save updated attempt count
       saveSyncQueue(queue);
-      
+
       // Retry after delay
       console.log(`[SyncService] Retry ${queueItem.attempts}/${MAX_RETRY_ATTEMPTS} in ${RETRY_DELAY_MS}ms`);
       setTimeout(() => syncSingleGame(localGameId), RETRY_DELAY_MS);
     }
-    
+
     return false;
   }
 };
@@ -359,7 +359,7 @@ export const syncAllGames = async (): Promise<SyncResult> => {
   // Process each game
   for (const item of queue) {
     const success = await syncSingleGame(item.localGameId);
-    
+
     if (success) {
       results.syncedGames.push(item.localGameId);
     } else {
@@ -389,7 +389,7 @@ export const startAutoSync = () => {
   // Sync when coming online
   window.addEventListener('online', async () => {
     console.log('[SyncService] 📡 Connection restored - auto-syncing...');
-    
+
     // Wait a bit for connection to stabilize
     setTimeout(async () => {
       if (auth.currentUser) {
@@ -442,7 +442,7 @@ export const migrateAllLocalGamesToCloud = async (): Promise<SyncResult> => {
   console.log('[SyncService] 📦 Starting migration...');
 
   const pendingGames = getPendingSyncGames();
-  
+
   // Add all to queue
   pendingGames.forEach(metadata => {
     addToSyncQueue(metadata.id, metadata.game);
@@ -458,7 +458,7 @@ export const migrateAllLocalGamesToCloud = async (): Promise<SyncResult> => {
 export const downloadCloudGameToLocal = async (
   cloudGameId: string
 ): Promise<boolean> => {
-  
+
   if (!db) return false;
 
   try {
@@ -471,7 +471,7 @@ export const downloadCloudGameToLocal = async (
     }
 
     const cloudData = gameSnap.data() as BasketballGame;
-    
+
     // Import to local storage
     const localGameService = await import('./localGameService');
     const metadata = localGameService.createLocalGame(
@@ -485,13 +485,13 @@ export const downloadCloudGameToLocal = async (
       // Update with cloud data
       localGameService.updateLocalGame(metadata.id, cloudData);
       localGameService.markGameAsSynced(metadata.id, cloudGameId);
-      
+
       console.log(`[SyncService] ✅ Downloaded ${cloudGameId} → ${metadata.id}`);
       return true;
     }
 
     return false;
-    
+
   } catch (error) {
     console.error('[SyncService] Download failed:', error);
     return false;
@@ -506,18 +506,18 @@ export default {
   // Queue
   addToSyncQueue,
   clearSyncQueue,
-  
+
   // Status
   getSyncStatus,
-  
+
   // Sync
   syncSingleGame,
   syncAllGames,
   triggerManualSync,
-  
+
   // Auto-sync
   startAutoSync,
-  
+
   // Migration
   migrateAllLocalGamesToCloud,
   downloadCloudGameToLocal,
