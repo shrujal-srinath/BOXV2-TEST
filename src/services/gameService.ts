@@ -263,3 +263,12 @@ export const getGamesByHost = async (hostId: string): Promise<BasketballGame[]> 
     return [];
   }
 };
+
+// ============================================
+// BACKWARDS COMPATIBILITY ALIASES
+// ============================================
+
+/**
+ * Alias for getGameByCode (for backwards compatibility)
+ */
+export const getGame = getGameByCode;
