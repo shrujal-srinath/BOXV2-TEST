@@ -1,230 +1,239 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createTournament } from '../services/tournamentService';
-import type { TournamentConfig, SportType } from '../types';
+import { ImageCropperModal } from '../components/ImageCropperModal'; // NEW IMPORT
+import type { TournamentConfig } from '../types';
 
 export const TournamentSetup: React.FC = () => {
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(false);
     const [step, setStep] = useState(1);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // --- DATA STATE ---
-    const [name, setName] = useState('');
-    const [logoUrl, setLogoUrl] = useState('');
+    // Config State
     const [config, setConfig] = useState<TournamentConfig>({
         sports: {
             basketball: { isActive: true, courts: 1 },
-            badminton: { isActive: false, courts: 3 },
-            volleyball: { isActive: false, courts: 1 },
+            badminton: { isActive: false, courts: 0 },
+            volleyball: { isActive: false, courts: 0 }
         }
     });
 
+    // Branding State
+    const [name, setName] = useState("");
+    const [logoUrl, setLogoUrl] = useState(""); // Stores Base64 string now
+
+    // Image Upload State
+    const [tempImageSrc, setTempImageSrc] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     // --- HANDLERS ---
-    const toggleSport = (sport: SportType) => {
+
+    const updateSport = (sport: keyof TournamentConfig['sports'], field: 'isActive' | 'courts', value: any) => {
         setConfig(prev => ({
+            ...prev,
             sports: {
                 ...prev.sports,
                 [sport]: {
-                    ...prev.sports[sport]!,
-                    isActive: !prev.sports[sport]?.isActive
+                    ...prev.sports[sport],
+                    [field]: value
                 }
             }
         }));
     };
 
-    const updateCourts = (sport: SportType, count: number) => {
-        setConfig(prev => ({
-            sports: {
-                ...prev.sports,
-                [sport]: {
-                    ...prev.sports[sport]!,
-                    courts: Math.max(1, count)
-                }
-            }
-        }));
-    };
-
-    const handleLaunch = async () => {
-        setLoading(true);
-        try {
-            const id = await createTournament(name, logoUrl, config);
-            navigate(`/tournament/${id}/manage`); // Redirect to the new Command Center
-        } catch (err) {
-            console.error(err);
-            alert("Failed to create tournament");
-            setLoading(false);
+    // 1. Handle File Selection
+    const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const reader = new FileReader();
+            reader.addEventListener('load', () => setTempImageSrc(reader.result as string));
+            reader.readAsDataURL(e.target.files[0]);
         }
     };
 
-    // --- RENDER HELPERS ---
-    const StepIndicator = ({ num, label }: { num: number, label: string }) => (
-        <div className={`flex items-center gap-4 p-4 rounded-lg transition-all ${step === num ? 'bg-zinc-800 border border-yellow-500/50' : 'text-zinc-600'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${step === num ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}>
-                {num}
-            </div>
-            <span className={`font-bold uppercase tracking-widest text-xs ${step === num ? 'text-white' : 'text-zinc-600'}`}>{label}</span>
-        </div>
-    );
+    // 2. Handle Crop Completion
+    const onCropComplete = (croppedBase64: string) => {
+        setLogoUrl(croppedBase64); // Save the result
+        setTempImageSrc(null);     // Close modal
+    };
+
+    const handleCreate = async () => {
+        if (!name) return;
+        setIsSubmitting(true);
+        try {
+            const id = await createTournament(name, logoUrl, config);
+            navigate(`/tournament/${id}/manage`);
+        } catch (error) {
+            console.error(error);
+            alert("Failed to create tournament.");
+            setIsSubmitting(false);
+        }
+    };
+
+    // --- RENDER ---
 
     return (
-        <div className="min-h-screen bg-black text-white font-sans flex flex-col md:flex-row">
+        <div className="min-h-screen bg-black text-white font-sans flex items-center justify-center p-4">
 
-            {/* SIDEBAR (Progress) */}
-            <aside className="w-full md:w-80 border-r border-zinc-800 bg-zinc-950 p-6 flex flex-col justify-between">
-                <div>
-                    <button onClick={() => navigate('/tournament')} className="text-zinc-500 hover:text-white text-xs font-bold uppercase tracking-widest mb-8 flex items-center gap-2">
-                        &larr; Cancel Setup
-                    </button>
-                    <h1 className="text-2xl font-black italic uppercase text-white mb-2">Setup Studio</h1>
-                    <p className="text-xs text-zinc-500 mb-8">Configure your multi-sport event infrastructure.</p>
+            {/* Cropper Modal Overlay */}
+            {tempImageSrc && (
+                <ImageCropperModal
+                    imageSrc={tempImageSrc}
+                    onCancel={() => setTempImageSrc(null)}
+                    onCropComplete={onCropComplete}
+                />
+            )}
 
-                    <div className="space-y-2">
-                        <StepIndicator num={1} label="Identity" />
-                        <StepIndicator num={2} label="Sports Catalog" />
-                        <StepIndicator num={3} label="Infrastructure" />
-                        <StepIndicator num={4} label="Launch" />
+            <div className="w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col h-[80vh]">
+
+                {/* Header */}
+                <div className="bg-zinc-950 border-b border-zinc-800 p-6 flex justify-between items-center shrink-0">
+                    <div>
+                        <h1 className="text-xl font-black italic uppercase text-white">New Tournament</h1>
+                        <div className="flex gap-2 mt-2">
+                            <div className={`h-1 w-8 rounded-full ${step >= 1 ? 'bg-yellow-500' : 'bg-zinc-800'}`}></div>
+                            <div className={`h-1 w-8 rounded-full ${step >= 2 ? 'bg-yellow-500' : 'bg-zinc-800'}`}></div>
+                            <div className={`h-1 w-8 rounded-full ${step >= 3 ? 'bg-yellow-500' : 'bg-zinc-800'}`}></div>
+                        </div>
                     </div>
+                    <button onClick={() => navigate('/tournament')} className="text-zinc-500 hover:text-white text-2xl">&times;</button>
                 </div>
-                <div className="text-[10px] text-zinc-700 font-mono uppercase">System Ready • v2.0</div>
-            </aside>
 
-            {/* MAIN CONTENT */}
-            <main className="flex-1 flex flex-col">
-                <div className="flex-1 p-8 md:p-16 max-w-4xl mx-auto w-full">
+                {/* Content */}
+                <div className="flex-1 p-8 overflow-y-auto">
 
-                    {/* STEP 1: IDENTITY */}
+                    {/* STEP 1: SPORTS SELECTION */}
                     {step === 1 && (
-                        <div className="animate-in fade-in slide-in-from-right duration-500 space-y-8">
-                            <h2 className="text-4xl font-black italic uppercase text-white">Event Identity</h2>
-                            <div className="space-y-6">
-                                <div>
-                                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Tournament Name</label>
-                                    <input
-                                        autoFocus
-                                        value={name}
-                                        onChange={e => setName(e.target.value)}
-                                        placeholder="e.g. KREEDOTSAV 2026"
-                                        className="w-full bg-zinc-900 border border-zinc-800 p-6 text-2xl font-black text-white uppercase rounded-xl focus:border-yellow-500 outline-none transition-all placeholder:text-zinc-800"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Branding Logo URL (Optional)</label>
-                                    <input
-                                        value={logoUrl}
-                                        onChange={e => setLogoUrl(e.target.value)}
-                                        placeholder="https://..."
-                                        className="w-full bg-black border border-zinc-800 p-4 text-sm text-zinc-300 rounded-xl focus:border-yellow-500 outline-none"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* STEP 2: SPORTS CATALOG */}
-                    {step === 2 && (
-                        <div className="animate-in fade-in slide-in-from-right duration-500 space-y-8">
-                            <h2 className="text-4xl font-black italic uppercase text-white">Select Sports</h2>
+                        <div className="space-y-6 animate-in slide-in-from-right-8 duration-500">
+                            <h2 className="text-lg font-bold uppercase tracking-wide">Select Sports</h2>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {(['basketball', 'badminton', 'volleyball'] as SportType[]).map(sport => (
-                                    <button
-                                        key={sport}
-                                        onClick={() => toggleSport(sport)}
-                                        className={`p-6 rounded-xl border flex flex-col items-start gap-4 transition-all group ${config.sports[sport]?.isActive ? 'bg-yellow-900/10 border-yellow-500' : 'bg-zinc-900 border-zinc-800 opacity-60 hover:opacity-100'}`}
-                                    >
-                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${config.sports[sport]?.isActive ? 'border-yellow-500 bg-yellow-500' : 'border-zinc-600'}`}>
-                                            {config.sports[sport]?.isActive && <span className="text-black text-xs font-bold">✓</span>}
+                                {(['basketball', 'badminton', 'volleyball'] as const).map(sport => (
+                                    <div key={sport} className={`p-4 border rounded-xl cursor-pointer transition-all ${config.sports[sport]?.isActive ? 'bg-yellow-900/20 border-yellow-600' : 'bg-black border-zinc-800 opacity-60 hover:opacity-100'}`} onClick={() => updateSport(sport, 'isActive', !config.sports[sport]?.isActive)}>
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className="text-2xl capitalize">{sport}</span>
+                                            <div className={`w-4 h-4 rounded-full border-2 ${config.sports[sport]?.isActive ? 'bg-yellow-500 border-yellow-500' : 'border-zinc-600'}`}></div>
                                         </div>
-                                        <span className={`text-xl font-black uppercase italic ${config.sports[sport]?.isActive ? 'text-white' : 'text-zinc-500'}`}>{sport}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* STEP 3: INFRASTRUCTURE */}
-                    {step === 3 && (
-                        <div className="animate-in fade-in slide-in-from-right duration-500 space-y-8">
-                            <h2 className="text-4xl font-black italic uppercase text-white">Infrastructure Map</h2>
-                            <p className="text-zinc-400 text-sm">Assign physical courts to each active sport.</p>
-
-                            <div className="space-y-4">
-                                {(Object.keys(config.sports) as SportType[]).filter(s => config.sports[s]?.isActive).map(sport => (
-                                    <div key={sport} className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 flex justify-between items-center">
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-2xl">🏟️</span>
-                                            <span className="text-lg font-black uppercase italic">{sport}</span>
-                                        </div>
-                                        <div className="flex items-center gap-4 bg-black p-2 rounded-lg border border-zinc-800">
-                                            <button onClick={() => updateCourts(sport, (config.sports[sport]?.courts || 1) - 1)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 rounded text-white font-bold">-</button>
-                                            <div className="text-center">
-                                                <div className="text-xl font-mono font-bold text-yellow-500 w-12">{config.sports[sport]?.courts}</div>
-                                                <div className="text-[9px] text-zinc-600 uppercase font-bold">Courts</div>
-                                            </div>
-                                            <button onClick={() => updateCourts(sport, (config.sports[sport]?.courts || 1) + 1)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 rounded text-white font-bold">+</button>
+                                        <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">
+                                            {config.sports[sport]?.isActive ? 'Enabled' : 'Disabled'}
                                         </div>
                                     </div>
                                 ))}
-                                {Object.values(config.sports).every(s => !s?.isActive) && (
-                                    <div className="text-red-500 font-bold border border-red-900/50 bg-red-900/10 p-4 rounded">⚠️ No sports selected. Go back to Step 2.</div>
-                                )}
                             </div>
                         </div>
                     )}
 
-                    {/* STEP 4: LAUNCH */}
-                    {step === 4 && (
-                        <div className="animate-in fade-in slide-in-from-right duration-500 space-y-8 text-center pt-12">
-                            <div className="w-24 h-24 bg-yellow-500 rounded-full mx-auto flex items-center justify-center animate-bounce">
-                                <span className="text-4xl">🚀</span>
+                    {/* STEP 2: COURTS CONFIG */}
+                    {step === 2 && (
+                        <div className="space-y-6 animate-in slide-in-from-right-8 duration-500">
+                            <h2 className="text-lg font-bold uppercase tracking-wide">Configure Venues</h2>
+                            <div className="space-y-4">
+                                {(Object.entries(config.sports) as [keyof TournamentConfig['sports'], any][]).map(([sport, data]) => {
+                                    if (!data.isActive) return null;
+                                    return (
+                                        <div key={sport} className="bg-black border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center text-lg capitalize font-bold text-zinc-500">
+                                                    {sport[0]}
+                                                </div>
+                                                <span className="font-bold text-white capitalize">{sport}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <button onClick={() => updateSport(sport, 'courts', Math.max(1, data.courts - 1))} className="w-8 h-8 rounded bg-zinc-900 text-white hover:bg-zinc-800">-</button>
+                                                <span className="font-mono font-bold w-4 text-center">{data.courts}</span>
+                                                <button onClick={() => updateSport(sport, 'courts', Math.min(10, data.courts + 1))} className="w-8 h-8 rounded bg-zinc-900 text-white hover:bg-zinc-800">+</button>
+                                                <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest ml-2">Courts</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                            <h2 className="text-4xl font-black italic uppercase text-white">Ready to Launch?</h2>
-                            <div className="max-w-md mx-auto bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-left space-y-4">
-                                <div className="flex justify-between">
-                                    <span className="text-zinc-500 text-xs font-bold uppercase">Event Name</span>
-                                    <span className="text-white font-bold">{name}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-zinc-500 text-xs font-bold uppercase">Active Sports</span>
-                                    <span className="text-white font-bold">{Object.values(config.sports).filter(s => s?.isActive).length}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-zinc-500 text-xs font-bold uppercase">Total Courts</span>
-                                    <span className="text-white font-bold">{Object.values(config.sports).reduce((acc, curr) => acc + (curr?.isActive ? (curr.courts || 0) : 0), 0)}</span>
+                        </div>
+                    )}
+
+                    {/* STEP 3: BRANDING (UPDATED WITH IMAGE UPLOAD) */}
+                    {step === 3 && (
+                        <div className="space-y-8 animate-in slide-in-from-right-8 duration-500 max-w-lg mx-auto">
+                            <div>
+                                <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Tournament Name</label>
+                                <input
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="w-full bg-black border border-zinc-800 p-4 text-lg font-bold text-white rounded-lg outline-none focus:border-yellow-600 uppercase placeholder-zinc-700"
+                                    placeholder="E.G. SUMMER LEAGUE 2026"
+                                />
+                            </div>
+
+                            {/* NEW: Image Upload Section */}
+                            <div>
+                                <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-4 uppercase">Official Logo</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={onSelectFile}
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                />
+
+                                <div className="flex items-center gap-6">
+                                    <div
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="relative group w-32 h-32 rounded-full bg-zinc-900 border-2 border-dashed border-zinc-700 flex items-center justify-center overflow-hidden hover:border-yellow-500 hover:bg-zinc-800 transition-all cursor-pointer shadow-lg"
+                                    >
+                                        {logoUrl ? (
+                                            <img src={logoUrl} alt="Logo Preview" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-3xl text-zinc-600 group-hover:text-yellow-500 mb-1">+</span>
+                                                <span className="text-[9px] font-bold text-zinc-600 uppercase group-hover:text-white">Upload</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="text-sm font-bold text-white mb-1">Upload Brand Asset</h3>
+                                        <p className="text-xs text-zinc-500 leading-relaxed mb-3">
+                                            Select a high-quality PNG or JPG from your device. <br />
+                                            You will be able to crop it to fit the circular profile.
+                                        </p>
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="text-[10px] font-bold uppercase tracking-widest text-yellow-600 hover:text-yellow-500 underline"
+                                        >
+                                            Browse Files
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
+
                 </div>
 
-                {/* FOOTER CONTROLS */}
-                <div className="p-8 border-t border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+                {/* Footer Controls */}
+                <div className="bg-zinc-950 border-t border-zinc-800 p-6 flex justify-between shrink-0">
                     <button
-                        onClick={() => step > 1 && setStep(step - 1)}
+                        onClick={() => setStep(Math.max(1, step - 1))}
                         disabled={step === 1}
-                        className={`text-xs font-bold uppercase tracking-widest px-6 py-4 rounded ${step === 1 ? 'opacity-0' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                        className="px-6 py-3 rounded text-zinc-500 font-bold uppercase text-xs tracking-widest hover:text-white disabled:opacity-30 disabled:hover:text-zinc-500"
                     >
-                        &larr; Previous
+                        Back
                     </button>
-
-                    {step < 4 ? (
+                    {step < 3 ? (
                         <button
                             onClick={() => setStep(step + 1)}
-                            disabled={!name || (step === 3 && Object.values(config.sports).every(s => !s?.isActive))}
-                            className="bg-white hover:bg-zinc-200 text-black font-bold px-8 py-4 rounded-lg uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            className="bg-white hover:bg-zinc-200 text-black px-8 py-3 rounded font-black uppercase text-xs tracking-widest transition-transform hover:-translate-y-0.5"
                         >
-                            Next Step &rarr;
+                            Next Step
                         </button>
                     ) : (
                         <button
-                            onClick={handleLaunch}
-                            disabled={loading}
-                            className="bg-yellow-500 hover:bg-yellow-400 text-black font-black px-12 py-4 rounded-lg uppercase tracking-widest text-sm shadow-[0_0_30px_rgba(234,179,8,0.4)] transition-all"
+                            onClick={handleCreate}
+                            disabled={!name || isSubmitting}
+                            className="bg-yellow-600 hover:bg-yellow-500 text-black px-8 py-3 rounded font-black uppercase text-xs tracking-widest shadow-lg shadow-yellow-900/20 transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
                         >
-                            {loading ? 'Initializing...' : 'Launch Tournament'}
+                            {isSubmitting ? 'Creating System...' : 'Launch Tournament'}
                         </button>
                     )}
                 </div>
-            </main>
+            </div>
         </div>
     );
 };
