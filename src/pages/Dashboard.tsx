@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BasketballGame } from '../types';
 import { logoutUser, subscribeToAuth } from '../services/authService';
-import { subscribeToLiveGames, deleteGame } from '../services/gameService'; // Imported deleteGame
+import { subscribeToLiveGames, deleteGame } from '../services/gameService';
 import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
@@ -19,7 +19,8 @@ export const Dashboard: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | null>(null);
+
+  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | 'confirmTournament' | null>(null);
 
   const [showInstallCard, setShowInstallCard] = useState(() => {
     return localStorage.getItem('box_dismiss_install') !== 'true';
@@ -79,11 +80,15 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  // --- DELETE HANDLER ---
   const handleDeleteGame = (code: string) => {
     if (window.confirm("Are you sure you want to delete this session? This cannot be undone.")) {
       deleteGame(code);
     }
+  };
+
+  const handleEnterTournament = () => {
+    setActiveModal(null);
+    navigate('/tournament');
   };
 
   const getInstallMessage = () => {
@@ -131,6 +136,8 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="space-y-1 flex-1 overflow-y-auto">
             <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
+            <MenuItem label="Tournament Mode" icon="🏆" onClick={() => { setIsMenuOpen(false); setActiveModal('confirmTournament'); }} highlight subtitle="League Management" />
+
             <div className="pt-2 mt-2">
               <MenuItem label={isInstalled ? "Unit Provisioned" : "Provision Hardware"} icon={isInstalled ? "✅" : "📱"} onClick={() => { setIsMenuOpen(false); setActiveModal('provision'); }} highlight={!isInstalled} subtitle={isInstalled ? "Device Ready" : "Setup Referee Unit"} />
             </div>
@@ -221,8 +228,9 @@ export const Dashboard: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(activeTab === 'my' ? myGames : liveFeed).map(g => (
-                <div key={g.code} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden ${activeTab === 'my' ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
+              {(activeTab === 'my' ? myGames : liveFeed).map((g, index) => (
+                // FIXED: Combined Key
+                <div key={`${g.code}-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden ${activeTab === 'my' ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
                   {/* Status Color Bar */}
                   <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${activeTab === 'my' ? 'bg-red-600' : 'bg-blue-600'}`}></div>
 
@@ -303,6 +311,28 @@ export const Dashboard: React.FC = () => {
               </div>
             )}
             {isInstalled && <button onClick={() => setActiveModal(null)} className="w-full bg-zinc-800 text-white font-bold py-4 uppercase tracking-widest text-[10px] mt-4">Close</button>}
+          </div>
+        </Modal>
+      )}
+
+      {activeModal === 'confirmTournament' && (
+        <Modal title="Enter Tournament Mode" onClose={() => setActiveModal(null)}>
+          <div className="space-y-6 text-center">
+            <div className="w-16 h-16 bg-yellow-900/20 rounded-full flex items-center justify-center mx-auto border border-yellow-900/50">
+              <span className="text-3xl">🏆</span>
+            </div>
+            <p className="text-zinc-400 text-xs leading-relaxed">
+              You are about to switch to the <strong>Tournament Management Console</strong>.
+              <br />This allows you to organize leagues, brackets, and manage multiple scorers.
+            </p>
+            <div className="flex gap-4">
+              <button onClick={() => setActiveModal(null)} className="flex-1 py-3 bg-transparent border border-zinc-700 text-zinc-400 hover:text-white font-bold uppercase tracking-widest text-xs rounded transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleEnterTournament} className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-black font-black uppercase tracking-widest text-xs rounded shadow-lg shadow-yellow-900/20 transition-colors">
+                Enter
+              </button>
+            </div>
           </div>
         </Modal>
       )}
