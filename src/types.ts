@@ -1,15 +1,12 @@
 // src/types.ts
 
-// ==========================================
-// 1. PLAYER & TEAM TYPES
-// ==========================================
+// ... (Keep Player, TeamData, GameSettings, GameState, BasketballGame as they were) ...
 
 export interface Player {
   id: string;
   name: string;
   number: string;
   position: string;
-  // Stats
   points: number;
   fouls: number;
   assists: number;
@@ -38,17 +35,13 @@ export interface TeamData {
   players: Player[];
 }
 
-// ==========================================
-// 2. GAME SETTINGS & STATE
-// ==========================================
-
 export interface GameSettings {
   gameName: string;
   periodDuration: number;
   shotClockDuration: number;
   periodType: 'quarter' | 'half';
-  courtNumber?: string;   // e.g. "1", "2" (Used for Wall View)
-  tournamentId?: string;  // Links this game to a specific Tournament
+  courtNumber?: string;
+  tournamentId?: string;
 }
 
 export interface GameState {
@@ -60,14 +53,10 @@ export interface GameState {
   possession: 'A' | 'B';
 }
 
-// ==========================================
-// 3. MAIN GAME OBJECT
-// ==========================================
-
 export interface BasketballGame {
-  code: string;           // The unique 6-digit Game Code
-  hostId: string;         // User ID of the creator
-  sport: string;          // 'basketball', 'badminton', etc.
+  code: string;
+  hostId: string;
+  sport: string;
   status: 'live' | 'finished';
   gameType: 'local' | 'online';
   createdAt: number;
@@ -88,24 +77,33 @@ export interface TournamentConfig {
   sports: {
     [key in SportType]?: {
       isActive: boolean;
-      courts: number; // Number of active courts for this sport (e.g. 6)
+      courts: number;
     };
   };
 }
 
+// NEW: Definition for a Scheduled Match
+export interface TournamentFixture {
+  id: string;
+  tournamentId: string;
+  sport: SportType;
+  teamA: string;
+  teamB: string;
+  court: string; // "Court 1"
+  time: string;  // "10:00 AM"
+  status: 'scheduled' | 'live' | 'completed';
+  gameCode?: string; // Links to the live BasketballGame when started
+}
+
 export interface Tournament {
-  id: string;             // e.g. "KREE26"
-  adminId: string;        // The Creator's User ID
-  name: string;           // "Kreedotsav 2026"
-  logoUrl?: string;       // Optional URL for branding
-  scorerPin: string;      // "8899" - Shared access code for volunteers
+  id: string;
+  adminId: string;
+  name: string;
+  logoUrl?: string;
+  scorerPin: string;
   status: 'draft' | 'active' | 'archived';
-
-  // Infrastructure Map (Which sports are active & how many courts)
   config: TournamentConfig;
-
-  // Security & Permissions
-  approvedScorers: string[]; // List of User IDs allowed to score games
+  approvedScorers: string[];
   pendingRequests: {
     [userId: string]: {
       displayName: string;
@@ -114,6 +112,5 @@ export interface Tournament {
       status: 'pending' | 'approved' | 'rejected';
     }
   };
-
   createdAt: number;
 }
