@@ -1,7 +1,6 @@
 // src/types.ts
 
-// ... (Keep Player, TeamData, GameSettings, GameState, BasketballGame as they were) ...
-
+// ... (Keep Player, TeamData, GameSettings, GameState, BasketballGame as is) ...
 export interface Player {
   id: string;
   name: string;
@@ -71,28 +70,44 @@ export interface BasketballGame {
 // 4. TOURNAMENT ARCHITECTURE
 // ==========================================
 
-export type SportType = 'basketball' | 'badminton' | 'volleyball';
+export type SportType = 'basketball' | 'badminton' | 'volleyball' | 'kabaddi' | 'football' | 'cricket';
+export type TournamentFormat = 'random' | 'knockout' | 'league';
+export type GenderCategory = 'men' | 'women' | 'mixed';
 
-export interface TournamentConfig {
-  sports: {
-    [key in SportType]?: {
-      isActive: boolean;
-      courts: number;
-    };
-  };
+export interface DivisionConfig {
+  id: string;
+  sport: SportType;
+  gender: GenderCategory;
+  isActive: boolean;
+  format: TournamentFormat;
+  bracketSize?: number;
+  // UPDATED STATUSES
+  status: 'setup_required' | 'draft' | 'published' | 'completed';
 }
 
-// NEW: Definition for a Scheduled Match
 export interface TournamentFixture {
   id: string;
   tournamentId: string;
+  divisionId: string;
   sport: SportType;
+  gender: GenderCategory;
+
   teamA: string;
   teamB: string;
-  court: string; // "Court 1"
-  time: string;  // "10:00 AM"
+  court: string;
+  time: string;
+  date?: string;
+
   status: 'scheduled' | 'live' | 'completed';
-  gameCode?: string; // Links to the live BasketballGame when started
+  gameCode?: string;
+
+  // Bracket Logic
+  round?: number;
+  matchNumber?: number;
+  nextMatchId?: string | null;
+  bracketParent?: 'A' | 'B';
+  winnerSide?: 'A' | 'B';
+  isBye?: boolean;
 }
 
 export interface Tournament {
@@ -100,9 +115,25 @@ export interface Tournament {
   adminId: string;
   name: string;
   logoUrl?: string;
+
+  organizer?: string;
+  location?: string;
+  startDate?: string;
+  endDate?: string;
+
   scorerPin: string;
   status: 'draft' | 'active' | 'archived';
-  config: TournamentConfig;
+
+  sportConfig: {
+    [key in SportType]?: {
+      courts: number;
+    }
+  };
+
+  divisions: {
+    [divisionId: string]: DivisionConfig;
+  };
+
   approvedScorers: string[];
   pendingRequests: {
     [userId: string]: {

@@ -1,89 +1,76 @@
+// src/App.tsx
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './services/firebase';
+import { usePWAInstall } from './hooks/usePWAInstall';
+
+// PAGE IMPORTS
 import { LandingPage } from './pages/LandingPage';
 import { Dashboard } from './pages/Dashboard';
 import { GameSetup } from './pages/GameSetup';
 import { HostConsole } from './pages/HostConsole';
 import { SpectatorView } from './pages/SpectatorView';
 import { WallView } from './pages/WallView';
+import { TabletController } from './pages/TabletController';
+import { StandaloneTablet } from './pages/StandaloneTablet';
+
+// --- NEW TOURNAMENT MODULE IMPORTS ---
 import { TournamentDashboard } from './pages/TournamentDashboard';
 import { TournamentSetup } from './pages/TournamentSetup';
 import { TournamentManager } from './pages/TournamentManager';
-import { TabletController } from './pages/TabletController';
-import { StandaloneTablet } from './pages/StandaloneTablet';
-import ProtectedHostRoute from './components/ProtectedHostRoute';
-import { startAutoSync } from './services/syncService';
+
+// COMPONENTS
+import { ProtectedHostRoute } from './components/ProtectedHostRoute';
+import { InstallPrompt } from './components/InstallPrompt';
+import './App.css';
 
 function App() {
-  // Initialize Auto-Sync Service
+  const { isInstallable, installPWA } = usePWAInstall();
+
+  // Basic Auth Listener (Optional: for global state if needed)
   useEffect(() => {
-    startAutoSync();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) console.log("User logged in:", user.uid);
+    });
+    return () => unsubscribe();
   }, []);
 
   return (
     <Router>
-      <div className="min-h-screen bg-black text-white font-sans">
+      <div className="min-h-screen bg-black text-white">
         <Routes>
-          {/* Public Routes */}
+          {/* PUBLIC ROUTES */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/watch/:gameCode" element={<SpectatorView />} />
-          <Route path="/wall" element={<WallView />} />
+          <Route path="/spectator/:gameId" element={<SpectatorView />} />
+          <Route path="/wall/:gameId" element={<WallView />} />
 
-          {/* Protected Dashboard Routes */}
-          <Route path="/dashboard" element={
-            <ProtectedHostRoute>
-              <Dashboard />
-            </ProtectedHostRoute>
-          } />
+          {/* PROTECTED HOST ROUTES */}
+          <Route path="/dashboard" element={<ProtectedHostRoute><Dashboard /></ProtectedHostRoute>} />
+          <Route path="/setup" element={<ProtectedHostRoute><GameSetup /></ProtectedHostRoute>} />
+          <Route path="/host/:gameCode" element={<ProtectedHostRoute><HostConsole /></ProtectedHostRoute>} />
 
-          <Route path="/setup" element={
-            <ProtectedHostRoute>
-              <GameSetup />
-            </ProtectedHostRoute>
-          } />
+          {/* TABLET ROUTES */}
+          <Route path="/tablet" element={<TabletController />} />
+          <Route path="/tablet/:gameCode" element={<StandaloneTablet />} />
 
-          {/* Tournament Routes */}
-          <Route path="/tournament" element={
-            <ProtectedHostRoute>
-              <TournamentDashboard />
-            </ProtectedHostRoute>
-          } />
+          {/* --- TOURNAMENT MODULE ROUTES (NEW) --- */}
 
-          <Route path="/tournament/create" element={
-            <ProtectedHostRoute>
-              <TournamentSetup />
-            </ProtectedHostRoute>
-          } />
+          {/* 1. The Hub: Lists all tournaments */}
+          <Route path="/tournament" element={<ProtectedHostRoute><TournamentDashboard /></ProtectedHostRoute>} />
 
-          <Route path="/tournament/:id/manage" element={
-            <ProtectedHostRoute>
-              <TournamentManager />
-            </ProtectedHostRoute>
-          } />
+          {/* 2. The Wizard: Create a new event */}
+          <Route path="/tournament/setup" element={<ProtectedHostRoute><TournamentSetup /></ProtectedHostRoute>} />
 
-          {/* Host Console */}
-          <Route path="/host/:gameCode" element={
-            <ProtectedHostRoute>
-              <HostConsole />
-            </ProtectedHostRoute>
-          } />
+          {/* 3. The Brain: Manage a specific event (Bracket, Schedule, Lifecycle) */}
+          <Route path="/tournament/:id/manage" element={<ProtectedHostRoute><TournamentManager /></ProtectedHostRoute>} />
 
-          {/* Tablet Controller Routes */}
-          <Route path="/tablet/standalone" element={
-            <ProtectedHostRoute>
-              <StandaloneTablet />
-            </ProtectedHostRoute>
-          } />
-
-          <Route path="/tablet/:gameCode" element={
-            <ProtectedHostRoute>
-              <TabletController />
-            </ProtectedHostRoute>
-          } />
-
-          {/* Fallback */}
+          {/* FALLBACK */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+
+        {/* PWA INSTALL PROMPT */}
+        {isInstallable && <InstallPrompt onInstall={installPWA} />}
       </div>
     </Router>
   );
