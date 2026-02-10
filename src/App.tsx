@@ -1,4 +1,3 @@
-// src/App.tsx
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -21,14 +20,15 @@ import { TournamentSetup } from './pages/TournamentSetup';
 import { TournamentManager } from './pages/TournamentManager';
 
 // COMPONENTS
-import { ProtectedHostRoute } from './components/ProtectedHostRoute';
+// FIX: Default Import (No Braces)
+import ProtectedHostRoute from './components/ProtectedHostRoute';
 import { InstallPrompt } from './components/InstallPrompt';
 import './App.css';
 
 function App() {
   const { isInstallable, installPWA } = usePWAInstall();
 
-  // Basic Auth Listener (Optional: for global state if needed)
+  // Basic Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) console.log("User logged in:", user.uid);
@@ -54,7 +54,7 @@ function App() {
           <Route path="/tablet" element={<TabletController />} />
           <Route path="/tablet/:gameCode" element={<StandaloneTablet />} />
 
-          {/* --- TOURNAMENT MODULE ROUTES (NEW) --- */}
+          {/* --- TOURNAMENT MODULE ROUTES --- */}
 
           {/* 1. The Hub: Lists all tournaments */}
           <Route path="/tournament" element={<ProtectedHostRoute><TournamentDashboard /></ProtectedHostRoute>} />
@@ -62,7 +62,7 @@ function App() {
           {/* 2. The Wizard: Create a new event */}
           <Route path="/tournament/setup" element={<ProtectedHostRoute><TournamentSetup /></ProtectedHostRoute>} />
 
-          {/* 3. The Brain: Manage a specific event (Bracket, Schedule, Lifecycle) */}
+          {/* 3. The Brain: Manage a specific event */}
           <Route path="/tournament/:id/manage" element={<ProtectedHostRoute><TournamentManager /></ProtectedHostRoute>} />
 
           {/* FALLBACK */}

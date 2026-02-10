@@ -53,7 +53,6 @@ const ProtectedHostRoute: React.FC<ProtectedHostRouteProps> = ({ children }) => 
     }
 
     // 2. If a gameCode is present, must be the owner
-    // (If no gameCode, isOwner defaults to true in the effect above)
     if (gameCode && !isOwner) {
         return (
             <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white">
