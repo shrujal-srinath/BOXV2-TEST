@@ -1,6 +1,6 @@
-// BracketEditor.tsx - PROFESSIONAL TOURNAMENT BRACKET (PRODUCTION READY)
-// Standards: NCAA/FIBA bracket placement, even BYE distribution, inline editing
-// Features: Smart connection lines, professional seeding, real-time updates
+// BracketEditor.tsx - FINAL POLISHED PRODUCTION VERSION
+// Theme: Tournament consistency (zinc/black/yellow + green for LIVE only)
+// Specs: Yellow BYE bars, center lines shifting to winner, subtle hover states
 
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import type { TournamentFixture } from '../types';
@@ -19,7 +19,6 @@ const CARD_WIDTH = 280;
 const CARD_HEIGHT = 110;
 const COLUMN_GAP = 180;
 
-// Dynamic spacing calculation
 const calculateRowHeight = (bracketSize: number) => {
     if (bracketSize <= 8) return 200;
     if (bracketSize <= 16) return 160;
@@ -34,7 +33,6 @@ export const BracketEditor: React.FC<Props> = ({
     divisionStatus,
     isEditMode
 }) => {
-    // STATE
     const [hoveredMatch, setHoveredMatch] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [celebratingMatch, setCelebratingMatch] = useState<string | null>(null);
@@ -44,7 +42,6 @@ export const BracketEditor: React.FC<Props> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Calculate bracket size
     const bracketSize = useMemo(() => {
         const maxRound = Math.max(...fixtures.map(f => f.round || 0));
         return Math.pow(2, maxRound);
@@ -53,7 +50,6 @@ export const BracketEditor: React.FC<Props> = ({
     const ROW_HEIGHT = calculateRowHeight(bracketSize);
     const maxRound = useMemo(() => Math.max(...fixtures.map(f => f.round || 0)), [fixtures]);
 
-    // Focus input when editing starts
     useEffect(() => {
         if (editingTeam && inputRef.current) {
             inputRef.current.focus();
@@ -79,7 +75,6 @@ export const BracketEditor: React.FC<Props> = ({
 
         const positions = new Map<string, { x: number, y: number }>();
 
-        // Position Round 1
         const round1 = rounds[1] || [];
         round1.forEach(match => {
             const x = 0;
@@ -87,7 +82,6 @@ export const BracketEditor: React.FC<Props> = ({
             positions.set(match.id, { x, y });
         });
 
-        // Position subsequent rounds
         for (let r = 2; r <= maxRnd; r++) {
             const currentRoundMatches = rounds[r] || [];
             currentRoundMatches.forEach(match => {
@@ -113,7 +107,8 @@ export const BracketEditor: React.FC<Props> = ({
             });
         }
 
-        // SMART SVG CONNECTION LINES
+        // SMART CONNECTION LINES
+        // Rule: From CENTER of two teams, shift to winner after declaration
         const paths: JSX.Element[] = [];
         fixtures.forEach(match => {
             if (!match.nextMatchId) return;
@@ -123,10 +118,17 @@ export const BracketEditor: React.FC<Props> = ({
                 const hasWinner = match.winnerSide !== undefined;
                 const isBye = match.isBye;
 
-                // PROFESSIONAL STANDARD: Line comes from middle until winner declared
+                // Calculate center point between the two team slots
+                const teamACenter = CARD_HEIGHT / 4;  // Center of Team A slot
+                const teamBCenter = (CARD_HEIGHT * 3) / 4;  // Center of Team B slot
+                const centerBetweenTeams = (teamACenter + teamBCenter) / 2;  // Midpoint
+
+                // Line position logic:
+                // BEFORE winner: From center between both teams
+                // AFTER winner: From the winning team's center
                 const startY = hasWinner || isBye
-                    ? start.y + (match.winnerSide === 'A' || match.teamB === 'BYE' ? CARD_HEIGHT / 4 : (CARD_HEIGHT * 3) / 4)
-                    : start.y + CARD_HEIGHT / 2; // From middle if no winner
+                    ? start.y + (match.winnerSide === 'A' || match.teamB === 'BYE' ? teamACenter : teamBCenter)
+                    : start.y + centerBetweenTeams;
 
                 const x1 = start.x + CARD_WIDTH;
                 const y1 = startY;
@@ -140,23 +142,22 @@ export const BracketEditor: React.FC<Props> = ({
                 const isCompleted = match.winnerSide !== undefined;
                 const isLive = match.status === 'live';
 
+                // COLOR SCHEME: Zinc-gray + Yellow (completed) + Green (LIVE only)
+                const strokeColor = isLive ? '#22c55e' :  // Green for LIVE
+                    isCompleted || isBye ? '#eab308' :  // Yellow for completed
+                        '#52525b';  // Zinc for default
+
                 paths.push(
                     <path
                         key={`${match.id}-path`}
                         d={`M ${x1} ${y1} C ${controlPointX1} ${y1}, ${controlPointX2} ${y2}, ${x2} ${y2}`}
                         fill="none"
-                        stroke={
-                            isLive ? 'url(#liveGradient)' :
-                                isCompleted || isBye ? '#10b981' :
-                                    isHovered ? '#3b82f6' :
-                                        '#3f3f46'
-                        }
-                        strokeWidth={isHovered ? 3 : 2}
+                        stroke={strokeColor}
+                        strokeWidth={2}
                         className="transition-all duration-500"
                         style={{
-                            filter: isHovered ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.6))' :
-                                isLive ? 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.6))' :
-                                    isCompleted ? 'drop-shadow(0 0 4px rgba(16, 185, 129, 0.4))' : 'none'
+                            filter: isLive ? 'drop-shadow(0 0 6px rgba(34, 197, 94, 0.5))' :
+                                isCompleted ? 'drop-shadow(0 0 4px rgba(234, 179, 8, 0.3))' : 'none'
                         }}
                     />
                 );
@@ -197,12 +198,12 @@ export const BracketEditor: React.FC<Props> = ({
     const canRename = isAdmin && (divisionStatus === 'draft' || isEditMode);
     const canStartGame = isAdmin && divisionStatus === 'published' && !isEditMode;
 
-    // INLINE EDITING HANDLERS
+    // INLINE EDITING
     const handleStartEdit = (fixture: TournamentFixture, side: 'A' | 'B') => {
         if (!canRename || !fixture.round || fixture.round !== 1) return;
 
         const currentName = side === 'A' ? fixture.teamA : fixture.teamB;
-        if (currentName === 'BYE') return; // Don't edit the BYE text itself
+        if (currentName === 'BYE') return;
 
         setEditingTeam({ fixtureId: fixture.id, side });
         setEditValue(currentName === 'TBD' ? '' : currentName);
@@ -244,15 +245,13 @@ export const BracketEditor: React.FC<Props> = ({
     };
 
     const handleTeamClick = async (fixture: TournamentFixture, side: 'A' | 'B') => {
-        if (fixture.isBye && side === 'B') return; // Don't click on BYE slot
+        if (fixture.isBye && side === 'B') return;
 
-        // DRAFT MODE - INLINE EDIT (Round 1 only)
         if (canRename && fixture.round === 1) {
             handleStartEdit(fixture, side);
             return;
         }
 
-        // PUBLISHED MODE - DECLARE WINNER
         if (canStartGame) {
             const teamName = side === 'A' ? fixture.teamA : fixture.teamB;
             if (teamName === 'TBD' || teamName === 'BYE') return;
@@ -313,7 +312,7 @@ export const BracketEditor: React.FC<Props> = ({
             <div className="absolute top-6 right-6 z-30 flex flex-col gap-2">
                 <button
                     onClick={handleZoomIn}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-blue-500 rounded-lg flex items-center justify-center text-white font-bold transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white font-bold transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -321,7 +320,7 @@ export const BracketEditor: React.FC<Props> = ({
                 </button>
                 <button
                     onClick={handleZoomOut}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-blue-500 rounded-lg flex items-center justify-center text-white font-bold transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white font-bold transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" />
@@ -329,13 +328,13 @@ export const BracketEditor: React.FC<Props> = ({
                 </button>
                 <button
                     onClick={handleZoomReset}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-blue-500 rounded-lg flex items-center justify-center text-white text-xs font-black transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white text-xs font-black transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
                 >
                     1:1
                 </button>
                 <button
                     onClick={handleZoomFit}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-blue-500 rounded-lg flex items-center justify-center text-white transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
@@ -364,7 +363,7 @@ export const BracketEditor: React.FC<Props> = ({
                                 y={pos.y}
                                 width={CARD_WIDTH}
                                 height={CARD_HEIGHT}
-                                fill={isLive ? '#22c55e' : isCompleted ? '#10b981' : '#3f3f46'}
+                                fill={isLive ? '#22c55e' : isCompleted ? '#eab308' : '#3f3f46'}
                                 stroke="#52525b"
                                 strokeWidth="3"
                                 opacity={isLive ? 0.9 : isCompleted ? 0.7 : 0.4}
@@ -395,16 +394,6 @@ export const BracketEditor: React.FC<Props> = ({
                     <div className="relative w-full h-full">
                         {/* SVG CONNECTION LINES */}
                         <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-                            <defs>
-                                <linearGradient id="liveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                    <stop offset="0%" stopColor="#10b981">
-                                        <animate attributeName="stop-color" values="#10b981; #22c55e; #10b981" dur="2s" repeatCount="indefinite" />
-                                    </stop>
-                                    <stop offset="100%" stopColor="#22c55e">
-                                        <animate attributeName="stop-color" values="#22c55e; #10b981; #22c55e" dur="2s" repeatCount="indefinite" />
-                                    </stop>
-                                </linearGradient>
-                            </defs>
                             {svgPaths}
                         </svg>
 
@@ -444,12 +433,17 @@ export const BracketEditor: React.FC<Props> = ({
                                         relative w-full h-full rounded-xl overflow-hidden backdrop-blur-md
                                         ${isDraft && isRound1 ? 'border-2 border-dashed border-yellow-500/40' :
                                             isLive ? 'border-2 border-green-500' :
-                                                isCompleted ? 'border border-green-500/30' :
+                                                isCompleted ? 'border border-yellow-500/30' :
                                                     'border border-zinc-700/50'}
                                         ${isHovered ? 'shadow-2xl shadow-blue-500/20 scale-105' : 'shadow-xl'}
                                         ${isFinal ? 'shadow-2xl shadow-yellow-500/30' : ''}
                                         transition-all duration-300
                                     `}>
+                                        {/* YELLOW ACCENT BAR FOR BYE MATCHES */}
+                                        {match.isBye && (
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500 z-20" />
+                                        )}
+
                                         <div className={`absolute inset-0 ${isLive ? 'bg-gradient-to-br from-green-950/80 via-zinc-900/90 to-zinc-950/90' :
                                                 isCompleted ? 'bg-gradient-to-br from-zinc-900/90 via-zinc-900/95 to-zinc-950/95' :
                                                     'bg-gradient-to-br from-zinc-900/70 via-zinc-900/80 to-zinc-950/90'
@@ -467,8 +461,8 @@ export const BracketEditor: React.FC<Props> = ({
                                                     {isFinal && <span className="text-lg">🏆</span>}
                                                 </div>
                                                 <div className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${isLive ? 'bg-green-500/20 text-green-400 animate-pulse' :
-                                                        match.isBye ? 'bg-zinc-800/50 text-zinc-600' :
-                                                            isCompleted ? 'bg-green-900/30 text-green-500' :
+                                                        match.isBye ? 'bg-yellow-500/20 text-yellow-500' :
+                                                            isCompleted ? 'bg-yellow-500/20 text-yellow-500' :
                                                                 'bg-zinc-800/50 text-zinc-500'
                                                     }`}>
                                                     {match.isBye ? 'BYE' : match.status}
@@ -481,8 +475,8 @@ export const BracketEditor: React.FC<Props> = ({
                                                 <div
                                                     onClick={() => !isEditingA && handleTeamClick(match, 'A')}
                                                     className={`flex-1 px-4 flex items-center justify-between border-b border-white/5 transition-all duration-200
-                                                        ${(canEdit || canStartGame) && match.teamA !== 'BYE' && !isEditingA ? 'cursor-pointer hover:bg-white/5' : ''}
-                                                        ${match.winnerSide === 'A' ? 'bg-green-500/10' : ''}`}
+                                                        ${(canEdit || canStartGame) && match.teamA !== 'BYE' && !isEditingA ? 'cursor-pointer hover:bg-yellow-500/5' : ''}
+                                                        ${match.winnerSide === 'A' ? 'bg-yellow-500/10' : ''}`}
                                                 >
                                                     {isEditingA ? (
                                                         <input
@@ -492,21 +486,21 @@ export const BracketEditor: React.FC<Props> = ({
                                                             onChange={(e) => setEditValue(e.target.value)}
                                                             onKeyDown={handleKeyDown}
                                                             onBlur={handleSaveEdit}
-                                                            className="flex-1 bg-zinc-800 text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none focus:ring-2 focus:ring-yellow-500"
+                                                            className="flex-1 bg-black border-2 border-yellow-500 text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none shadow-lg"
                                                             placeholder="Enter team name"
                                                             maxLength={30}
                                                         />
                                                     ) : (
                                                         <>
                                                             <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamA === 'TBD' ? 'text-zinc-600 italic font-normal' :
-                                                                    match.winnerSide === 'A' ? 'text-green-400' :
+                                                                    match.winnerSide === 'A' ? 'text-yellow-400' :
                                                                         'text-zinc-100'
                                                                 }`}>
                                                                 {match.teamA}
                                                             </span>
                                                             <div className="flex items-center gap-2">
                                                                 {canEdit && match.teamA !== 'BYE' && <span className="text-[8px] text-yellow-500 font-bold">EDIT</span>}
-                                                                {match.winnerSide === 'A' && <span className="text-green-500 text-sm">✓</span>}
+                                                                {match.winnerSide === 'A' && <span className="text-yellow-500 text-sm">✓</span>}
                                                             </div>
                                                         </>
                                                     )}
@@ -516,8 +510,8 @@ export const BracketEditor: React.FC<Props> = ({
                                                 <div
                                                     onClick={() => !isEditingB && match.teamB !== 'BYE' && handleTeamClick(match, 'B')}
                                                     className={`flex-1 px-4 flex items-center justify-between transition-all duration-200
-                                                        ${(canEdit || canStartGame) && match.teamB !== 'BYE' && !isEditingB ? 'cursor-pointer hover:bg-white/5' : ''}
-                                                        ${match.winnerSide === 'B' ? 'bg-green-500/10' : ''}`}
+                                                        ${(canEdit || canStartGame) && match.teamB !== 'BYE' && !isEditingB ? 'cursor-pointer hover:bg-yellow-500/5' : ''}
+                                                        ${match.winnerSide === 'B' ? 'bg-yellow-500/10' : ''}`}
                                                 >
                                                     {isEditingB ? (
                                                         <input
@@ -527,21 +521,21 @@ export const BracketEditor: React.FC<Props> = ({
                                                             onChange={(e) => setEditValue(e.target.value)}
                                                             onKeyDown={handleKeyDown}
                                                             onBlur={handleSaveEdit}
-                                                            className="flex-1 bg-zinc-800 text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none focus:ring-2 focus:ring-yellow-500"
+                                                            className="flex-1 bg-black border-2 border-yellow-500 text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none shadow-lg"
                                                             placeholder="Enter team name"
                                                             maxLength={30}
                                                         />
                                                     ) : (
                                                         <>
                                                             <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamB === 'TBD' || match.teamB === 'BYE' ? 'text-zinc-600 italic font-normal' :
-                                                                    match.winnerSide === 'B' ? 'text-green-400' :
+                                                                    match.winnerSide === 'B' ? 'text-yellow-400' :
                                                                         'text-zinc-100'
                                                                 }`}>
                                                                 {match.teamB}
                                                             </span>
                                                             <div className="flex items-center gap-2">
                                                                 {canEdit && match.teamB !== 'BYE' && <span className="text-[8px] text-yellow-500 font-bold">EDIT</span>}
-                                                                {match.winnerSide === 'B' && <span className="text-green-500 text-sm">✓</span>}
+                                                                {match.winnerSide === 'B' && <span className="text-yellow-500 text-sm">✓</span>}
                                                             </div>
                                                         </>
                                                     )}
@@ -566,7 +560,7 @@ export const BracketEditor: React.FC<Props> = ({
             {/* LEGEND */}
             <div className="absolute bottom-8 left-8 flex gap-4 text-xs text-zinc-500">
                 <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500" /><span>Live</span></div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500/30" /><span>Completed</span></div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-500" /><span>Completed</span></div>
                 {canRename && <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border-2 border-dashed border-yellow-500/40" /><span>Round 1 - Click to Edit</span></div>}
             </div>
         </div>

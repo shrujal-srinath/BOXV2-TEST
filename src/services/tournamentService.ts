@@ -1,13 +1,17 @@
-// tournamentService.ts - PROFESSIONAL TOURNAMENT STANDARDS
-// Features: NCAA/FIBA BYE distribution, even spacing, proper seeding
-// Fixed: Real-time updates, composite index error, BYE placement
+// src/services/tournamentService.ts
+// COMPLETE FILE - Ready to replace your existing tournamentService.ts
 
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot, arrayUnion, deleteField, orderBy, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot, arrayUnion, deleteField, orderBy, writeBatch, runTransaction } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { initializeNewGame } from './gameService';
 import type { Tournament, DivisionConfig, TournamentFixture, SportType, GenderCategory, TournamentFormat } from '../types';
 
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
 const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString();
+
 const generateId = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -15,7 +19,9 @@ const generateId = () => {
     return result;
 };
 
-// --- CORE TOURNAMENT MANAGEMENT ---
+// ============================================
+// CORE TOURNAMENT MANAGEMENT
+// ============================================
 
 export const createTournament = async (
     name: string,
@@ -89,7 +95,9 @@ export const removeDivision = async (tournamentId: string, divisionId: string) =
     await updateDoc(tRef, { [`divisions.${divisionId}`]: deleteField() });
 };
 
-// --- LIFECYCLE MANAGEMENT ---
+// ============================================
+// LIFECYCLE MANAGEMENT
+// ============================================
 
 export const activateDivision = async (
     tournamentId: string,
@@ -124,49 +132,29 @@ export const unpublishDivision = async (tournamentId: string, divisionId: string
     await updateDoc(tRef, { [`divisions.${divisionId}.status`]: 'draft' });
 };
 
-// PROFESSIONAL BYE PLACEMENT ALGORITHM
-// Standards: NCAA, FIBA, professional tournaments
-// Rules: 
-// 1. Top seeds get byes (reward for performance)
-// 2. Byes distributed evenly across bracket
-// 3. No clustering of byes in one section
+// ============================================
+// BRACKET GENERATION
+// ============================================
+
 const generateBracketSlots = (tId: string, divId: string, sport: SportType, gender: GenderCategory, teamCount: number, batch: any) => {
     const bracketSize = Math.pow(2, Math.ceil(Math.log2(teamCount)));
     const totalRounds = Math.log2(bracketSize);
     const numByes = bracketSize - teamCount;
+
     const round1Matches = bracketSize / 2;
+    const byeIndices = new Set<number>();
 
-    console.log(`🏀 Generating bracket: ${teamCount} teams → ${bracketSize} slots (${numByes} BYEs)`);
-
-    // PROFESSIONAL BYE DISTRIBUTION
-    // Pattern: Spread byes evenly across all matches
-    // Top seeds get byes (1st, 2nd, 3rd... get bye advantage)
-    const byePositions = new Set<number>();
-
-    if (numByes > 0) {
-        // NCAA STANDARD: Distribute byes in alternating pattern
-        // Match positions: 0, 1, 2, 3, 4, 5, 6, 7...
-        // First pass: Even positions (0, 2, 4, 6...)
-        // Second pass: Odd positions (1, 3, 5, 7...)
-
-        let allocatedByes = 0;
-
-        // First: Spread across even positions
-        for (let i = 0; i < round1Matches && allocatedByes < numByes; i += 2) {
-            byePositions.add(i);
-            allocatedByes++;
-        }
-
-        // Then: Fill odd positions if needed
-        for (let i = 1; i < round1Matches && allocatedByes < numByes; i += 2) {
-            byePositions.add(i);
-            allocatedByes++;
-        }
+    // Distribute BYEs evenly (NCAA standard)
+    let allocatedByes = 0;
+    for (let i = 0; i < round1Matches && allocatedByes < numByes; i++) {
+        if (i % 2 === 0) { byeIndices.add(i); allocatedByes++; }
+    }
+    for (let i = 0; i < round1Matches && allocatedByes < numByes; i++) {
+        if (!byeIndices.has(i)) { byeIndices.add(i); allocatedByes++; }
     }
 
     const getMatchId = (r: number, m: number) => `match_${divId}_${r}_${m}`;
 
-    // Generate all rounds
     for (let round = 1; round <= totalRounds; round++) {
         const matchesInRound = bracketSize / Math.pow(2, round);
 
@@ -182,8 +170,7 @@ const generateBracketSlots = (tId: string, divId: string, sport: SportType, gend
                 bracketParent = matchIdx % 2 === 0 ? 'A' : 'B';
             }
 
-            // Check if this is a BYE match
-            const isByeMatch = round === 1 && byePositions.has(matchIdx);
+            const isByeMatch = round === 1 && byeIndices.has(matchIdx);
 
             const fixture: TournamentFixture = {
                 id: matchId,
@@ -191,11 +178,11 @@ const generateBracketSlots = (tId: string, divId: string, sport: SportType, gend
                 divisionId: divId,
                 sport,
                 gender,
-                teamA: 'TBD', // Admin will enter actual team name
+                teamA: 'TBD',
                 teamB: isByeMatch ? 'BYE' : 'TBD',
                 court: 'Unassigned',
                 time: 'Pending',
-                status: 'scheduled', // Start as scheduled, not completed
+                status: isByeMatch ? 'completed' : 'scheduled',
                 round,
                 matchNumber: matchIdx,
                 nextMatchId,
@@ -203,43 +190,30 @@ const generateBracketSlots = (tId: string, divId: string, sport: SportType, gend
                 isBye: isByeMatch
             };
 
-            // Don't auto-complete BYE matches - let admin set team name first
-            // Once admin enters teamA, the BYE will auto-advance
+            if (isByeMatch) fixture.winnerSide = 'A';
 
             batch.set(doc(db, `tournaments/${tId}/fixtures`, matchId), fixture);
         }
     }
-
-    console.log(`✅ Generated ${round1Matches} Round 1 matches (${byePositions.size} BYEs distributed evenly)`);
 };
 
-// --- DATA ACCESS (FIXED) ---
+// ============================================
+// DATA ACCESS - SUBSCRIPTIONS
+// ============================================
 
 export const subscribeToTournament = (id: string, callback: (data: Tournament | null) => void) => {
-    return onSnapshot(
-        doc(db, 'tournaments', id),
-        (doc) => {
-            callback(doc.exists() ? (doc.data() as Tournament) : null);
-        },
-        (error) => {
-            console.error('❌ Tournament subscription error:', error);
-            callback(null);
-        }
-    );
+    return onSnapshot(doc(db, 'tournaments', id), (doc) => {
+        callback(doc.exists() ? (doc.data() as Tournament) : null);
+    });
 };
 
-// ✅ FIXED: No composite index requirement
-export const subscribeToFixtures = (
-    tournamentId: string,
-    divisionId: string | null,
-    callback: (data: TournamentFixture[]) => void
-) => {
+export const subscribeToFixtures = (tournamentId: string, divisionId: string | null, callback: (data: TournamentFixture[]) => void) => {
     let q;
-
     if (divisionId) {
         q = query(
             collection(db, `tournaments/${tournamentId}/fixtures`),
-            where('divisionId', '==', divisionId)
+            where('divisionId', '==', divisionId),
+            orderBy('id', 'asc')
         );
     } else {
         q = query(
@@ -247,124 +221,9 @@ export const subscribeToFixtures = (
             orderBy('time', 'asc')
         );
     }
-
-    return onSnapshot(
-        q,
-        (snapshot) => {
-            let fixtures = snapshot.docs.map(d => d.data() as TournamentFixture);
-
-            // Sort client-side
-            if (divisionId) {
-                fixtures.sort((a, b) => {
-                    if (a.round !== b.round) return (a.round || 0) - (b.round || 0);
-                    return (a.matchNumber || 0) - (b.matchNumber || 0);
-                });
-            }
-
-            callback(fixtures);
-        },
-        (error) => {
-            console.error('❌ Fixtures subscription error:', error);
-            callback([]);
-        }
-    );
-};
-
-export const updateFixtureData = async (
-    tournamentId: string,
-    fixtureId: string,
-    data: Partial<TournamentFixture>
-) => {
-    try {
-        const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId);
-        await updateDoc(fixtureRef, data);
-
-        // Auto-advance BYE matches when teamA is set
-        if (data.teamA) {
-            const fixtureSnap = await getDoc(fixtureRef);
-            if (fixtureSnap.exists()) {
-                const fixture = fixtureSnap.data() as TournamentFixture;
-                if (fixture.isBye && fixture.teamB === 'BYE' && data.teamA !== 'TBD') {
-                    // Auto-advance the team with BYE
-                    await advanceBracketWinner(tournamentId, { ...fixture, teamA: data.teamA }, 'A');
-                }
-            }
-        }
-    } catch (error) {
-        console.error('❌ Fixture update failed:', error);
-        throw error;
-    }
-};
-
-export const advanceBracketWinner = async (
-    tournamentId: string,
-    fixture: TournamentFixture,
-    winnerSide: 'A' | 'B'
-) => {
-    try {
-        if (!fixture.nextMatchId) {
-            await updateDoc(doc(db, `tournaments/${tournamentId}/fixtures`, fixture.id), {
-                status: 'completed',
-                winnerSide: winnerSide
-            });
-            return;
-        }
-
-        const winnerName = winnerSide === 'A' ? fixture.teamA : fixture.teamB;
-
-        const nextMatchRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.nextMatchId);
-        const nextMatchSnap = await getDoc(nextMatchRef);
-
-        if (!nextMatchSnap.exists()) {
-            throw new Error(`Next match ${fixture.nextMatchId} not found`);
-        }
-
-        const batch = writeBatch(db);
-
-        batch.update(doc(db, `tournaments/${tournamentId}/fixtures`, fixture.id), {
-            status: 'completed',
-            winnerSide: winnerSide
-        });
-
-        const updateField = fixture.bracketParent === 'A' ? { teamA: winnerName } : { teamB: winnerName };
-        batch.update(nextMatchRef, updateField);
-
-        await batch.commit();
-    } catch (error) {
-        console.error('❌ Winner advancement failed:', error);
-        throw error;
-    }
-};
-
-export const startTournamentMatch = async (
-    tournamentId: string,
-    fixtureId: string,
-    fixtureData: TournamentFixture
-): Promise<string> => {
-    if (!auth.currentUser) throw new Error("Auth required");
-
-    const gameCode = await initializeNewGame(
-        {
-            gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`,
-            periodDuration: 10,
-            shotClockDuration: 24,
-            periodType: 'quarter',
-            courtNumber: fixtureData.court,
-            tournamentId: tournamentId
-        },
-        { name: fixtureData.teamA, color: '#DC2626', players: [] },
-        { name: fixtureData.teamB, color: '#2563EB', players: [] },
-        false,
-        fixtureData.sport,
-        auth.currentUser.uid
-    );
-
-    await updateDoc(doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId), {
-        status: 'live',
-        gameCode: gameCode
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => d.data() as TournamentFixture));
     });
-
-    return gameCode;
 };
 
 export const subscribeToMyTournaments = (userId: string, callback: (data: Tournament[]) => void) => {
@@ -382,11 +241,197 @@ export const subscribeToJoinedTournaments = (userId: string, callback: (data: To
     });
 };
 
+// ============================================
+// FIXTURE MANAGEMENT
+// ============================================
+
+export const updateFixtureData = async (tournamentId: string, fixtureId: string, data: Partial<TournamentFixture>) => {
+    await updateDoc(doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId), data);
+};
+
+export const checkSchedulingConflict = async (tournamentId: string, court: string, time: string, date: string, excludeFixtureId?: string): Promise<TournamentFixture | null> => {
+    const q = query(
+        collection(db, `tournaments/${tournamentId}/fixtures`),
+        where('court', '==', court),
+        where('time', '==', time)
+    );
+
+    const snapshot = await getDocs(q);
+    const conflicts = snapshot.docs
+        .map(d => d.data() as TournamentFixture)
+        .filter(f => f.id !== excludeFixtureId && f.status !== 'completed' && !f.isBye);
+
+    return conflicts.length > 0 ? conflicts[0] : null;
+};
+
+// ============================================
+// GAME STARTING (UPDATED WITH COURT SELECTION)
+// ============================================
+
+/**
+ * Start a tournament match with court selection
+ * BACKWARDS COMPATIBLE: court parameter has default value
+ */
+export const startTournamentMatch = async (
+    tournamentId: string,
+    fixtureId: string,
+    fixtureData: TournamentFixture,
+    court: string = fixtureData.court || 'Court 1'
+): Promise<string> => {
+    if (!auth.currentUser) throw new Error("Authentication required");
+
+    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId);
+
+    try {
+        // Use Firestore transaction for optimistic locking (prevents double-start)
+        await runTransaction(db, async (transaction) => {
+            const fixtureSnap = await transaction.get(fixtureRef);
+
+            if (!fixtureSnap.exists()) {
+                throw new Error('Fixture not found');
+            }
+
+            const currentFixture = fixtureSnap.data() as TournamentFixture;
+
+            // SAFETY: Prevent double-start (first-come-first-served)
+            if (currentFixture.status === 'live') {
+                throw new Error('This match has already been started by another scorer');
+            }
+
+            // Lock the fixture immediately
+            transaction.update(fixtureRef, {
+                status: 'live',
+                court: court,
+                scorerId: auth.currentUser!.uid,
+                actualStartTime: Date.now()
+            });
+        });
+
+        // Create the game (outside transaction)
+        const newGameCode = await initializeNewGame(
+            {
+                gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`,
+                periodDuration: 10,
+                shotClockDuration: 24,
+                periodType: 'quarter',
+                courtNumber: court,
+                tournamentId: tournamentId,
+                sport: fixtureData.sport
+            },
+            { name: fixtureData.teamA, color: '#DC2626', players: [] },
+            { name: fixtureData.teamB, color: '#2563EB', players: [] },
+            false,
+            fixtureData.sport,
+            auth.currentUser!.uid
+        );
+
+        // Link game code to fixture
+        await updateDoc(fixtureRef, {
+            gameCode: newGameCode
+        });
+
+        console.log(`✅ Match started: ${fixtureData.teamA} vs ${fixtureData.teamB} on ${court}`);
+        return newGameCode;
+
+    } catch (error: any) {
+        console.error('❌ Failed to start match:', error);
+        throw error;
+    }
+};
+
+/**
+ * Check if a court is currently in use
+ */
+export const checkCourtAvailability = async (
+    tournamentId: string,
+    court: string
+): Promise<boolean> => {
+    try {
+        const gamesQuery = query(
+            collection(db, 'games'),
+            where('settings.tournamentId', '==', tournamentId),
+            where('settings.courtNumber', '==', court),
+            where('status', '==', 'live')
+        );
+
+        const snapshot = await getDocs(gamesQuery);
+        return snapshot.empty;
+    } catch (error) {
+        console.error('Failed to check court availability:', error);
+        return false;
+    }
+};
+
+/**
+ * Get fixture by game code (for winner selection)
+ */
+export const getFixtureByGameCode = async (
+    tournamentId: string,
+    gameCode: string
+): Promise<TournamentFixture | null> => {
+    try {
+        const fixturesQuery = query(
+            collection(db, `tournaments/${tournamentId}/fixtures`),
+            where('gameCode', '==', gameCode)
+        );
+
+        const snapshot = await getDocs(fixturesQuery);
+
+        if (snapshot.empty) return null;
+
+        return snapshot.docs[0].data() as TournamentFixture;
+    } catch (error) {
+        console.error('Failed to get fixture by game code:', error);
+        return null;
+    }
+};
+
+// ============================================
+// BRACKET ADVANCEMENT
+// ============================================
+
+export const advanceBracketWinner = async (
+    tournamentId: string,
+    fixture: TournamentFixture,
+    winnerSide: 'A' | 'B',
+    finalScore?: { teamA: number; teamB: number }
+) => {
+    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.id);
+
+    // Update current fixture with winner and score
+    await updateDoc(fixtureRef, {
+        status: 'completed',
+        winnerSide: winnerSide,
+        finalScore: finalScore || { teamA: 0, teamB: 0 },
+        actualEndTime: Date.now()
+    });
+
+    // If there's a next match, advance the winner
+    if (fixture.nextMatchId) {
+        const winnerName = winnerSide === 'A' ? fixture.teamA : fixture.teamB;
+        const nextMatchRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.nextMatchId);
+
+        const updateField = fixture.bracketParent === 'A'
+            ? { teamA: winnerName }
+            : { teamB: winnerName };
+
+        await updateDoc(nextMatchRef, updateField);
+
+        console.log(`✅ Winner advanced: ${winnerName} → ${fixture.nextMatchId}`);
+    }
+};
+
+// ============================================
+// VOLUNTEER ACCESS FLOW
+// ============================================
+
 export const joinTournament = async (tournamentId: string): Promise<void> => {
     if (!auth.currentUser) throw new Error("Must be logged in");
     const tRef = doc(db, 'tournaments', tournamentId);
+
     const snap = await getDoc(tRef);
     if (!snap.exists()) throw new Error("Invalid Tournament Code");
+
     const user = auth.currentUser;
     await updateDoc(tRef, {
         [`pendingRequests.${user.uid}`]: {

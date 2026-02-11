@@ -1,6 +1,10 @@
 // src/types.ts
+// COMPLETE FILE - Ready to replace your existing types.ts
 
-// ... (Keep Player, TeamData, GameSettings, GameState, BasketballGame as is) ...
+// ==========================================
+// 1. PLAYER & TEAM DATA
+// ==========================================
+
 export interface Player {
   id: string;
   name: string;
@@ -34,13 +38,18 @@ export interface TeamData {
   players: Player[];
 }
 
+// ==========================================
+// 2. GAME SETTINGS & STATE
+// ==========================================
+
 export interface GameSettings {
   gameName: string;
   periodDuration: number;
   shotClockDuration: number;
   periodType: 'quarter' | 'half';
   courtNumber?: string;
-  tournamentId?: string;
+  tournamentId?: string;  // Link to tournament (if part of one)
+  sport?: string;
 }
 
 export interface GameState {
@@ -49,8 +58,14 @@ export interface GameState {
   shotClock: number;
   gameRunning: boolean;
   shotClockRunning: boolean;
-  possession: 'A' | 'B';
+  shotClockActive: boolean;
+  possessionTeam: 'A' | 'B';
+  timeLeft: number;
 }
+
+// ==========================================
+// 3. BASKETBALL GAME
+// ==========================================
 
 export interface BasketballGame {
   code: string;
@@ -81,7 +96,6 @@ export interface DivisionConfig {
   isActive: boolean;
   format: TournamentFormat;
   bracketSize?: number;
-  // UPDATED STATUSES
   status: 'setup_required' | 'draft' | 'published' | 'completed';
 }
 
@@ -108,6 +122,15 @@ export interface TournamentFixture {
   bracketParent?: 'A' | 'B';
   winnerSide?: 'A' | 'B';
   isBye?: boolean;
+
+  // NEW FIELDS - Tournament Features (all optional for backwards compatibility)
+  actualStartTime?: number;      // Timestamp when scorer started the match
+  actualEndTime?: number;        // Timestamp when scorer finished the match
+  scorerId?: string;             // UID of the scorer who started the match
+  finalScore?: {                 // Final score after match completion
+    teamA: number;
+    teamB: number;
+  };
 }
 
 export interface Tournament {
