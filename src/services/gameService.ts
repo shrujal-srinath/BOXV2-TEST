@@ -5,9 +5,9 @@
  * This replaces the mock in-memory database with actual Firebase operations
  */
 
-import { doc, setDoc, updateDoc, getDoc, onSnapshot, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
-import type { BasketballGame, Player, TeamData } from '../types';
+import type { BasketballGame, GameSettings, TeamData, GameState, Player } from '../types';
 
 // ============================================
 // FIREBASE OPERATIONS
@@ -80,24 +80,16 @@ export const subscribeToLiveGames = (
 /**
  * Update a specific field in Firebase (CRITICAL FIX)
  */
-export const updateGameField = async (code: string, path: string, value: any): Promise<void> => {
-  if (!code) {
-    console.error('[GameService] No game code provided');
-    return;
-  }
-
+export const updateGameField = async (gameId: string, fieldPath: string, value: any) => {
+  // This was failing because 'gameId' didn't match the Document ID
+  const gameRef = doc(db, 'games', gameId);
   try {
-    const gameRef = doc(db, 'games', code);
-
-    // Update Firebase with the field change
     await updateDoc(gameRef, {
-      [path]: value,
+      [fieldPath]: value,
       lastUpdate: Date.now()
     });
-
-    console.log(`[GameService] ✅ Updated ${path} in game ${code}`);
   } catch (error) {
-    console.error(`[GameService] ❌ Failed to update ${path}:`, error);
+    console.error(`[GameService] ❌ Failed to update ${fieldPath}:`, error);
     throw error;
   }
 };
@@ -163,57 +155,53 @@ const createDefaultTeam = (name: string, color: string): TeamData => ({
  * Initialize a new game in Firebase
  */
 export const initializeNewGame = async (
-  settings: any,
-  teamA: any,
-  teamB: any,
-  trackStats: boolean,
-  sportType: string,
+  settings: GameSettings,
+  teamA: TeamData,
+  teamB: TeamData,
+  isOnline: boolean,
+  sport: string,
   hostId: string
 ): Promise<string> => {
-  const code = generateGameCode();
 
-  const newGame: BasketballGame = {
-    code,
-    hostId,
-    sport: sportType,
-    status: 'live',
-    gameType: 'online',
-    createdAt: Date.now(),
-    lastUpdate: Date.now(),
-    settings: {
-      gameName: settings.gameName || `${teamA.name} vs ${teamB.name}`,
-      periodDuration: settings.periodDuration || 10,
-      shotClockDuration: settings.shotClockDuration || 24,
-      periodType: settings.periodType || 'quarter',
-    },
-    gameState: {
-      period: 1,
-      gameTime: {
-        minutes: settings.periodDuration || 10,
-        seconds: 0,
-        tenths: 0,
-      },
-      shotClock: settings.shotClockDuration || 24,
-      gameRunning: false,
-      shotClockRunning: false,
-      possession: 'A',
-    },
-    teamA: {
-      ...createDefaultTeam(teamA.name, teamA.color),
-      players: trackStats ? teamA.players || [] : [],
-    },
-    teamB: {
-      ...createDefaultTeam(teamB.name, teamB.color),
-      players: trackStats ? teamB.players || [] : [],
-    },
+  // 1. Generate the Code
+  let gameCode = generateGameCode();
+
+  // 2. Ensure Uniqueness (Optional but good)
+  // while ((await getDoc(doc(db, 'games', gameCode))).exists()) {
+  //    gameCode = generateGameCode();
+  // }
+
+  // 3. Define Initial State
+  const initialGameState: GameState = {
+    period: 1,
+    gameTime: { minutes: settings.periodDuration, seconds: 0, tenths: 0 },
+    shotClock: settings.shotClockDuration,
+    gameRunning: false,
+    shotClockRunning: false,
+    shotClockActive: true,
+    possessionTeam: 'A',
+    timeLeft: settings.periodDuration * 60
   };
 
-  // Save to Firebase
-  const gameRef = doc(db, 'games', code);
-  await setDoc(gameRef, newGame);
+  const newGame: BasketballGame = {
+    code: gameCode,
+    hostId: hostId,
+    sport: sport,
+    status: 'live',
+    gameType: isOnline ? 'online' : 'local',
+    createdAt: Date.now(),
+    lastUpdate: Date.now(),
+    settings: settings,
+    gameState: initialGameState,
+    teamA: teamA,
+    teamB: teamB
+  };
 
-  console.log(`[GameService] ✅ Created game ${code}`);
-  return code;
+  // 4. CRITICAL FIX: Use setDoc with the gameCode as the ID
+  // DO NOT use addDoc(collection(db, 'games'), newGame)
+  await setDoc(doc(db, 'games', gameCode), newGame);
+
+  return gameCode;
 };
 
 /**

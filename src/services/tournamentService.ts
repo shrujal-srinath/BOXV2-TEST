@@ -1,7 +1,7 @@
-// src/services/tournamentService.ts
-// COMPLETE FILE - Ready to replace your existing tournamentService.ts
-
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot, arrayUnion, deleteField, orderBy, writeBatch, runTransaction } from 'firebase/firestore';
+import {
+    doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs,
+    onSnapshot, arrayUnion, deleteField, orderBy, writeBatch, runTransaction
+} from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { initializeNewGame } from './gameService';
 import type { Tournament, DivisionConfig, TournamentFixture, SportType, GenderCategory, TournamentFormat } from '../types';
@@ -133,25 +133,40 @@ export const unpublishDivision = async (tournamentId: string, divisionId: string
 };
 
 // ============================================
-// BRACKET GENERATION
+// BRACKET GENERATION (Standard Seeding)
 // ============================================
+
+const getByeIndices = (totalMatches: number, numByes: number): Set<number> => {
+    const indices = new Set<number>();
+    const priorityList = [];
+
+    // Standard Seeding Pattern: Top, Bottom, Mid-Top, Mid-Bottom
+    priorityList.push(0);
+    priorityList.push(totalMatches - 1);
+
+    if (totalMatches > 2) {
+        priorityList.push(Math.floor(totalMatches / 2) - 1);
+        priorityList.push(Math.floor(totalMatches / 2));
+    }
+
+    // Fill remaining
+    for (let i = 0; i < totalMatches; i++) {
+        if (!priorityList.includes(i)) priorityList.push(i);
+    }
+
+    for (let i = 0; i < numByes; i++) {
+        if (i < priorityList.length) indices.add(priorityList[i]);
+    }
+    return indices;
+};
 
 const generateBracketSlots = (tId: string, divId: string, sport: SportType, gender: GenderCategory, teamCount: number, batch: any) => {
     const bracketSize = Math.pow(2, Math.ceil(Math.log2(teamCount)));
     const totalRounds = Math.log2(bracketSize);
     const numByes = bracketSize - teamCount;
-
     const round1Matches = bracketSize / 2;
-    const byeIndices = new Set<number>();
 
-    // Distribute BYEs evenly (NCAA standard)
-    let allocatedByes = 0;
-    for (let i = 0; i < round1Matches && allocatedByes < numByes; i++) {
-        if (i % 2 === 0) { byeIndices.add(i); allocatedByes++; }
-    }
-    for (let i = 0; i < round1Matches && allocatedByes < numByes; i++) {
-        if (!byeIndices.has(i)) { byeIndices.add(i); allocatedByes++; }
-    }
+    const byeIndices = getByeIndices(round1Matches, numByes);
 
     const getMatchId = (r: number, m: number) => `match_${divId}_${r}_${m}`;
 
@@ -182,6 +197,7 @@ const generateBracketSlots = (tId: string, divId: string, sport: SportType, gend
                 teamB: isByeMatch ? 'BYE' : 'TBD',
                 court: 'Unassigned',
                 time: 'Pending',
+                // Auto-complete byes so they look correct visually
                 status: isByeMatch ? 'completed' : 'scheduled',
                 round,
                 matchNumber: matchIdx,
@@ -198,7 +214,185 @@ const generateBracketSlots = (tId: string, divId: string, sport: SportType, gend
 };
 
 // ============================================
-// DATA ACCESS - SUBSCRIPTIONS
+// FIXTURE MANAGEMENT (WITH PROPAGATION FIX)
+// ============================================
+
+export const updateFixtureData = async (tournamentId: string, fixtureId: string, data: Partial<TournamentFixture>) => {
+    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId);
+
+    try {
+        const snap = await getDoc(fixtureRef);
+        if (!snap.exists()) return;
+        const currentFixture = snap.data() as TournamentFixture;
+
+        // 1. Perform the update
+        await updateDoc(fixtureRef, data);
+
+        // 2. PROPAGATION LOGIC (CRITICAL RESTORATION)
+        // If this match is already finished (e.g. Bye), and we change a name, 
+        // we MUST update the next match.
+        if (currentFixture.status === 'completed' && currentFixture.nextMatchId && currentFixture.winnerSide) {
+
+            const newTeamA = data.teamA !== undefined ? data.teamA : currentFixture.teamA;
+            const newTeamB = data.teamB !== undefined ? data.teamB : currentFixture.teamB;
+
+            const winnerName = currentFixture.winnerSide === 'A' ? newTeamA : newTeamB;
+
+            // Only propagate if the winner name is valid (not TBD)
+            if (winnerName && winnerName !== 'TBD') {
+                const nextRef = doc(db, `tournaments/${tournamentId}/fixtures`, currentFixture.nextMatchId);
+                const fieldToUpdate = currentFixture.bracketParent === 'A' ? { teamA: winnerName } : { teamB: winnerName };
+
+                await updateDoc(nextRef, fieldToUpdate);
+                console.log(`Propagated update: ${winnerName} -> Match ${currentFixture.nextMatchId}`);
+            }
+        }
+    } catch (error) {
+        console.error("Error updating fixture:", error);
+        throw error;
+    }
+};
+
+export const checkSchedulingConflict = async (tournamentId: string, court: string, time: string, date: string, excludeFixtureId?: string): Promise<TournamentFixture | null> => {
+    const q = query(
+        collection(db, `tournaments/${tournamentId}/fixtures`),
+        where('court', '==', court),
+        where('time', '==', time)
+    );
+
+    const snapshot = await getDocs(q);
+    const conflicts = snapshot.docs
+        .map(d => d.data() as TournamentFixture)
+        .filter(f => f.id !== excludeFixtureId && f.status !== 'completed' && !f.isBye);
+
+    return conflicts.length > 0 ? conflicts[0] : null;
+};
+
+// ============================================
+// GAME STARTING (YOUR NEW LOGIC)
+// ============================================
+
+export const startTournamentMatch = async (
+    tournamentId: string,
+    fixtureId: string,
+    fixtureData: TournamentFixture,
+    court: string = fixtureData.court || 'Court 1'
+): Promise<string> => {
+    if (!auth.currentUser) throw new Error("Authentication required");
+
+    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId);
+
+    try {
+        // Use Firestore transaction for optimistic locking
+        await runTransaction(db, async (transaction) => {
+            const fixtureSnap = await transaction.get(fixtureRef);
+            if (!fixtureSnap.exists()) throw new Error('Fixture not found');
+
+            const currentFixture = fixtureSnap.data() as TournamentFixture;
+            if (currentFixture.status === 'live') {
+                throw new Error('This match has already been started by another scorer');
+            }
+
+            transaction.update(fixtureRef, {
+                status: 'live',
+                court: court,
+                scorerId: auth.currentUser!.uid,
+                actualStartTime: Date.now()
+            });
+        });
+
+        // Create the game
+        const newGameCode = await initializeNewGame(
+            {
+                gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`,
+                periodDuration: 10,
+                shotClockDuration: 24,
+                periodType: 'quarter',
+                courtNumber: court,
+                tournamentId: tournamentId,
+                sport: fixtureData.sport
+            },
+            {
+                name: fixtureData.teamA,
+                color: '#DC2626',
+                players: [],
+                score: 0,
+                timeouts: 2,
+                timeoutsFirstHalf: 2,
+                timeoutsSecondHalf: 3,
+                fouls: 0,
+                foulsThisQuarter: 0
+            },
+            {
+                name: fixtureData.teamB,
+                color: '#2563EB',
+                players: [],
+                score: 0,
+                timeouts: 2,
+                timeoutsFirstHalf: 2,
+                timeoutsSecondHalf: 3,
+                fouls: 0,
+                foulsThisQuarter: 0
+            },
+            false,
+            fixtureData.sport,
+            auth.currentUser!.uid
+        );
+
+        await updateDoc(fixtureRef, { gameCode: newGameCode });
+        return newGameCode;
+
+    } catch (error: any) {
+        console.error('❌ Failed to start match:', error);
+        throw error;
+    }
+};
+
+// ============================================
+// BRACKET ADVANCEMENT
+// ============================================
+
+export const advanceBracketWinner = async (
+    tournamentId: string,
+    fixture: TournamentFixture,
+    winnerSide: 'A' | 'B',
+    finalScore?: { teamA: number; teamB: number }
+) => {
+    // 1. Safety Check for Next Match
+    if (fixture.nextMatchId) {
+        const nextRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.nextMatchId);
+        const nextSnap = await getDoc(nextRef);
+        if (!nextSnap.exists()) {
+            console.error("Next match not found via advancement.");
+            // We still complete the current match, but warn logic is broken
+        }
+    }
+
+    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.id);
+
+    // 2. Update current fixture
+    await updateDoc(fixtureRef, {
+        status: 'completed',
+        winnerSide: winnerSide,
+        finalScore: finalScore || { teamA: 0, teamB: 0 },
+        actualEndTime: Date.now()
+    });
+
+    // 3. Advance to next round
+    if (fixture.nextMatchId) {
+        const winnerName = winnerSide === 'A' ? fixture.teamA : fixture.teamB;
+        const nextMatchRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.nextMatchId);
+
+        const updateField = fixture.bracketParent === 'A'
+            ? { teamA: winnerName }
+            : { teamB: winnerName };
+
+        await updateDoc(nextMatchRef, updateField);
+    }
+};
+
+// ============================================
+// SUBSCRIPTIONS & OTHERS
 // ============================================
 
 export const subscribeToTournament = (id: string, callback: (data: Tournament | null) => void) => {
@@ -226,219 +420,80 @@ export const subscribeToFixtures = (tournamentId: string, divisionId: string | n
     });
 };
 
+export const checkCourtAvailability = async (tournamentId: string, court: string): Promise<boolean> => {
+    try {
+        const gamesQuery = query(collection(db, 'games'), where('settings.tournamentId', '==', tournamentId), where('settings.courtNumber', '==', court), where('status', '==', 'live'));
+        const snapshot = await getDocs(gamesQuery);
+        return snapshot.empty;
+    } catch (error) {
+        return false;
+    }
+};
+
 export const subscribeToMyTournaments = (userId: string, callback: (data: Tournament[]) => void) => {
     const q = query(collection(db, 'tournaments'), where('adminId', '==', userId));
-    return onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(d => d.data() as Tournament));
-    });
+    return onSnapshot(q, (snapshot) => callback(snapshot.docs.map(d => d.data() as Tournament)));
 };
 
 export const subscribeToJoinedTournaments = (userId: string, callback: (data: Tournament[]) => void) => {
     const q = query(collection(db, 'tournaments'), where('approvedScorers', 'array-contains', userId));
     return onSnapshot(q, (snapshot) => {
-        const all = snapshot.docs.map(d => d.data() as Tournament);
-        callback(all.filter(t => t.adminId !== userId));
+        // 1. Get all tournaments where I am a scorer
+        const allTournaments = snapshot.docs.map(d => d.data() as Tournament);
+
+        // 2. Filter out tournaments where I am ALSO the admin (to avoid duplicates in UI)
+        const filtered = allTournaments.filter(t => t.adminId !== userId);
+
+        // 3. Update state
+        callback(filtered);
     });
 };
 
 // ============================================
-// FIXTURE MANAGEMENT
-// ============================================
-
-export const updateFixtureData = async (tournamentId: string, fixtureId: string, data: Partial<TournamentFixture>) => {
-    await updateDoc(doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId), data);
-};
-
-export const checkSchedulingConflict = async (tournamentId: string, court: string, time: string, date: string, excludeFixtureId?: string): Promise<TournamentFixture | null> => {
-    const q = query(
-        collection(db, `tournaments/${tournamentId}/fixtures`),
-        where('court', '==', court),
-        where('time', '==', time)
-    );
-
-    const snapshot = await getDocs(q);
-    const conflicts = snapshot.docs
-        .map(d => d.data() as TournamentFixture)
-        .filter(f => f.id !== excludeFixtureId && f.status !== 'completed' && !f.isBye);
-
-    return conflicts.length > 0 ? conflicts[0] : null;
-};
-
-// ============================================
-// GAME STARTING (UPDATED WITH COURT SELECTION)
+// VOLUNTEER ACCESS FLOW (UPDATED)
 // ============================================
 
 /**
- * Start a tournament match with court selection
- * BACKWARDS COMPATIBLE: court parameter has default value
+ * 1. Verify code and get basic info (Name, Sports) to populate the Modal
  */
-export const startTournamentMatch = async (
-    tournamentId: string,
-    fixtureId: string,
-    fixtureData: TournamentFixture,
-    court: string = fixtureData.court || 'Court 1'
-): Promise<string> => {
-    if (!auth.currentUser) throw new Error("Authentication required");
-
-    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId);
-
+export const getTournamentPublicInfo = async (tournamentId: string): Promise<Tournament | null> => {
     try {
-        // Use Firestore transaction for optimistic locking (prevents double-start)
-        await runTransaction(db, async (transaction) => {
-            const fixtureSnap = await transaction.get(fixtureRef);
-
-            if (!fixtureSnap.exists()) {
-                throw new Error('Fixture not found');
-            }
-
-            const currentFixture = fixtureSnap.data() as TournamentFixture;
-
-            // SAFETY: Prevent double-start (first-come-first-served)
-            if (currentFixture.status === 'live') {
-                throw new Error('This match has already been started by another scorer');
-            }
-
-            // Lock the fixture immediately
-            transaction.update(fixtureRef, {
-                status: 'live',
-                court: court,
-                scorerId: auth.currentUser!.uid,
-                actualStartTime: Date.now()
-            });
-        });
-
-        // Create the game (outside transaction)
-        const newGameCode = await initializeNewGame(
-            {
-                gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`,
-                periodDuration: 10,
-                shotClockDuration: 24,
-                periodType: 'quarter',
-                courtNumber: court,
-                tournamentId: tournamentId,
-                sport: fixtureData.sport
-            },
-            { name: fixtureData.teamA, color: '#DC2626', players: [] },
-            { name: fixtureData.teamB, color: '#2563EB', players: [] },
-            false,
-            fixtureData.sport,
-            auth.currentUser!.uid
-        );
-
-        // Link game code to fixture
-        await updateDoc(fixtureRef, {
-            gameCode: newGameCode
-        });
-
-        console.log(`✅ Match started: ${fixtureData.teamA} vs ${fixtureData.teamB} on ${court}`);
-        return newGameCode;
-
-    } catch (error: any) {
-        console.error('❌ Failed to start match:', error);
-        throw error;
-    }
-};
-
-/**
- * Check if a court is currently in use
- */
-export const checkCourtAvailability = async (
-    tournamentId: string,
-    court: string
-): Promise<boolean> => {
-    try {
-        const gamesQuery = query(
-            collection(db, 'games'),
-            where('settings.tournamentId', '==', tournamentId),
-            where('settings.courtNumber', '==', court),
-            where('status', '==', 'live')
-        );
-
-        const snapshot = await getDocs(gamesQuery);
-        return snapshot.empty;
+        const tRef = doc(db, 'tournaments', tournamentId);
+        const snap = await getDoc(tRef);
+        if (snap.exists()) {
+            return snap.data() as Tournament;
+        }
+        return null;
     } catch (error) {
-        console.error('Failed to check court availability:', error);
-        return false;
-    }
-};
-
-/**
- * Get fixture by game code (for winner selection)
- */
-export const getFixtureByGameCode = async (
-    tournamentId: string,
-    gameCode: string
-): Promise<TournamentFixture | null> => {
-    try {
-        const fixturesQuery = query(
-            collection(db, `tournaments/${tournamentId}/fixtures`),
-            where('gameCode', '==', gameCode)
-        );
-
-        const snapshot = await getDocs(fixturesQuery);
-
-        if (snapshot.empty) return null;
-
-        return snapshot.docs[0].data() as TournamentFixture;
-    } catch (error) {
-        console.error('Failed to get fixture by game code:', error);
+        console.error("Error fetching tournament info:", error);
         return null;
     }
 };
 
-// ============================================
-// BRACKET ADVANCEMENT
-// ============================================
-
-export const advanceBracketWinner = async (
+/**
+ * 2. Submit the detailed request
+ */
+export const joinTournament = async (
     tournamentId: string,
-    fixture: TournamentFixture,
-    winnerSide: 'A' | 'B',
-    finalScore?: { teamA: number; teamB: number }
-) => {
-    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.id);
-
-    // Update current fixture with winner and score
-    await updateDoc(fixtureRef, {
-        status: 'completed',
-        winnerSide: winnerSide,
-        finalScore: finalScore || { teamA: 0, teamB: 0 },
-        actualEndTime: Date.now()
-    });
-
-    // If there's a next match, advance the winner
-    if (fixture.nextMatchId) {
-        const winnerName = winnerSide === 'A' ? fixture.teamA : fixture.teamB;
-        const nextMatchRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.nextMatchId);
-
-        const updateField = fixture.bracketParent === 'A'
-            ? { teamA: winnerName }
-            : { teamB: winnerName };
-
-        await updateDoc(nextMatchRef, updateField);
-
-        console.log(`✅ Winner advanced: ${winnerName} → ${fixture.nextMatchId}`);
+    requestDetails: {
+        displayName: string;
+        requestType: 'all' | 'specific';
+        requestedSports: SportType[]
     }
-};
-
-// ============================================
-// VOLUNTEER ACCESS FLOW
-// ============================================
-
-export const joinTournament = async (tournamentId: string): Promise<void> => {
+): Promise<void> => {
     if (!auth.currentUser) throw new Error("Must be logged in");
+
     const tRef = doc(db, 'tournaments', tournamentId);
-
-    const snap = await getDoc(tRef);
-    if (!snap.exists()) throw new Error("Invalid Tournament Code");
-
     const user = auth.currentUser;
+
     await updateDoc(tRef, {
         [`pendingRequests.${user.uid}`]: {
-            displayName: user.displayName || 'Volunteer',
+            displayName: requestDetails.displayName, // User's custom input name
             email: user.email,
             timestamp: Date.now(),
-            status: 'pending'
+            status: 'pending',
+            requestType: requestDetails.requestType,
+            requestedSports: requestDetails.requestedSports
         }
     });
 };
@@ -446,10 +501,7 @@ export const joinTournament = async (tournamentId: string): Promise<void> => {
 export const handleRequest = async (tournamentId: string, userId: string, action: 'approve' | 'reject') => {
     const tRef = doc(db, 'tournaments', tournamentId);
     if (action === 'approve') {
-        await updateDoc(tRef, {
-            approvedScorers: arrayUnion(userId),
-            [`pendingRequests.${userId}.status`]: 'approved'
-        });
+        await updateDoc(tRef, { approvedScorers: arrayUnion(userId), [`pendingRequests.${userId}.status`]: 'approved' });
     } else {
         await updateDoc(tRef, { [`pendingRequests.${userId}`]: deleteField() });
     }

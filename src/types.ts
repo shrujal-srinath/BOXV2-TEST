@@ -158,12 +158,17 @@ export interface Tournament {
   };
 
   approvedScorers: string[];
+
+  // UPDATED PENDING REQUEST STRUCTURE
   pendingRequests: {
     [userId: string]: {
       displayName: string;
       email: string;
       timestamp: number;
       status: 'pending' | 'approved' | 'rejected';
+      // NEW FIELDS
+      requestType: 'all' | 'specific';
+      requestedSports?: SportType[]; // Only if requestType is 'specific'
     }
   };
   createdAt: number;

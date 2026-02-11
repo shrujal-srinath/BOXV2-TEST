@@ -1,6 +1,5 @@
 // src/App.tsx
-// COMPLETE FILE - CORRECTED VERSION
-// Fixed: ProtectedHostRoute import (default export, not named)
+// COMPLETE FILE - Replace your entire src/App.tsx with this
 
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -23,7 +22,7 @@ import { TournamentSetup } from './pages/TournamentSetup';
 import { TournamentManager } from './pages/TournamentManager';
 import { TournamentWallView } from './pages/TournamentWallView';
 
-// COMPONENTS - FIXED: Default import (not named)
+// COMPONENT - DEFAULT IMPORT (no curly braces)
 import ProtectedHostRoute from './components/ProtectedHostRoute';
 
 function App() {

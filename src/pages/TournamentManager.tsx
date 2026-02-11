@@ -168,8 +168,7 @@ export const TournamentManager: React.FC = () => {
     const bracketSize = Math.pow(2, Math.ceil(Math.log2(customTeamCount)));
     const byes = bracketSize - customTeamCount;
 
-    // CONTINUE IN PART 2...// src/pages/TournamentManager.tsx - PART 2 (JSX RENDER)
-    // CONTINUE FROM PART 1...
+    // CONTINUE IN PART 2...
 
     // === MAIN RENDER ===
     return (
