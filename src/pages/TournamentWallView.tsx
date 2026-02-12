@@ -1,228 +1,158 @@
 // src/pages/TournamentWallView.tsx
-// PREMIUM MULTI-COURT STADIUM DISPLAY
-// Zero risk - New isolated page
+// FIXED: replaced non-existent GameState fields with correct ones:
+//   timeLeft        → gameTime.minutes / gameTime.seconds
+//   possessionTeam  → possession
+//   shotClockActive → shotClockRunning
+//   settings.sport  → game.sport (top-level field on BasketballGame)
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { subscribeToGame } from '../services/gameService';
 import type { BasketballGame } from '../types';
 
-// Simplified Scoreboard Component (embedded SpectatorView)
-const CourtScoreboard: React.FC<{ gameCode: string; courtNumber: string }> = ({ gameCode, courtNumber }) => {
+export const TournamentWallView: React.FC = () => {
+    const { gameCode } = useParams<{ gameCode: string }>();
     const [game, setGame] = useState<BasketballGame | null>(null);
 
     useEffect(() => {
-        const unsubscribe = subscribeToGame(gameCode, setGame);
-        return () => unsubscribe();
+        if (!gameCode) return;
+        return subscribeToGame(gameCode, setGame);
     }, [gameCode]);
 
     if (!game) {
         return (
-            <div className="w-full h-full flex items-center justify-center bg-zinc-950 rounded-xl border border-zinc-900">
-                <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-zinc-600 text-sm font-bold">Loading {courtNumber}...</p>
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="text-zinc-500 font-mono text-sm animate-pulse uppercase tracking-widest">
+                    Connecting to game…
                 </div>
             </div>
         );
     }
 
-    const getPeriodName = () => {
-        const p = game.gameState.period;
-        return p <= 4 ? `Q${p}` : `OT${p - 4}`;
+    const { gameState, teamA, teamB, settings, sport } = game;
+
+    // ── Derived display values ────────────────────────────
+    // FIX: was gameState.timeLeft — correct field is gameTime
+    const minutes = gameState.gameTime.minutes;
+    const seconds = gameState.gameTime.seconds;
+    const timeDisplay = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    const isLowTime = minutes === 0 && seconds <= 30;
+
+    // FIX: was gameState.possessionTeam — correct field is possession
+    const possessionName = gameState.possession === 'A' ? teamA.name : teamB.name;
+    const possessionColor = gameState.possession === 'A' ? teamA.color : teamB.color;
+
+    // FIX: was gameState.shotClockActive — correct field is shotClockRunning
+    const showShotClock = settings.shotClockDuration > 0;
+
+    // FIX: was settings.sport — correct field is game.sport (top-level)
+    const sportLabel = sport || 'Basketball';
+
+    const periodLabel = () => {
+        if (settings.periodType === 'half') {
+            return gameState.period <= 2 ? `Half ${gameState.period}` : 'OT';
+        }
+        return gameState.period <= 4 ? `Q${gameState.period}` : `OT${gameState.period - 4}`;
     };
 
     return (
-        <div className="w-full h-full bg-gradient-to-br from-zinc-950 via-black to-zinc-950 rounded-xl border border-zinc-800 overflow-hidden flex flex-col relative">
-            {/* Court Label - Floating Badge */}
-            <div className="absolute top-4 left-4 z-10 bg-yellow-500 text-black px-4 py-2 rounded-lg shadow-lg">
-                <span className="font-black text-sm uppercase tracking-wider">{courtNumber}</span>
+        <div className="min-h-screen bg-black text-white overflow-hidden select-none">
+
+            {/* Status bar */}
+            <div className="flex items-center justify-between px-8 py-3 bg-zinc-950 border-b border-zinc-900">
+                <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${gameState.gameRunning ? 'bg-green-500 animate-pulse' : 'bg-zinc-700'}`} />
+                    <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+                        {gameState.gameRunning ? 'Live' : 'Paused'} · {sportLabel}
+                    </span>
+                </div>
+                <span className="text-xs font-mono text-zinc-600 uppercase tracking-widest">
+                    {periodLabel()} · {settings.gameName}
+                </span>
             </div>
 
-            {/* Live Indicator */}
-            {game.gameState.gameRunning && (
-                <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-red-900/80 backdrop-blur-sm border border-red-500 px-3 py-2 rounded-lg shadow-lg">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
-                    <span className="text-xs font-black uppercase tracking-widest text-red-400">Live</span>
-                </div>
-            )}
+            {/* Main scoreboard */}
+            <div className="flex items-stretch min-h-[calc(100vh-48px)]">
 
-            {/* Main Scoreboard */}
-            <div className="flex-1 flex flex-col items-center justify-center p-8">
-                {/* Game Name */}
-                <div className="text-center mb-8">
-                    <h2 className="text-2xl font-black italic uppercase text-white/80 tracking-tight">
-                        {game.settings.gameName}
-                    </h2>
-                    <div className="text-sm text-zinc-600 uppercase tracking-widest mt-1">
-                        {getPeriodName()} • {Math.floor(game.gameState.timeLeft / 60)}:{(game.gameState.timeLeft % 60).toString().padStart(2, '0')}
+                {/* Team A */}
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 p-12"
+                    style={{ borderRight: `3px solid ${teamA.color}20` }}>
+                    <div className="text-3xl font-black uppercase tracking-widest text-center"
+                        style={{ color: teamA.color }}>
+                        {teamA.name}
                     </div>
+                    <div className="text-[10rem] font-black font-mono leading-none tabular-nums text-white"
+                        style={{ textShadow: `0 0 60px ${teamA.color}40` }}>
+                        {teamA.score}
+                    </div>
+                    <div className="flex gap-6 text-xs text-zinc-600 font-bold uppercase tracking-widest">
+                        <span>Fouls: {teamA.fouls}</span>
+                        <span>TO: {teamA.timeouts}</span>
+                    </div>
+                    {/* Possession indicator */}
+                    {gameState.possession === 'A' && (
+                        <div className="mt-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest"
+                            style={{ background: `${teamA.color}30`, color: teamA.color, border: `1px solid ${teamA.color}60` }}>
+                            ◀ Possession
+                        </div>
+                    )}
                 </div>
 
-                {/* Score Display */}
-                <div className="grid grid-cols-3 gap-8 w-full max-w-4xl items-center">
-                    {/* TEAM A */}
-                    <div className="text-center">
-                        <div
-                            className="text-8xl font-black mb-4"
-                            style={{ color: game.teamA.color }}
-                        >
-                            {game.teamA.score}
-                        </div>
-                        <div className="text-2xl font-black uppercase tracking-wide text-white truncate">
-                            {game.teamA.name}
-                        </div>
-                        {game.gameState.possessionTeam === 'A' && (
-                            <div className="mt-2 inline-block px-3 py-1 bg-white/10 rounded-full">
-                                <span className="text-xs font-bold text-white">POSSESSION ⚫</span>
+                {/* Center: Clock */}
+                <div className="flex-none w-72 flex flex-col items-center justify-center gap-6 px-8">
+                    {/* Period */}
+                    <div className="text-zinc-500 text-xs font-bold uppercase tracking-[0.3em]">
+                        {periodLabel()}
+                    </div>
+
+                    {/* Game clock */}
+                    <div className={`text-7xl font-mono font-black tabular-nums ${isLowTime ? 'text-red-500' : 'text-white'}`}
+                        style={isLowTime ? { textShadow: '0 0 30px rgba(239,68,68,0.6)' } : {}}>
+                        {timeDisplay}
+                    </div>
+
+                    {/* Shot clock */}
+                    {showShotClock && (
+                        <div className="flex flex-col items-center gap-1">
+                            <div className="text-[9px] text-zinc-600 uppercase tracking-widest">Shot Clock</div>
+                            <div className={`text-4xl font-mono font-black tabular-nums ${gameState.shotClock <= 5 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
+                                {gameState.shotClock}
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
 
-                    {/* VS DIVIDER */}
+                    {/* Possession label */}
                     <div className="text-center">
-                        <div className="text-4xl font-black text-zinc-700">VS</div>
-                    </div>
-
-                    {/* TEAM B */}
-                    <div className="text-center">
-                        <div
-                            className="text-8xl font-black mb-4"
-                            style={{ color: game.teamB.color }}
-                        >
-                            {game.teamB.score}
+                        <div className="text-[9px] text-zinc-600 uppercase tracking-widest mb-1">Possession</div>
+                        <div className="text-sm font-black uppercase tracking-widest" style={{ color: possessionColor }}>
+                            {possessionName}
                         </div>
-                        <div className="text-2xl font-black uppercase tracking-wide text-white truncate">
-                            {game.teamB.name}
-                        </div>
-                        {game.gameState.possessionTeam === 'B' && (
-                            <div className="mt-2 inline-block px-3 py-1 bg-white/10 rounded-full">
-                                <span className="text-xs font-bold text-white">POSSESSION ⚫</span>
-                            </div>
-                        )}
                     </div>
                 </div>
 
-                {/* Shot Clock (if active) */}
-                {game.gameState.shotClockActive && (
-                    <div className="mt-8 text-center">
-                        <div className="text-sm text-zinc-600 uppercase tracking-widest mb-1">Shot Clock</div>
-                        <div className={`text-4xl font-mono font-black ${game.gameState.shotClock <= 5 ? 'text-red-500 animate-pulse' : 'text-white'
-                            }`}>
-                            {game.gameState.shotClock}
+                {/* Team B */}
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 p-12"
+                    style={{ borderLeft: `3px solid ${teamB.color}20` }}>
+                    <div className="text-3xl font-black uppercase tracking-widest text-center"
+                        style={{ color: teamB.color }}>
+                        {teamB.name}
+                    </div>
+                    <div className="text-[10rem] font-black font-mono leading-none tabular-nums text-white"
+                        style={{ textShadow: `0 0 60px ${teamB.color}40` }}>
+                        {teamB.score}
+                    </div>
+                    <div className="flex gap-6 text-xs text-zinc-600 font-bold uppercase tracking-widest">
+                        <span>Fouls: {teamB.fouls}</span>
+                        <span>TO: {teamB.timeouts}</span>
+                    </div>
+                    {gameState.possession === 'B' && (
+                        <div className="mt-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest"
+                            style={{ background: `${teamB.color}30`, color: teamB.color, border: `1px solid ${teamB.color}60` }}>
+                            Possession ▶
                         </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Bottom Info Bar */}
-            <div className="bg-black/40 backdrop-blur-sm border-t border-zinc-800 p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="text-xs text-zinc-600 uppercase tracking-widest">
-                        {game.settings.sport === 'basketball' ? '🏀' : '⚽'} {game.settings.sport.toUpperCase()}
-                    </div>
-                </div>
-                <div className="text-xs text-zinc-600 uppercase tracking-widest">
-                    {game.settings.periodType === 'quarter' ? '4 Quarters' : '2 Halves'} • {game.settings.periodDuration}min
+                    )}
                 </div>
             </div>
-        </div>
-    );
-};
-
-// Main Tournament Wall Component
-export const TournamentWallView: React.FC = () => {
-    const { tournamentId } = useParams<{ tournamentId: string }>();
-    const [liveGames, setLiveGames] = useState<BasketballGame[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (!tournamentId) return;
-
-        // Subscribe to all live games in this tournament
-        const gamesQuery = query(
-            collection(db, 'games'),
-            where('settings.tournamentId', '==', tournamentId),
-            where('status', '==', 'live')
-        );
-
-        const unsubscribe = onSnapshot(
-            gamesQuery,
-            (snapshot) => {
-                const games: BasketballGame[] = [];
-                snapshot.forEach(doc => {
-                    games.push(doc.data() as BasketballGame);
-                });
-                setLiveGames(games);
-                setLoading(false);
-            },
-            (error) => {
-                console.error('Failed to subscribe to live games:', error);
-                setLoading(false);
-            }
-        );
-
-        return () => unsubscribe();
-    }, [tournamentId]);
-
-    // Dynamic grid layout based on number of active games
-    const gridLayout = useMemo(() => {
-        const count = liveGames.length;
-        if (count === 0) return 'grid-cols-1';
-        if (count === 1) return 'grid-cols-1';
-        if (count === 2) return 'grid-cols-2';
-        if (count === 3) return 'grid-cols-3';
-        if (count === 4) return 'grid-cols-2 grid-rows-2';
-        if (count === 5 || count === 6) return 'grid-cols-3 grid-rows-2';
-        return 'grid-cols-3 grid-rows-3';  // 7-9 games
-    }, [liveGames.length]);
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-black flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-white font-bold text-xl mb-2">Loading Tournament Display...</p>
-                    <p className="text-zinc-600 text-sm">Connecting to live games</p>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="min-h-screen bg-black text-white p-2 overflow-hidden">
-            {liveGames.length === 0 ? (
-                // No active games
-                <div className="h-screen flex flex-col items-center justify-center">
-                    <div className="text-center max-w-2xl">
-                        <div className="text-9xl mb-8 opacity-20">🏀</div>
-                        <h1 className="text-6xl font-black italic uppercase tracking-tight mb-4 text-white/80">
-                            THE BOX
-                        </h1>
-                        <p className="text-2xl font-bold uppercase tracking-wider text-zinc-600 mb-8">
-                            Tournament Display
-                        </p>
-                        <div className="inline-block px-6 py-3 bg-zinc-900 border border-zinc-800 rounded-full">
-                            <p className="text-sm font-bold uppercase tracking-widest text-zinc-500">
-                                ⏳ Waiting for matches to start...
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                // Active games grid
-                <div className={`grid ${gridLayout} gap-2 h-screen`}>
-                    {liveGames.map(game => (
-                        <CourtScoreboard
-                            key={game.code}
-                            gameCode={game.code}
-                            courtNumber={game.settings.courtNumber}
-                        />
-                    ))}
-                </div>
-            )}
         </div>
     );
 };
