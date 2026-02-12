@@ -428,8 +428,8 @@ export const HostConsole: React.FC = () => {
                                             <div
                                                 key={i}
                                                 className={`w-3 h-5 rounded-sm transition-all ${i < game.teamA.timeouts
-                                                        ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]'
-                                                        : 'bg-zinc-800/50'
+                                                    ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]'
+                                                    : 'bg-zinc-800/50'
                                                     }`}
                                             ></div>
                                         ))}
@@ -498,8 +498,8 @@ export const HostConsole: React.FC = () => {
                                             <div
                                                 key={i}
                                                 className={`w-3 h-5 rounded-sm transition-all ${i < game.teamB.timeouts
-                                                        ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]'
-                                                        : 'bg-zinc-800/50'
+                                                    ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]'
+                                                    : 'bg-zinc-800/50'
                                                     }`}
                                             ></div>
                                         ))}
@@ -550,8 +550,8 @@ export const HostConsole: React.FC = () => {
                                 <button
                                     onClick={handleTimerToggle}
                                     className={`flex-1 rounded border-2 transition-all flex flex-col items-center justify-center active:scale-95 shadow-lg ${game.gameState.gameRunning
-                                            ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
-                                            : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
+                                        ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
+                                        : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
                                         }`}
                                 >
                                     <span className="text-2xl font-black uppercase italic tracking-wider">

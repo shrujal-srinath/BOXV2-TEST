@@ -473,27 +473,18 @@ export const getTournamentPublicInfo = async (tournamentId: string): Promise<Tou
 /**
  * 2. Submit the detailed request
  */
-export const joinTournament = async (
-    tournamentId: string,
-    requestDetails: {
-        displayName: string;
-        requestType: 'all' | 'specific';
-        requestedSports: SportType[]
-    }
-): Promise<void> => {
+export const joinTournament = async (tournamentId: string): Promise<void> => {
     if (!auth.currentUser) throw new Error("Must be logged in");
-
     const tRef = doc(db, 'tournaments', tournamentId);
+    const snap = await getDoc(tRef);
+    if (!snap.exists()) throw new Error("Invalid Tournament Code");
     const user = auth.currentUser;
-
     await updateDoc(tRef, {
         [`pendingRequests.${user.uid}`]: {
-            displayName: requestDetails.displayName, // User's custom input name
+            displayName: user.displayName || 'Volunteer',
             email: user.email,
             timestamp: Date.now(),
-            status: 'pending',
-            requestType: requestDetails.requestType,
-            requestedSports: requestDetails.requestedSports
+            status: 'pending'
         }
     });
 };

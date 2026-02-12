@@ -24,14 +24,14 @@ export const ControlDeck: React.FC<ControlDeckProps> = ({
   onUndo,
   onHorn
 }) => {
-  
+
   // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in an input
       if (document.activeElement?.tagName === 'INPUT') return;
 
-      switch(e.key) {
+      switch (e.key) {
         case ' ': // Spacebar -> Toggle Clock
           e.preventDefault();
           onGameClock('toggle');
@@ -41,7 +41,7 @@ export const ControlDeck: React.FC<ControlDeckProps> = ({
           onShotClock('reset-24');
           break;
         case 'r': // r -> Reset 14
-        case 'R': 
+        case 'R':
           onShotClock('reset-14');
           break;
         case 'p': // p -> Possession
@@ -66,14 +66,14 @@ export const ControlDeck: React.FC<ControlDeckProps> = ({
   return (
     <div className="bg-zinc-950 border-t-4 border-zinc-900 p-4 shrink-0 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
       <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 lg:gap-8 h-full">
-        
+
         {/* === ZONE 1: TEAM A (HOME) === */}
         <div className="col-span-3 flex flex-col gap-3">
           <div className="flex justify-between items-center border-b border-zinc-800 pb-1 mb-1">
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate">{teamA.name}</span>
             {teamA.fouls >= 5 && <span className="bg-red-600 text-white text-[9px] font-bold px-1.5 rounded animate-pulse">BONUS</span>}
           </div>
-          
+
           {/* Points Array */}
           <div className="grid grid-cols-3 gap-1.5 h-20">
             <TactileBtn label="+1" color={teamA.color} onClick={() => onAction('A', 'points', 1)} />
@@ -94,46 +94,46 @@ export const ControlDeck: React.FC<ControlDeckProps> = ({
           <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '10px 10px' }}></div>
 
           <div className="flex-1 grid grid-cols-12 gap-3 relative z-10">
-            
+
             {/* Game Clock Controls */}
             <div className="col-span-4 flex flex-col gap-2">
-               <div className="text-[9px] font-bold text-zinc-500 text-center uppercase tracking-widest">Game Clock</div>
-               <button 
-                 onClick={() => onGameClock('toggle')}
-                 className={`flex-1 rounded-lg border-2 transition-all flex flex-col items-center justify-center shadow-lg active:scale-95 ${gameState.gameRunning ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500' : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'}`}
-               >
-                 <span className="text-2xl">{gameState.gameRunning ? '⏸' : '▶'}</span>
-                 <span className="text-[10px] font-black uppercase tracking-widest">{gameState.gameRunning ? 'STOP' : 'START'}</span>
-               </button>
-               <div className="grid grid-cols-2 gap-1">
-                 <PrecisionBtn label="+1s" onClick={() => onGameClock('adjust', 1)} />
-                 <PrecisionBtn label="-1s" onClick={() => onGameClock('adjust', -1)} />
-               </div>
+              <div className="text-[9px] font-bold text-zinc-500 text-center uppercase tracking-widest">Game Clock</div>
+              <button
+                onClick={() => onGameClock('toggle')}
+                className={`flex-1 rounded-lg border-2 transition-all flex flex-col items-center justify-center shadow-lg active:scale-95 ${gameState.gameRunning ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500' : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'}`}
+              >
+                <span className="text-2xl">{gameState.gameRunning ? '⏸' : '▶'}</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">{gameState.gameRunning ? 'STOP' : 'START'}</span>
+              </button>
+              <div className="grid grid-cols-2 gap-1">
+                <PrecisionBtn label="+1s" onClick={() => onGameClock('adjust', 1)} />
+                <PrecisionBtn label="-1s" onClick={() => onGameClock('adjust', -1)} />
+              </div>
             </div>
 
             {/* Shot Clock Controls */}
             <div className="col-span-4 flex flex-col gap-2 border-x border-zinc-800 px-3">
-               <div className="text-[9px] font-bold text-zinc-500 text-center uppercase tracking-widest">Shot Clock</div>
-               <div className="grid grid-cols-1 gap-2 flex-1">
-                 <button onClick={() => onShotClock('reset-24')} className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95 transition-all">24</button>
-                 <button onClick={() => onShotClock('reset-14')} className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95 transition-all">14</button>
-               </div>
+              <div className="text-[9px] font-bold text-zinc-500 text-center uppercase tracking-widest">Shot Clock</div>
+              <div className="grid grid-cols-1 gap-2 flex-1">
+                <button onClick={() => onShotClock('reset-24')} className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95 transition-all">24</button>
+                <button onClick={() => onShotClock('reset-14')} className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95 transition-all">14</button>
+              </div>
             </div>
 
             {/* Admin / Possession */}
             <div className="col-span-4 flex flex-col gap-2">
-               <div className="text-[9px] font-bold text-zinc-500 text-center uppercase tracking-widest">Possession</div>
-               <button 
-                 onClick={onPossession}
-                 className="flex-1 bg-black border border-zinc-700 rounded-lg flex items-center justify-center gap-2 hover:border-white transition-all group active:scale-95"
-               >
-                 <span className={`text-2xl transition-colors ${gameState.possession === 'A' ? 'text-white' : 'text-zinc-800'}`}>◀</span>
-                 <span className="text-[10px] font-bold text-zinc-500 group-hover:text-white">SWAP</span>
-                 <span className={`text-2xl transition-colors ${gameState.possession === 'B' ? 'text-white' : 'text-zinc-800'}`}>▶</span>
-               </button>
-               <button onClick={onHorn} className="h-8 bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400 rounded text-[10px] font-black uppercase tracking-widest transition-colors active:scale-95">
-                 📣 SIREN
-               </button>
+              <div className="text-[9px] font-bold text-zinc-500 text-center uppercase tracking-widest">Possession</div>
+              <button
+                onClick={onPossession}
+                className="flex-1 bg-black border border-zinc-700 rounded-lg flex items-center justify-center gap-2 hover:border-white transition-all group active:scale-95"
+              >
+                <span className={`text-2xl transition-colors ${gameState.possession === 'A' ? 'text-white' : 'text-zinc-800'}`}>◀</span>
+                <span className="text-[10px] font-bold text-zinc-500 group-hover:text-white">SWAP</span>
+                <span className={`text-2xl transition-colors ${gameState.possession === 'B' ? 'text-white' : 'text-zinc-800'}`}>▶</span>
+              </button>
+              <button onClick={onHorn} className="h-8 bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400 rounded text-[10px] font-black uppercase tracking-widest transition-colors active:scale-95">
+                📣 SIREN
+              </button>
             </div>
           </div>
         </div>
@@ -164,7 +164,7 @@ export const ControlDeck: React.FC<ControlDeckProps> = ({
       {/* Global Admin Strip */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-4 opacity-50 hover:opacity-100 transition-opacity">
         <button onClick={onUndo} className="px-4 py-1 bg-zinc-900 border border-zinc-700 rounded text-[9px] font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 uppercase tracking-widest">
-           ↶ Undo Last (Z)
+          ↶ Undo Last (Z)
         </button>
       </div>
     </div>
@@ -174,7 +174,7 @@ export const ControlDeck: React.FC<ControlDeckProps> = ({
 // --- SUB-COMPONENTS for Industrial Look ---
 
 const TactileBtn = ({ label, color, onClick }: any) => (
-  <button 
+  <button
     onClick={(e) => {
       // Visual ripple effect logic could go here
       onClick(e);

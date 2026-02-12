@@ -109,7 +109,7 @@ export const BracketEditor: React.FC<Props> = ({
 
         // SMART CONNECTION LINES
         // Rule: From CENTER of two teams, shift to winner after declaration
-        const paths: JSX.Element[] = [];
+        const paths: React.ReactElement[] = [];
         fixtures.forEach(match => {
             if (!match.nextMatchId) return;
             const start = positions.get(match.id);
@@ -445,8 +445,8 @@ export const BracketEditor: React.FC<Props> = ({
                                         )}
 
                                         <div className={`absolute inset-0 ${isLive ? 'bg-gradient-to-br from-green-950/80 via-zinc-900/90 to-zinc-950/90' :
-                                                isCompleted ? 'bg-gradient-to-br from-zinc-900/90 via-zinc-900/95 to-zinc-950/95' :
-                                                    'bg-gradient-to-br from-zinc-900/70 via-zinc-900/80 to-zinc-950/90'
+                                            isCompleted ? 'bg-gradient-to-br from-zinc-900/90 via-zinc-900/95 to-zinc-950/95' :
+                                                'bg-gradient-to-br from-zinc-900/70 via-zinc-900/80 to-zinc-950/90'
                                             }`} />
 
                                         {isLive && <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-green-500/5 to-transparent" />}
@@ -461,9 +461,9 @@ export const BracketEditor: React.FC<Props> = ({
                                                     {isFinal && <span className="text-lg">🏆</span>}
                                                 </div>
                                                 <div className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${isLive ? 'bg-green-500/20 text-green-400 animate-pulse' :
-                                                        match.isBye ? 'bg-yellow-500/20 text-yellow-500' :
-                                                            isCompleted ? 'bg-yellow-500/20 text-yellow-500' :
-                                                                'bg-zinc-800/50 text-zinc-500'
+                                                    match.isBye ? 'bg-yellow-500/20 text-yellow-500' :
+                                                        isCompleted ? 'bg-yellow-500/20 text-yellow-500' :
+                                                            'bg-zinc-800/50 text-zinc-500'
                                                     }`}>
                                                     {match.isBye ? 'BYE' : match.status}
                                                 </div>
@@ -493,8 +493,8 @@ export const BracketEditor: React.FC<Props> = ({
                                                     ) : (
                                                         <>
                                                             <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamA === 'TBD' ? 'text-zinc-600 italic font-normal' :
-                                                                    match.winnerSide === 'A' ? 'text-yellow-400' :
-                                                                        'text-zinc-100'
+                                                                match.winnerSide === 'A' ? 'text-yellow-400' :
+                                                                    'text-zinc-100'
                                                                 }`}>
                                                                 {match.teamA}
                                                             </span>
@@ -528,8 +528,8 @@ export const BracketEditor: React.FC<Props> = ({
                                                     ) : (
                                                         <>
                                                             <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamB === 'TBD' || match.teamB === 'BYE' ? 'text-zinc-600 italic font-normal' :
-                                                                    match.winnerSide === 'B' ? 'text-yellow-400' :
-                                                                        'text-zinc-100'
+                                                                match.winnerSide === 'B' ? 'text-yellow-400' :
+                                                                    'text-zinc-100'
                                                                 }`}>
                                                                 {match.teamB}
                                                             </span>

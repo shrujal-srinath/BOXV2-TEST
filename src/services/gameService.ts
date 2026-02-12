@@ -156,8 +156,8 @@ const createDefaultTeam = (name: string, color: string): TeamData => ({
  */
 export const initializeNewGame = async (
   settings: GameSettings,
-  teamA: TeamData,
-  teamB: TeamData,
+  teamA: Partial<TeamData> & { name: string; color: string },
+  teamB: Partial<TeamData> & { name: string; color: string },
   isOnline: boolean,
   sport: string,
   hostId: string
@@ -178,9 +178,18 @@ export const initializeNewGame = async (
     shotClock: settings.shotClockDuration,
     gameRunning: false,
     shotClockRunning: false,
-    shotClockActive: true,
-    possessionTeam: 'A',
-    timeLeft: settings.periodDuration * 60
+    possession: 'A'
+  };
+
+  // 4. Merge partial team data with defaults
+  const fullTeamA: TeamData = {
+    ...createDefaultTeam(teamA.name, teamA.color),
+    ...teamA
+  };
+
+  const fullTeamB: TeamData = {
+    ...createDefaultTeam(teamB.name, teamB.color),
+    ...teamB
   };
 
   const newGame: BasketballGame = {
@@ -193,11 +202,11 @@ export const initializeNewGame = async (
     lastUpdate: Date.now(),
     settings: settings,
     gameState: initialGameState,
-    teamA: teamA,
-    teamB: teamB
+    teamA: fullTeamA,
+    teamB: fullTeamB
   };
 
-  // 4. CRITICAL FIX: Use setDoc with the gameCode as the ID
+  // 5. CRITICAL FIX: Use setDoc with the gameCode as the ID
   // DO NOT use addDoc(collection(db, 'games'), newGame)
   await setDoc(doc(db, 'games', gameCode), newGame);
 

@@ -56,22 +56,21 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
 
   return (
     <div className="flex-1 flex flex-col bg-black overflow-hidden">
-      
+
       {/* ULTRA-COMPACT 2-ROW LAYOUT */}
       <div className="flex-1 grid grid-rows-2 gap-2 p-2">
-        
+
         {/* ============================================
             ROW 1: SCORES + CLOCK + CONTROLS
             ============================================ */}
         <div className="grid grid-cols-12 gap-2">
-          
+
           {/* LEFT: TEAM A SCORE */}
           <div className="col-span-3 flex flex-col gap-1">
             <div className="metal-panel p-2">
               <div className="text-xs font-bold text-blue-400 uppercase truncate mb-1">{game.teamA.name}</div>
-              <div className={`digital-display digital-display-team-a text-5xl text-center py-2 ${
-                flashingTeam === 'A' ? 'animate-score-flash' : ''
-              }`}>
+              <div className={`digital-display digital-display-team-a text-5xl text-center py-2 ${flashingTeam === 'A' ? 'animate-score-flash' : ''
+                }`}>
                 {game.teamA.score}
               </div>
               <div className="flex gap-1 mt-1 text-xs">
@@ -92,17 +91,15 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
             {/* Game Clock */}
             <div className="flex-1 metal-panel-inset flex flex-col items-center justify-center p-2">
               <div className="text-xs text-zinc-500 font-bold mb-1">PERIOD {game.gameState.period}</div>
-              <div className={`digital-display text-6xl mb-2 ${
-                game.gameState.gameRunning ? 'text-green-500' : 'text-zinc-600'
-              }`}>
+              <div className={`digital-display text-6xl mb-2 ${game.gameState.gameRunning ? 'text-green-500' : 'text-zinc-600'
+                }`}>
                 {formatTime(game.gameState.gameTime.minutes, game.gameState.gameTime.seconds)}
               </div>
               <div className="flex gap-2 w-full">
                 <button
                   onClick={onToggleClock}
-                  className={`flex-1 hw-button py-2 text-sm ${
-                    game.gameState.gameRunning ? 'hw-button-red' : 'hw-button-green'
-                  }`}
+                  className={`flex-1 hw-button py-2 text-sm ${game.gameState.gameRunning ? 'hw-button-red' : 'hw-button-green'
+                    }`}
                 >
                   {game.gameState.gameRunning ? '⏸ STOP' : '▶ START'}
                 </button>
@@ -113,9 +110,8 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
             <div className="metal-panel-inset p-2 flex items-center justify-between">
               <div className="flex-1 text-center">
                 <div className="text-xs text-zinc-500 font-bold mb-1">SHOT</div>
-                <div className={`digital-display text-4xl ${
-                  game.gameState.shotClock <= 5 && game.gameState.shotClock > 0 ? 'text-red-500 animate-pulse' : 'text-amber-500'
-                }`}>
+                <div className={`digital-display text-4xl ${game.gameState.shotClock <= 5 && game.gameState.shotClock > 0 ? 'text-red-500 animate-pulse' : 'text-amber-500'
+                  }`}>
                   {game.gameState.shotClock}
                 </div>
               </div>
@@ -130,9 +126,8 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
           <div className="col-span-3 flex flex-col gap-1">
             <div className="metal-panel p-2">
               <div className="text-xs font-bold text-red-400 uppercase truncate mb-1 text-right">{game.teamB.name}</div>
-              <div className={`digital-display digital-display-team-b text-5xl text-center py-2 ${
-                flashingTeam === 'B' ? 'animate-score-flash' : ''
-              }`}>
+              <div className={`digital-display digital-display-team-b text-5xl text-center py-2 ${flashingTeam === 'B' ? 'animate-score-flash' : ''
+                }`}>
                 {game.teamB.score}
               </div>
               <div className="flex gap-1 mt-1 text-xs">
@@ -153,7 +148,7 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
             ROW 2: ACTION BUTTONS
             ============================================ */}
         <div className="grid grid-cols-12 gap-2">
-          
+
           {/* TEAM A ACTIONS */}
           <div className="col-span-3 grid grid-cols-2 gap-1">
             <button onClick={() => handleScoreAction('A', 3)} className="hw-button hw-button-blue text-2xl font-black">+3</button>
@@ -172,14 +167,14 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
               disabled={!canUndo}
               className="hw-button text-xs col-span-1"
             >
-              ↶<br/>UNDO
+              ↶<br />UNDO
             </button>
             <button
               onClick={onRedo}
               disabled={!canRedo}
               className="hw-button text-xs col-span-1"
             >
-              ↷<br/>REDO
+              ↷<br />REDO
             </button>
 
             {/* Possession */}
@@ -187,7 +182,7 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
               onClick={onTogglePossession}
               className="hw-button text-xs col-span-1"
             >
-              {game.gameState.possession === 'A' ? '◀' : '▶'}<br/>POSS
+              {game.gameState.possession === 'A' ? '◀' : '▶'}<br />POSS
             </button>
 
             {/* Next Period */}
@@ -200,7 +195,7 @@ export const HardwareUI: React.FC<HardwareUIProps> = ({
               }}
               className="hw-button hw-button-amber text-xs col-span-1"
             >
-              ⏭<br/>NEXT Q
+              ⏭<br />NEXT Q
             </button>
           </div>
 

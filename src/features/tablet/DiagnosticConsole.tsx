@@ -27,7 +27,7 @@ export const DiagnosticConsole: React.FC<DiagnosticConsoleProps> = ({
     console.log = (...args: any[]) => {
       originalLog(...args);
       const timestamp = new Date().toLocaleTimeString();
-      const message = args.map(arg => 
+      const message = args.map(arg =>
         typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
       ).join(' ');
       capturedLogs.push(`[${timestamp}] ${message}`);
@@ -100,31 +100,31 @@ export const DiagnosticConsole: React.FC<DiagnosticConsoleProps> = ({
           {/* LEFT: System Status */}
           <div className="metal-panel p-6 flex flex-col gap-4">
             <h3 className="embossed-label mb-2">SYSTEM STATUS</h3>
-            
+
             <div className="space-y-4">
               <StatusRow label="Mode" value={navigator.onLine ? 'ONLINE' : 'OFFLINE'} />
               <StatusRow label="Uptime" value={formatUptime(uptime)} />
               <StatusRow label="Memory" value={getMemoryUsage()} />
               <StatusRow label="Game Code" value={game.code} />
               <StatusRow label="Period" value={`Q${game.gameState.period}`} />
-              <StatusRow 
-                label="Clock" 
-                value={`${game.gameState.gameTime.minutes}:${game.gameState.gameTime.seconds.toString().padStart(2, '0')}`} 
+              <StatusRow
+                label="Clock"
+                value={`${game.gameState.gameTime.minutes}:${game.gameState.gameTime.seconds.toString().padStart(2, '0')}`}
               />
-              <StatusRow 
-                label="Shot Clock" 
-                value={game.gameState.shotClock.toString()} 
+              <StatusRow
+                label="Shot Clock"
+                value={game.gameState.shotClock.toString()}
               />
-              <StatusRow 
-                label="Possession" 
-                value={game.gameState.possession === 'A' ? game.teamA.name : game.teamB.name} 
+              <StatusRow
+                label="Possession"
+                value={game.gameState.possession === 'A' ? game.teamA.name : game.teamB.name}
               />
             </div>
 
             <div className="mt-auto pt-4 border-t border-zinc-700">
-              <StatusRow 
-                label="Queue Length" 
-                value={syncQueue.length.toString()} 
+              <StatusRow
+                label="Queue Length"
+                value={syncQueue.length.toString()}
                 highlight={syncQueue.length > 0}
               />
             </div>
@@ -133,7 +133,7 @@ export const DiagnosticConsole: React.FC<DiagnosticConsoleProps> = ({
           {/* MIDDLE: Sync Queue */}
           <div className="metal-panel p-6 flex flex-col">
             <h3 className="embossed-label mb-4">SYNC QUEUE</h3>
-            
+
             <div className="flex-1 terminal-output">
               {syncQueue.length === 0 ? (
                 <div className="text-zinc-700 text-center py-8">
@@ -143,7 +143,7 @@ export const DiagnosticConsole: React.FC<DiagnosticConsoleProps> = ({
                 <div className="space-y-1">
                   {syncQueue.map((item: any, idx: number) => (
                     <div key={idx} className="terminal-line text-xs">
-                      [{new Date(item.timestamp).toLocaleTimeString()}] 
+                      [{new Date(item.timestamp).toLocaleTimeString()}]
                       {item.code} - {item.data.gameState.period}Q
                     </div>
                   ))}
@@ -155,7 +155,7 @@ export const DiagnosticConsole: React.FC<DiagnosticConsoleProps> = ({
           {/* RIGHT: Event Log */}
           <div className="metal-panel p-6 flex flex-col">
             <h3 className="embossed-label mb-4">EVENT LOG (LAST 50)</h3>
-            
+
             <div className="flex-1 terminal-output">
               {logs.length === 0 ? (
                 <div className="text-zinc-700 text-center py-8">
@@ -185,10 +185,10 @@ export const DiagnosticConsole: React.FC<DiagnosticConsoleProps> = ({
   );
 };
 
-const StatusRow: React.FC<{ label: string; value: string; highlight?: boolean }> = ({ 
-  label, 
-  value, 
-  highlight 
+const StatusRow: React.FC<{ label: string; value: string; highlight?: boolean }> = ({
+  label,
+  value,
+  highlight
 }) => (
   <div className="flex justify-between items-center py-2 border-b border-zinc-800 last:border-0">
     <span className="text-xs text-zinc-500 font-bold uppercase tracking-wide">{label}</span>
