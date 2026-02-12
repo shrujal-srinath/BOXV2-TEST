@@ -269,3 +269,53 @@
 .overflow-hidden {
   overflow: hidden;
 }
+
+/* 
+ * Add to the BOTTOM of src/styles/hardware.css
+ * ─────────────────────────────────────────────────────────────
+ * LANDSCAPE ENFORCEMENT
+ *
+ * Strategy:
+ *   1. TabletController calls screen.orientation.lock('landscape')
+ *      This works on: Android Chrome, iOS PWA (added to home screen)
+ *
+ *   2. If the API is unavailable (desktop browser, some mobile browsers),
+ *      these CSS rules kick in as a fallback.
+ *      They rotate the entire UI 90° via CSS transform when the device
+ *      is in portrait orientation, making the content always appear landscape.
+ *
+ * The .landscape-enforcer class is applied to the TabletController root div.
+ * ─────────────────────────────────────────────────────────────
+ */
+
+/* Tell the browser this page prefers landscape */
+@media screen and (orientation: portrait) {
+  .landscape-enforcer {
+    /* Rotate the entire app 90 degrees */
+    transform: rotate(90deg);
+    transform-origin: center center;
+
+    /* After rotation, swap width/height so it fills the screen */
+    width: 100vh !important;
+    height: 100vw !important;
+
+    /* Re-center: shift by the difference */
+    position: fixed;
+    top: calc((100vh - 100vw) / 2);
+    left: calc((100vw - 100vh) / 2);
+
+    overflow: hidden;
+  }
+}
+
+/* In landscape: .landscape-enforcer is a normal full-screen div */
+@media screen and (orientation: landscape) {
+  .landscape-enforcer {
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+  }
+}
