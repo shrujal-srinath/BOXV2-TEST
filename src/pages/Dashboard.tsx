@@ -1,3 +1,4 @@
+// src/pages/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BasketballGame } from '../types';
@@ -6,6 +7,7 @@ import { subscribeToLiveGames, deleteGame } from '../services/gameService';
 import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
+import { ConnectControllerModal } from '../components/ConnectControllerModal'; // <--- NEW IMPORT
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -20,7 +22,11 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | 'confirmTournament' | null>(null);
+  // Added 'connect_controller' to the modal types
+  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | 'confirmTournament' | 'connect_controller' | null>(null);
+
+  // Track if controller is linked (checks session storage on load)
+  const [controllerLinked, setControllerLinked] = useState(!!sessionStorage.getItem('BOX_HANDHELD_ID'));
 
   const [showInstallCard, setShowInstallCard] = useState(() => {
     return localStorage.getItem('box_dismiss_install') !== 'true';
@@ -138,9 +144,20 @@ export const Dashboard: React.FC = () => {
             <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
             <MenuItem label="Tournament Mode" icon="🏆" onClick={() => { setIsMenuOpen(false); setActiveModal('confirmTournament'); }} highlight subtitle="League Management" />
 
+            {/* --- NEW HANDHELD CONTROLLER MENU ITEM --- */}
             <div className="pt-2 mt-2">
-              <MenuItem label={isInstalled ? "Unit Provisioned" : "Provision Hardware"} icon={isInstalled ? "✅" : "📱"} onClick={() => { setIsMenuOpen(false); setActiveModal('provision'); }} highlight={!isInstalled} subtitle={isInstalled ? "Device Ready" : "Setup Referee Unit"} />
+              <MenuItem
+                label={controllerLinked ? "Handheld Linked" : "Connect Handheld"}
+                icon={controllerLinked ? "🎮" : "🔗"}
+                onClick={() => { setIsMenuOpen(false); setActiveModal('connect_controller'); }}
+                highlight={!controllerLinked}
+                subtitle={controllerLinked ? "Ready to Sync" : "Link ESP Controller"}
+                badge={controllerLinked ? "ON" : undefined}
+              />
+              <MenuItem label={isInstalled ? "Unit Provisioned" : "Provision Hardware"} icon={isInstalled ? "✅" : "📱"} onClick={() => { setIsMenuOpen(false); setActiveModal('provision'); }} highlight={!isInstalled && !controllerLinked} subtitle={isInstalled ? "Device Ready" : "Setup Referee Unit"} />
             </div>
+            {/* ----------------------------------------- */}
+
             <MenuItem label="My Profile" icon="👤" onClick={() => { setIsMenuOpen(false); setActiveModal('profile'); }} disabled={!user} />
             <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
             {myGames.length > 0 && (
@@ -289,6 +306,19 @@ export const Dashboard: React.FC = () => {
       </main>
 
       {/* Modals */}
+      {/* --- NEW MODAL IMPLEMENTATION --- */}
+      {activeModal === 'connect_controller' && user && (
+        <ConnectControllerModal
+          userId={user.uid}
+          onClose={() => setActiveModal(null)}
+          onSuccess={(code) => {
+            setControllerLinked(true);
+            console.log(`Handheld Controller ${code} linked successfully`);
+          }}
+        />
+      )}
+      {/* -------------------------------- */}
+
       {activeModal === 'provision' && (
         <Modal title="Hardware Provisioning Checklist" onClose={() => setActiveModal(null)}>
           <div className="space-y-4">

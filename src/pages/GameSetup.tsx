@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { initializeNewGame } from '../services/gameService';
 import { subscribeToAuth } from '../services/authService';
 import { SplashScreen } from '../components/SplashScreen';
+import { useHardwareBridge } from '../hooks/useHardwareBridge'; // <--- NEW IMPORT
 import type { Player } from '../types';
 import type { User } from 'firebase/auth';
 
@@ -53,6 +54,23 @@ export const GameSetup: React.FC = () => {
 
   // Refs for UX
   const numberInputRef = useRef<HTMLInputElement>(null);
+
+  // --- NEW: HARDWARE BRIDGE INTEGRATION ---
+  const { isConnected, updateScreen } = useHardwareBridge();
+
+  // --- NEW: MIRROR EFFECT ---
+  // Updates the ESP32 screen whenever you type a team name or change duration
+  useEffect(() => {
+    if (isConnected) {
+      const nameA = teamAName.substring(0, 8).toUpperCase() || "TEAM A";
+      const nameB = teamBName.substring(0, 8).toUpperCase() || "TEAM B";
+      // Format: "BSK 10M" or "VOL 3SETS"
+      const footer = `${sportType.substring(0, 3).toUpperCase()} ${periodDuration}M`;
+
+      updateScreen(nameA, nameB, footer);
+    }
+  }, [teamAName, teamBName, periodDuration, sportType, isConnected, updateScreen]);
+
 
   // --- EFFECT: Load User State ---
   useEffect(() => {
@@ -217,8 +235,15 @@ export const GameSetup: React.FC = () => {
             <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:bg-white hover:text-black hover:border-white transition-all text-xl active:scale-95">←</button>
             <div>
               <h1 className="text-xl font-black tracking-tight uppercase italic text-white leading-none">{sportType} CONFIG</h1>
-              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] mt-1">
-                {step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}
+              <div className="flex items-center gap-2 mt-1">
+                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
+                  {step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}
+                </div>
+                {/* Hardware Indicator */}
+                <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ml-2 ${isConnected ? 'bg-green-900/30 border border-green-800' : 'hidden'}`}>
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-[8px] font-bold text-green-500 uppercase tracking-wide">LINKED</span>
+                </div>
               </div>
             </div>
           </div>
