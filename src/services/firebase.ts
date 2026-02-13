@@ -2,17 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-
-// Debug: Log environment variables (remove in production)
-console.log('FIREBASE CONFIG CHECK:', {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ? '✓ Present' : '✗ Missing',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ? '✓ Present' : '✗ Missing',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ? '✓ Present' : '✗ Missing',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ? '✓ Present' : '✗ Missing',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ? '✓ Present' : '✗ Missing',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID ? '✓ Present' : '✗ Missing',
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ? '✓ Present' : '✗ Missing',
-});
+import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -22,23 +12,30 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  // ⚠️ REQUIRED: Add your RTDB URL to your .env file:
+  // VITE_FIREBASE_DATABASE_URL=https://YOUR-PROJECT-default-rtdb.firebaseio.com
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
 };
 
-// Validate config before initializing
 const requiredFields = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
 const missingFields = requiredFields.filter(field => !firebaseConfig[field as keyof typeof firebaseConfig]);
 
 if (missingFields.length > 0) {
-  console.error('FIREBASE CONFIG: Some environment variables are missing:', missingFields);
   throw new Error(`Missing Firebase config: ${missingFields.join(', ')}`);
 }
 
-// Initialize Firebase (FIXED: Added 'export' so it can be imported as { app })
+if (!firebaseConfig.databaseURL) {
+  console.warn('[Firebase] VITE_FIREBASE_DATABASE_URL not set. Hardware bridge will use Firestore fallback only.');
+}
+
 export const app = initializeApp(firebaseConfig);
 
-// Initialize services
+// Firestore — for games, users, tournaments (rich queries, complex data)
 export const db = getFirestore(app);
-export const auth = getAuth(app);
 
-// Default export is still useful for some imports
+// Realtime Database — for hardware bridge (low latency, high frequency writes)
+// Will be undefined if databaseURL is not configured, handled gracefully in the bridge
+export const rtdb = firebaseConfig.databaseURL ? getDatabase(app) : null;
+
+export const auth = getAuth(app);
 export default app;
