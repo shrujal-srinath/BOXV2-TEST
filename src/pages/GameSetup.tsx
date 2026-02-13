@@ -1,9 +1,10 @@
+// src/pages/GameSetup.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { initializeNewGame } from '../services/gameService';
 import { subscribeToAuth } from '../services/authService';
 import { SplashScreen } from '../components/SplashScreen';
-import { useHardwareBridge } from '../hooks/useHardwareBridge'; // <--- NEW IMPORT
+import { useHardwareBridge } from '../hooks/useHardwareBridge';
 import type { Player } from '../types';
 import type { User } from 'firebase/auth';
 
@@ -55,13 +56,23 @@ export const GameSetup: React.FC = () => {
   // Refs for UX
   const numberInputRef = useRef<HTMLInputElement>(null);
 
-  // --- NEW: HARDWARE BRIDGE INTEGRATION ---
+  // --- HARDWARE BRIDGE INTEGRATION ---
   const { isConnected, updateScreen } = useHardwareBridge();
 
-  // --- NEW: MIRROR EFFECT ---
-  // Updates the ESP32 screen whenever you type a team name or change duration
+  // Control whether we are using the controller for this game
+  // Defaults to true if connected, but user can toggle it off
+  const [useHardware, setUseHardware] = useState(isConnected);
+
+  // Auto-enable if connection comes online while on this page
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected) setUseHardware(true);
+  }, [isConnected]);
+
+  // --- MIRROR EFFECT ---
+  // Updates the ESP32 screen whenever you type a team name or change duration
+  // Only active if device is connected AND enabled
+  useEffect(() => {
+    if (isConnected && useHardware) {
       const nameA = teamAName.substring(0, 8).toUpperCase() || "TEAM A";
       const nameB = teamBName.substring(0, 8).toUpperCase() || "TEAM B";
       // Format: "BSK 10M" or "VOL 3SETS"
@@ -69,7 +80,7 @@ export const GameSetup: React.FC = () => {
 
       updateScreen(nameA, nameB, footer);
     }
-  }, [teamAName, teamBName, periodDuration, sportType, isConnected, updateScreen]);
+  }, [teamAName, teamBName, periodDuration, sportType, isConnected, useHardware, updateScreen]);
 
 
   // --- EFFECT: Load User State ---
@@ -110,7 +121,6 @@ export const GameSetup: React.FC = () => {
     // 1. VALIDATION CHECKS
     if (!pNumber) {
       setErrorMsg("⚠️ PLEASE ENTER A JERSEY NUMBER");
-      // Optional: Focus back if they clicked button without typing
       numberInputRef.current?.focus();
       return;
     }
@@ -240,7 +250,7 @@ export const GameSetup: React.FC = () => {
                   {step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}
                 </div>
                 {/* Hardware Indicator */}
-                <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ml-2 ${isConnected ? 'bg-green-900/30 border border-green-800' : 'hidden'}`}>
+                <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ml-2 ${isConnected && useHardware ? 'bg-green-900/30 border border-green-800' : 'hidden'}`}>
                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
                   <span className="text-[8px] font-bold text-green-500 uppercase tracking-wide">LINKED</span>
                 </div>
@@ -255,8 +265,36 @@ export const GameSetup: React.FC = () => {
         {/* Step 1 Content */}
         {step === 1 && (
           <div className="flex-1 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-y-auto bg-black/20 custom-scrollbar">
+
             {/* Rules Section */}
             <div className="lg:col-span-7 flex flex-col gap-8">
+
+              {/* --- NEW HARDWARE STATUS BANNER --- */}
+              {isConnected && (
+                <div className="bg-green-900/10 border border-green-800/50 p-4 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-green-900/30 text-green-500 rounded-full flex items-center justify-center text-xl">
+                      🎮
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest">Hardware Controller Ready</h3>
+                      <p className="text-[10px] text-zinc-500 font-bold">Device is online and ready to score.</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setUseHardware(!useHardware)}
+                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${useHardware
+                      ? 'bg-green-500 text-black border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.4)]'
+                      : 'bg-transparent text-zinc-500 border-zinc-700 hover:text-white'
+                      }`}
+                  >
+                    {useHardware ? 'ENABLED' : 'DISABLED'}
+                  </button>
+                </div>
+              )}
+              {/* ---------------------------------- */}
+
               {/* Match Details */}
               <section className="bg-zinc-900/50 p-6 rounded-xl border border-zinc-800">
                 <h2 className="text-zinc-400 text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> Match Details</h2>

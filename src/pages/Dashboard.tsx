@@ -7,7 +7,8 @@ import { subscribeToLiveGames, deleteGame } from '../services/gameService';
 import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
-import { ConnectControllerModal } from '../components/ConnectControllerModal'; // <--- NEW IMPORT
+import { ConnectControllerModal } from '../components/ConnectControllerModal';
+import { useHardwareBridge } from '../hooks/useHardwareBridge'; // <--- IMPORT
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -22,11 +23,13 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Added 'connect_controller' to the modal types
   const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | 'confirmTournament' | 'connect_controller' | null>(null);
 
   // Track if controller is linked (checks session storage on load)
   const [controllerLinked, setControllerLinked] = useState(!!sessionStorage.getItem('BOX_HANDHELD_ID'));
+
+  // --- HARDWARE BRIDGE STATUS ---
+  const { isConnected, transport } = useHardwareBridge();
 
   const [showInstallCard, setShowInstallCard] = useState(() => {
     return localStorage.getItem('box_dismiss_install') !== 'true';
@@ -54,6 +57,11 @@ export const Dashboard: React.FC = () => {
       unsubGames();
     };
   }, []);
+
+  // Sync local state when connection changes
+  useEffect(() => {
+    setControllerLinked(isConnected || !!sessionStorage.getItem('BOX_HANDHELD_ID'));
+  }, [isConnected]);
 
   // --- HANDLERS ---
   const handleInstall = async () => {
@@ -126,6 +134,26 @@ export const Dashboard: React.FC = () => {
             {user ? (user.displayName || 'Operator') : 'Guest User'}
           </div>
         </button>
+
+        {/* --- HARDWARE STATUS WIDGET --- */}
+        <button
+          onClick={() => setActiveModal('connect_controller')}
+          className={`
+            flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all mr-auto ml-4
+            ${isConnected
+              ? 'bg-green-950/30 border-green-800 text-green-500 hover:bg-green-900/50'
+              : 'bg-zinc-900 border-zinc-800 text-zinc-600 hover:text-zinc-400 opacity-0 md:opacity-100'
+            }
+          `}
+        >
+          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`} />
+          <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">
+            {isConnected ? (transport === 'websocket' ? 'H/W: LAN' : 'H/W: CLOUD') : 'H/W: OFF'}
+          </span>
+          {isConnected && <span className="text-lg leading-none">🎮</span>}
+        </button>
+        {/* ----------------------------- */}
+
         <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-30 hover:bg-zinc-800 rounded transition-colors" aria-label="Open menu">
           <div className="w-6 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors"></div>
           <div className="w-6 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors"></div>
@@ -144,19 +172,17 @@ export const Dashboard: React.FC = () => {
             <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
             <MenuItem label="Tournament Mode" icon="🏆" onClick={() => { setIsMenuOpen(false); setActiveModal('confirmTournament'); }} highlight subtitle="League Management" />
 
-            {/* --- NEW HANDHELD CONTROLLER MENU ITEM --- */}
             <div className="pt-2 mt-2">
               <MenuItem
-                label={controllerLinked ? "Handheld Linked" : "Connect Handheld"}
-                icon={controllerLinked ? "🎮" : "🔗"}
+                label={isConnected ? "Handheld Connected" : "Connect Handheld"}
+                icon={isConnected ? "🎮" : "🔗"}
                 onClick={() => { setIsMenuOpen(false); setActiveModal('connect_controller'); }}
-                highlight={!controllerLinked}
-                subtitle={controllerLinked ? "Ready to Sync" : "Link ESP Controller"}
-                badge={controllerLinked ? "ON" : undefined}
+                highlight={!isConnected}
+                subtitle={isConnected ? "Device Online" : "Link ESP Controller"}
+                badge={isConnected ? "ON" : undefined}
               />
               <MenuItem label={isInstalled ? "Unit Provisioned" : "Provision Hardware"} icon={isInstalled ? "✅" : "📱"} onClick={() => { setIsMenuOpen(false); setActiveModal('provision'); }} highlight={!isInstalled && !controllerLinked} subtitle={isInstalled ? "Device Ready" : "Setup Referee Unit"} />
             </div>
-            {/* ----------------------------------------- */}
 
             <MenuItem label="My Profile" icon="👤" onClick={() => { setIsMenuOpen(false); setActiveModal('profile'); }} disabled={!user} />
             <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
@@ -246,7 +272,6 @@ export const Dashboard: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {(activeTab === 'my' ? myGames : liveFeed).map((g, index) => (
-                // FIXED: Combined Key
                 <div key={`${g.code}-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden ${activeTab === 'my' ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
                   {/* Status Color Bar */}
                   <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${activeTab === 'my' ? 'bg-red-600' : 'bg-blue-600'}`}></div>
@@ -306,7 +331,6 @@ export const Dashboard: React.FC = () => {
       </main>
 
       {/* Modals */}
-      {/* --- NEW MODAL IMPLEMENTATION --- */}
       {activeModal === 'connect_controller' && user && (
         <ConnectControllerModal
           userId={user.uid}
@@ -317,7 +341,6 @@ export const Dashboard: React.FC = () => {
           }}
         />
       )}
-      {/* -------------------------------- */}
 
       {activeModal === 'provision' && (
         <Modal title="Hardware Provisioning Checklist" onClose={() => setActiveModal(null)}>

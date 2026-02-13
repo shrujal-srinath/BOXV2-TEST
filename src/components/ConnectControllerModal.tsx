@@ -117,8 +117,8 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
         const isWS = transport === 'websocket';
         return (
             <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${isWS
-                    ? 'bg-green-900/30 border border-green-700/50 text-green-400'
-                    : 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
+                ? 'bg-green-900/30 border border-green-700/50 text-green-400'
+                : 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
                 }`}>
                 <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isWS ? 'bg-green-400' : 'bg-blue-400'}`} />
                 {isWS ? 'LOCAL WS' : 'CLOUD RTDB'}
@@ -145,9 +145,9 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
                 {/* Top accent line — colour changes by phase */}
                 <div className={`h-0.5 w-full ${phase === 'connected' ? 'bg-green-500' :
-                        phase === 'error' ? 'bg-red-500' :
-                            phase === 'linking' ? 'bg-blue-500 animate-pulse' :
-                                'bg-zinc-700'
+                    phase === 'error' ? 'bg-red-500' :
+                        phase === 'linking' ? 'bg-blue-500 animate-pulse' :
+                            'bg-zinc-700'
                     }`} />
 
                 <div className="p-8">
@@ -269,29 +269,17 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                 </div>
                             </div>
 
-                            {/* Button mapping legend */}
-                            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 mb-6">
-                                <p className="text-zinc-600 text-[10px] uppercase tracking-widest font-bold mb-2">Button Map</p>
-                                <div className="grid grid-cols-2 gap-1 text-[10px] font-mono">
-                                    <span className="text-zinc-600">BTN A</span><span className="text-zinc-400">Score Home +2</span>
-                                    <span className="text-zinc-600">BTN B</span><span className="text-zinc-400">Score Away +2</span>
-                                    <span className="text-zinc-600">BTN C</span><span className="text-zinc-400">Shot Clock 24s</span>
-                                    <span className="text-zinc-600">PAUSE</span><span className="text-zinc-400">Clock Toggle</span>
-                                    <span className="text-zinc-600">QUARTER</span><span className="text-zinc-400">Next Period</span>
-                                    <span className="text-zinc-600">UNDO</span><span className="text-zinc-400">Undo Last Action</span>
-                                </div>
-                            </div>
-
                             <div className="flex gap-3">
                                 <button
                                     onClick={handleUnlink}
-                                    className="flex-1 py-2.5 border border-zinc-800 text-zinc-500 hover:border-red-800 hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded"
+                                    className="flex-1 py-3 border border-zinc-800 text-zinc-500 hover:border-red-800 hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded"
                                 >
                                     Unlink
                                 </button>
+                                {/* SIMPLE DONE BUTTON - Returns user to dashboard */}
                                 <button
                                     onClick={onClose}
-                                    className="flex-1 py-2.5 bg-white text-black font-black text-xs uppercase tracking-widest hover:bg-zinc-200 transition-colors rounded"
+                                    className="flex-1 py-3 bg-white text-black font-black text-xs uppercase tracking-widest hover:bg-zinc-200 transition-colors rounded"
                                 >
                                     Done
                                 </button>
