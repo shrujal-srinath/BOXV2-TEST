@@ -1,8 +1,7 @@
 // src/pages/HostConsole.tsx (JUMBOTRON DESIGN + PRO FEATURES)
 /**
  * HOST CONSOLE - PREMIUM JUMBOTRON DESIGN
- * 
- * FEATURES:
+ * * FEATURES:
  * - Massive jumbotron scoreboard display
  * - Pro control deck with tactile buttons
  * - Player selection popup
@@ -17,6 +16,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToAuth } from '../services/authService';
 import { useBasketballGame } from '../hooks/useBasketballGame';
 import { deleteGame } from '../services/gameService';
+import { useHardwareBridge } from '../hooks/useHardwareBridge'; // <--- NEW IMPORT
 import type { Player } from '../types';
 
 // --- ICONS ---
@@ -68,6 +68,10 @@ export const HostConsole: React.FC = () => {
         handleAction,
         togglePossession
     } = useBasketballGame(gameCode || '', 'online');
+
+    // ─── HARDWARE BRIDGE INIT ─────────────────────────────────────────
+    const { lastInput, ackInput, updateScreen, isConnected } = useHardwareBridge();
+    // ──────────────────────────────────────────────────────────────────
 
     const gameRef = useRef(game);
     const gameStateRef = useRef(game?.gameState);
@@ -246,6 +250,67 @@ export const HostConsole: React.FC = () => {
         setActionHistory(prev => prev.slice(0, -1));
     };
 
+    // ─────────────────────────────────────────────────────────────
+    // NEW: HARDWARE EVENT LISTENERS (INPUT & SCREEN)
+    // ─────────────────────────────────────────────────────────────
+
+    // 1. Listen for Inputs from ESP32
+    useEffect(() => {
+        if (!lastInput || lastInput.handled) return;
+
+        console.log("Hardware Input:", lastInput.button);
+
+        switch (lastInput.button) {
+            case 'A': // Team A +2 (Standard)
+                handleAction('A', 'points', 2);
+                break;
+            case 'B': // Team B +2 (Standard)
+                handleAction('B', 'points', 2);
+                break;
+            case 'C': // Shot Clock Reset (Standard 24s)
+                resetShotClock(24);
+                break;
+            case 'PAUSE': // Pause/Play Timer
+                toggleTimer();
+                break;
+            case 'UNDO': // Undo last action
+                handleUndo();
+                break;
+            case 'QUARTER':
+                // Optional: Logic to advance quarter could go here
+                break;
+        }
+
+        // Critical: Tell bridge we handled this press
+        ackInput();
+
+    }, [lastInput, ackInput, handleAction, toggleTimer, resetShotClock]); // Note: handleUndo ref omitted to avoid dependency cycle, but effective due to closure
+
+    // 2. Mirror Game State to ESP32 Screen
+    useEffect(() => {
+        if (!isConnected || !game) return;
+
+        // Line 1: "HOME 88-85" (Truncated names)
+        const nameA = game.teamA.name.substring(0, 4).toUpperCase();
+        const nameB = game.teamB.name.substring(0, 4).toUpperCase();
+        const line1 = `${nameA} ${game.teamA.score}-${game.teamB.score} ${nameB}`;
+
+        // Line 2: "TIME 04:20"
+        const min = formatTime(game.gameState.gameTime.minutes);
+        const sec = formatTime(game.gameState.gameTime.seconds);
+        const line2 = `TIME ${min}:${sec}`;
+
+        // Footer: Status
+        let footer = `Q${game.gameState.period}`;
+        if (!game.gameState.gameRunning) footer += " PAUSED";
+        else footer += ` SC:${game.gameState.shotClock}`;
+
+        updateScreen(line1, line2, footer);
+
+    }, [game, isConnected, updateScreen]);
+    // ─────────────────────────────────────────────────────────────
+
+
     // ============================================
     // HEADER ACTIONS
     // ============================================
@@ -340,6 +405,15 @@ export const HostConsole: React.FC = () => {
                             {copied ? <Icons.Check /> : <span className="text-sm">📋</span>}
                         </button>
                     </div>
+
+                    {/* --- NEW: HARDWARE STATUS BADGE --- */}
+                    {isConnected && (
+                        <div className="hidden md:flex items-center gap-2 px-2 py-1 bg-green-900/20 border border-green-800/50 rounded">
+                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-[10px] font-bold text-green-500 uppercase tracking-wide">LINKED</span>
+                        </div>
+                    )}
+                    {/* ---------------------------------- */}
 
                     <div className="relative">
                         <button

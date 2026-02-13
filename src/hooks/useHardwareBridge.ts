@@ -242,6 +242,15 @@ export const useHardwareBridge = () => {
         onValue(ipRef, (snapshot) => {
             if (!snapshot.exists()) return;
             const ip = snapshot.val() as string;
+
+            // NEW LOGIC: If we see data here, the device is definitely online
+            setState(prev => ({
+                ...prev,
+                isConnected: true,
+                transport: wsRef.current?.readyState === WebSocket.OPEN ? 'websocket' : 'rtdb'
+            }));
+            resetHeartbeat();
+
             if (ip && ip !== wsIpRef.current) {
                 console.log(`[HardwareBridge] ESP32 reported IP ${ip} — attempting WS upgrade`);
                 connectWebSocket(ip);
