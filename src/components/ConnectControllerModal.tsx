@@ -1,10 +1,4 @@
 // src/components/ConnectControllerModal.tsx
-//
-// FIX SUMMARY vs previous version:
-//   - Mount effect no longer auto-advances to 'connected' from isConnected alone
-//   - 'connected' phase is only reached after a verified fresh heartbeat
-//   - Unlink clears RTDB stale nodes so next session starts clean
-//   - 8s timeout now shows 'pending' state, not fake 'connected'
 
 import React, { useState, useEffect, useRef } from 'react';
 import { linkHandheldDevice, unlinkHandheldDevice, HW_SESSION_KEY } from '../services/handheldService';
@@ -33,9 +27,6 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     const { isConnected, transport, latencyMs } = useHardwareBridge();
 
     // ── On mount: restore session only if we have a code AND confirmed live connection
-    // FIX: Previously this used isConnected from stale RTDB data.
-    // Now we only show 'connected' if isConnected is true after a fresh heartbeat.
-    // The bridge itself handles freshness — so this is now safe.
     useEffect(() => {
         const existingCode = sessionStorage.getItem(HW_SESSION_KEY);
         if (existingCode && isConnected) {
@@ -61,24 +52,36 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
         }
     }, [isConnected, phase]);
 
-    // ── Digit input handlers ─────────────────────────────────────
+    // ── Digit input handlers (UPDATED for Alphanumeric) ────────────────
     const handleDigitChange = (index: number, value: string) => {
-        if (!/^\d*$/.test(value)) return;
+        // Allow A-Z and 0-9 (Case insensitive check)
+        if (!/^[a-zA-Z0-9]*$/.test(value)) return;
+
         const next = [...digits];
-        next[index] = value.slice(-1);
+        // Take the last character typed and force Uppercase
+        next[index] = value.slice(-1).toUpperCase();
         setDigits(next);
+
+        // Auto-advance focus if value was entered
         if (value && index < 3) inputRefs.current[index + 1]?.focus();
     };
 
     const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+        // Backspace handling
         if (e.key === 'Backspace' && !digits[index] && index > 0) {
             inputRefs.current[index - 1]?.focus();
         }
+        // Enter key to submit
         if (e.key === 'Enter') handleLink();
     };
 
     const handlePaste = (e: React.ClipboardEvent) => {
-        const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+        // Clean paste data: keep only alphanumeric, max 4 chars, force uppercase
+        const pasted = e.clipboardData.getData('text')
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(0, 4)
+            .toUpperCase();
+
         if (pasted.length === 4) {
             setDigits(pasted.split(''));
             inputRefs.current[3]?.focus();
@@ -90,7 +93,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     const handleLink = async () => {
         const code = digits.join('');
         if (code.length !== 4) {
-            setErrorMsg('Enter all 4 digits.');
+            setErrorMsg('Enter all 4 characters.');
             return;
         }
 
@@ -108,12 +111,10 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
         // FIX: After 8 seconds with no heartbeat, go to 'pending' — NOT 'connected'.
         // 'pending' tells the user the code was accepted but the device hasn't responded yet.
-        // This is honest. 'connected' should only come from a real heartbeat.
         linkTimeoutRef.current = setTimeout(() => {
             setPhase(prev => {
                 if (prev === 'linking') {
                     // Firestore linked but no live heartbeat yet
-                    // Don't call onSuccess here — wait for actual connection
                     return 'pending';
                 }
                 return prev;
@@ -170,10 +171,10 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
                 {/* Top accent line */}
                 <div className={`h-0.5 w-full ${phase === 'connected' ? 'bg-green-500' :
-                        phase === 'pending' ? 'bg-amber-500 animate-pulse' :
-                            phase === 'error' ? 'bg-red-500' :
-                                phase === 'linking' ? 'bg-blue-500 animate-pulse' :
-                                    'bg-zinc-700'
+                    phase === 'pending' ? 'bg-amber-500 animate-pulse' :
+                        phase === 'error' ? 'bg-red-500' :
+                            phase === 'linking' ? 'bg-blue-500 animate-pulse' :
+                                'bg-zinc-700'
                     }`} />
 
                 <div className="p-8">
@@ -206,7 +207,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                     {(phase === 'input' || phase === 'error') && (
                         <div>
                             <p className="text-zinc-500 text-xs font-mono mb-6 leading-relaxed">
-                                Power on your ESP32 controller. The 4-digit pairing code will appear on its screen.
+                                Power on your ESP32 controller. The 4-character pairing code will appear on its screen.
                             </p>
 
                             <div className="flex gap-3 justify-center mb-6" onPaste={handlePaste}>
@@ -215,13 +216,13 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                         key={i}
                                         ref={el => { inputRefs.current[i] = el; }}
                                         type="text"
-                                        inputMode="numeric"
+                                        inputMode="text" /* CHANGED: was numeric */
                                         maxLength={1}
                                         value={d}
                                         onChange={e => handleDigitChange(i, e.target.value)}
                                         onKeyDown={e => handleKeyDown(i, e)}
                                         autoFocus={i === 0}
-                                        className={`w-14 h-16 text-center text-3xl font-black font-mono rounded-lg border-2 bg-black text-white outline-none transition-all
+                                        className={`w-14 h-16 text-center text-3xl font-black font-mono rounded-lg border-2 bg-black text-white outline-none transition-all uppercase
                                             ${d ? 'border-white' : 'border-zinc-800 focus:border-zinc-500'}
                                             ${phase === 'error' ? 'border-red-800' : ''}
                                         `}

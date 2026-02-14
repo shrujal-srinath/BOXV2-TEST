@@ -1,4 +1,4 @@
-// src/pages/HostConsole.tsx (JUMBOTRON DESIGN + PRO FEATURES)
+// src/pages/HostConsole.tsx (FULL CONTROL ENABLED)
 /**
  * HOST CONSOLE - PREMIUM JUMBOTRON DESIGN
  * * FEATURES:
@@ -9,6 +9,7 @@
  * - Manual adjustments
  * - Keyboard shortcuts
  * - Professional header
+ * - [NEW] Full Hardware Button Support (A, B, C, Pause, Undo)
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,7 +17,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToAuth } from '../services/authService';
 import { useBasketballGame } from '../hooks/useBasketballGame';
 import { deleteGame } from '../services/gameService';
-import { useHardwareBridge } from '../hooks/useHardwareBridge'; // <--- NEW IMPORT
+import { useHardwareBridge } from '../hooks/useHardwareBridge'; // <--- HARDWARE BRIDGE
+import { ConnectControllerModal } from '../components/ConnectControllerModal'; // <--- CONNECTION MODAL
 import type { Player } from '../types';
 
 // --- ICONS ---
@@ -49,6 +51,10 @@ export const HostConsole: React.FC = () => {
     const [shareMenuOpen, setShareMenuOpen] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
 
+    // --- CONNECTION STATE ---
+    const [showConnectModal, setShowConnectModal] = useState(false);
+    const [userId, setUserId] = useState<string | null>(null);
+
     // Undo system
     const [actionHistory, setActionHistory] = useState<GameAction[]>([]);
 
@@ -70,7 +76,7 @@ export const HostConsole: React.FC = () => {
     } = useBasketballGame(gameCode || '', 'online');
 
     // ─── HARDWARE BRIDGE INIT ─────────────────────────────────────────
-    const { lastInput, ackInput, updateScreen, isConnected } = useHardwareBridge();
+    const { lastInput, ackInput, updateScreen, isConnected, sendCommand } = useHardwareBridge();
     // ──────────────────────────────────────────────────────────────────
 
     const gameRef = useRef(game);
@@ -81,8 +87,16 @@ export const HostConsole: React.FC = () => {
         gameStateRef.current = game?.gameState;
     }, [game]);
 
+    // --- AUTH LISTENER (Required for Linking) ---
+    useEffect(() => {
+        const unsubscribe = subscribeToAuth((user) => {
+            if (user) setUserId(user.uid);
+        });
+        return () => unsubscribe();
+    }, []);
+
     // ============================================
-    // TIMER INTERVAL (Fixed from document)
+    // TIMER INTERVAL
     // ============================================
     const timerRef = useRef<number | null>(null);
 
@@ -181,7 +195,10 @@ export const HostConsole: React.FC = () => {
         });
 
         handleAction(team, type, value);
-        // TODO: Update player stats in Firebase
+        // Beep confirmation
+        if (isConnected && type === 'points') {
+            sendCommand({ cmd: 'BEEP' });
+        }
 
         setShowPlayerPopup(false);
         setPendingAction(null);
@@ -200,6 +217,9 @@ export const HostConsole: React.FC = () => {
         });
 
         handleAction(team, type, value);
+        if (isConnected && type === 'points') {
+            sendCommand({ cmd: 'BEEP' });
+        }
 
         setShowPlayerPopup(false);
         setPendingAction(null);
@@ -258,35 +278,42 @@ export const HostConsole: React.FC = () => {
     useEffect(() => {
         if (!lastInput || lastInput.handled) return;
 
-        console.log("Hardware Input:", lastInput.button);
+        console.log("Hardware Input Received:", lastInput.button);
 
+        // MAP PHYSICAL BUTTONS TO GAME ACTIONS
         switch (lastInput.button) {
-            case 'A': // Team A +2 (Standard)
+            case 'A': // Button A -> Team A +2 Points (Standard basket)
                 handleAction('A', 'points', 2);
                 break;
-            case 'B': // Team B +2 (Standard)
+
+            case 'B': // Button B -> Team B +2 Points (Standard basket)
                 handleAction('B', 'points', 2);
                 break;
-            case 'C': // Shot Clock Reset (Standard 24s)
+
+            case 'C': // Button C -> Reset Shot Clock to 24s
                 resetShotClock(24);
                 break;
-            case 'PAUSE': // Pause/Play Timer
+
+            case 'PAUSE': // Pause Button -> Start/Stop Game Clock
                 toggleTimer();
                 break;
-            case 'UNDO': // Undo last action
+
+            case 'UNDO': // Undo Button -> Revert last action
                 handleUndo();
                 break;
-            case 'QUARTER':
-                // Optional: Logic to advance quarter could go here
+
+            case 'QUARTER': // Quarter Button -> Advance Period (Optional)
+                // For now, we'll just log it or you can implement nextPeriod logic
+                console.log("Quarter button pressed - Logic placeholder");
                 break;
         }
 
-        // Critical: Tell bridge we handled this press
+        // Critical: Tell bridge we handled this press so it doesn't trigger again
         ackInput();
 
-    }, [lastInput, ackInput, handleAction, toggleTimer, resetShotClock]); // Note: handleUndo ref omitted to avoid dependency cycle, but effective due to closure
+    }, [lastInput, ackInput, handleAction, toggleTimer, resetShotClock]);
 
-    // 2. Mirror Game State to ESP32 Screen
+    // 2. Mirror Game State to ESP32 Screen (Output)
     useEffect(() => {
         if (!isConnected || !game) return;
 
@@ -406,14 +433,27 @@ export const HostConsole: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* --- NEW: HARDWARE STATUS BADGE --- */}
-                    {isConnected && (
-                        <div className="hidden md:flex items-center gap-2 px-2 py-1 bg-green-900/20 border border-green-800/50 rounded">
+                    {/* --- FIXED: CONNECTION BUTTON & BADGE --- */}
+                    {isConnected ? (
+                        // STATE 1: ALREADY CONNECTED (Click to manage/disconnect)
+                        <div
+                            onClick={() => setShowConnectModal(true)}
+                            className="hidden md:flex items-center gap-2 px-2 py-1 bg-green-900/20 border border-green-800/50 rounded cursor-pointer hover:bg-green-900/30 transition-colors"
+                        >
                             <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
                             <span className="text-[10px] font-bold text-green-500 uppercase tracking-wide">LINKED</span>
                         </div>
+                    ) : (
+                        // STATE 2: NOT CONNECTED (Click to connect)
+                        <button
+                            onClick={() => setShowConnectModal(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-xs font-bold uppercase tracking-wider text-zinc-300 transition-all"
+                        >
+                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                            <span>Remote</span>
+                        </button>
                     )}
-                    {/* ---------------------------------- */}
+                    {/* ---------------------------------------- */}
 
                     <div className="relative">
                         <button
@@ -597,22 +637,22 @@ export const HostConsole: React.FC = () => {
                             </span>
                         </div>
                         <div className="grid grid-cols-3 gap-1 h-16">
-                            <TactileBtn label="+1" color={game.teamA.color} onClick={(e) => handleScoreWithPlayer(e, 'A', 1)} />
-                            <TactileBtn label="+2" color={game.teamA.color} onClick={(e) => handleScoreWithPlayer(e, 'A', 2)} />
-                            <TactileBtn label="+3" color={game.teamA.color} onClick={(e) => handleScoreWithPlayer(e, 'A', 3)} />
+                            <TactileBtn label="+1" color={game.teamA.color} onClick={(e: any) => handleScoreWithPlayer(e, 'A', 1)} />
+                            <TactileBtn label="+2" color={game.teamA.color} onClick={(e: any) => handleScoreWithPlayer(e, 'A', 2)} />
+                            <TactileBtn label="+3" color={game.teamA.color} onClick={(e: any) => handleScoreWithPlayer(e, 'A', 3)} />
                         </div>
                         <div className="grid grid-cols-2 gap-1">
                             <AdminBtn
                                 label="FOUL"
                                 value={game.teamA.fouls}
                                 type="danger"
-                                onClick={(e) => handleFoulWithPlayer(e, 'A')}
+                                onClick={(e: any) => handleFoulWithPlayer(e, 'A')}
                             />
                             <AdminBtn
                                 label="TIMEOUT"
                                 value={game.teamA.timeouts}
                                 type="warning"
-                                onClick={(e) => handleTimeout(e, 'A')}
+                                onClick={(e: any) => handleTimeout(e, 'A')}
                             />
                         </div>
                     </div>
@@ -682,22 +722,22 @@ export const HostConsole: React.FC = () => {
                             </span>
                         </div>
                         <div className="grid grid-cols-3 gap-1 h-16">
-                            <TactileBtn label="+3" color={game.teamB.color} onClick={(e) => handleScoreWithPlayer(e, 'B', 3)} />
-                            <TactileBtn label="+2" color={game.teamB.color} onClick={(e) => handleScoreWithPlayer(e, 'B', 2)} />
-                            <TactileBtn label="+1" color={game.teamB.color} onClick={(e) => handleScoreWithPlayer(e, 'B', 1)} />
+                            <TactileBtn label="+3" color={game.teamB.color} onClick={(e: any) => handleScoreWithPlayer(e, 'B', 3)} />
+                            <TactileBtn label="+2" color={game.teamB.color} onClick={(e: any) => handleScoreWithPlayer(e, 'B', 2)} />
+                            <TactileBtn label="+1" color={game.teamB.color} onClick={(e: any) => handleScoreWithPlayer(e, 'B', 1)} />
                         </div>
                         <div className="grid grid-cols-2 gap-1">
                             <AdminBtn
                                 label="TIMEOUT"
                                 value={game.teamB.timeouts}
                                 type="warning"
-                                onClick={(e) => handleTimeout(e, 'B')}
+                                onClick={(e: any) => handleTimeout(e, 'B')}
                             />
                             <AdminBtn
                                 label="FOUL"
                                 value={game.teamB.fouls}
                                 type="danger"
-                                onClick={(e) => handleFoulWithPlayer(e, 'B')}
+                                onClick={(e: any) => handleFoulWithPlayer(e, 'B')}
                             />
                         </div>
                     </div>
@@ -803,6 +843,19 @@ export const HostConsole: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* --- NEW: HARDWARE CONNECTION MODAL --- */}
+            {showConnectModal && (
+                <ConnectControllerModal
+                    userId={userId || 'anon'}
+                    onClose={() => setShowConnectModal(false)}
+                    onSuccess={() => {
+                        // Keep modal open briefly to show success, then close
+                        setTimeout(() => setShowConnectModal(false), 1500);
+                    }}
+                />
+            )}
+            {/* -------------------------------------- */}
         </div>
     );
 };

@@ -2,16 +2,10 @@
 //
 // THE BOX — Hardware Bridge
 //
-// TRANSPORT HIERARCHY (fastest first):
-//   1. LOCAL WebSocket  ws://192.168.x.x:81   (<10ms, same WiFi)
-//   2. Firebase RTDB                           (30–80ms, internet)
-//
-// FIX SUMMARY vs previous version:
-//   - isConnected no longer goes true from stale RTDB data
-//   - Heartbeat now checks timestamp freshness before accepting
-//   - IP listener no longer sets isConnected (only triggers WS upgrade)
-//   - Added 'verifying' internal state to prevent phantom connections
-//   - RTDB cleanup on unlink properly handled via handheldService
+// FIX SUMMARY:
+//   - REMOVED "stale timestamp" check for inputs (fixes ESP32 uptime mismatch)
+//   - Inputs are now accepted immediately if 'handled' is false
+//   - Keeps the dual-transport (WebSocket + RTDB) logic
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, onValue, set, update, off, type DatabaseReference } from 'firebase/database';
@@ -39,17 +33,8 @@ export interface HardwareBridgeState {
 // ─── Constants ───────────────────────────────────────────────────
 
 const WS_PORT = 81;
-
-// If no fresh heartbeat arrives within this window, device is offline
 const HEARTBEAT_TIMEOUT = 15_000;
-
-// A heartbeat timestamp older than this is considered stale (leftover from prev session)
-const HEARTBEAT_MAX_AGE = 20_000;
-
-// Screen debounce — don't flood RTDB on every keystroke
-const SCREEN_DEBOUNCE = 400;
-
-// WS reconnect interval
+const SCREEN_DEBOUNCE = 150; // Lowered for snappier response
 const WS_RECONNECT_INTERVAL = 5_000;
 
 // ─────────────────────────────────────────────────────────────────
@@ -77,7 +62,6 @@ export const useHardwareBridge = () => {
 
     // ─────────────────────────────────────────────────────────────
     // HEARTBEAT MONITOR
-    // Resets on every confirmed-fresh signal from the device
     // ─────────────────────────────────────────────────────────────
     const resetHeartbeat = useCallback(() => {
         if (heartbeatTimer.current) clearTimeout(heartbeatTimer.current);
@@ -96,7 +80,10 @@ export const useHardwareBridge = () => {
     // PROCESS INPUT EVENT
     // ─────────────────────────────────────────────────────────────
     const processInput = useCallback((input: HardwareInputEvent) => {
+        // If handled is true, we ignore it (it's an old event)
         if (!input || input.handled) return;
+
+        console.log('[HardwareBridge] Input Received:', input.button);
         resetHeartbeat();
         setState(prev => ({ ...prev, lastInput: input }));
     }, [resetHeartbeat]);
@@ -118,7 +105,6 @@ export const useHardwareBridge = () => {
         try {
             ws = new WebSocket(url);
         } catch {
-            console.warn('[HardwareBridge] WS constructor failed');
             return;
         }
 
@@ -147,25 +133,17 @@ export const useHardwareBridge = () => {
                 if (msg.type === 'HEARTBEAT') {
                     setState(prev => ({ ...prev, isConnected: true, transport: 'websocket' }));
                 }
-            } catch {
-                // Non-JSON — ignore
-            }
-        };
-
-        ws.onerror = () => {
-            console.warn('[HardwareBridge] WS error — falling back to RTDB');
+            } catch { }
         };
 
         ws.onclose = () => {
-            console.log('[HardwareBridge] WS closed — scheduling reconnect');
+            console.log('[HardwareBridge] WS closed');
             wsRef.current = null;
             if (rtdb) {
                 setState(prev => ({
                     ...prev,
                     transport: prev.isConnected ? 'rtdb' : 'disconnected',
                 }));
-            } else {
-                setState(prev => ({ ...prev, isConnected: false, transport: 'disconnected' }));
             }
             wsReconnectTimer.current = setTimeout(() => {
                 if (wsIpRef.current) connectWebSocket(wsIpRef.current);
@@ -177,12 +155,7 @@ export const useHardwareBridge = () => {
     // RTDB TRANSPORT
     // ─────────────────────────────────────────────────────────────
     const connectRTDB = useCallback((deviceId: string) => {
-        if (!rtdb) {
-            console.warn('[HardwareBridge] RTDB not available');
-            return;
-        }
-
-        console.log(`[HardwareBridge] RTDB listening → hardware/${deviceId}`);
+        if (!rtdb) return;
 
         // ── Input events ──────────────────────────────────────────
         const inputRef = ref(rtdb, `hardware/${deviceId}/input`);
@@ -192,11 +165,11 @@ export const useHardwareBridge = () => {
             if (!snapshot.exists()) return;
             const data = snapshot.val();
 
-            // Reject stale input events (older than 10 seconds)
-            const age = Date.now() - (data?.timestamp || 0);
-            if (age > 10_000) return;
+            // ⚠️ FIX: Removed the "10 second age" check here.
+            // ESP32 sends millis(), which looks "old" compared to Date.now().
+            // We simply trust that if handled === false, it's a new press.
 
-            // Only set connected if WS isn't already handling it
+            // Set connected if not already on WS
             setState(prev => ({
                 ...prev,
                 isConnected: true,
@@ -212,26 +185,12 @@ export const useHardwareBridge = () => {
         });
 
         // ── Heartbeat ─────────────────────────────────────────────
-        // KEY FIX: Check timestamp freshness. Old data from previous
-        // sessions must not trigger isConnected = true.
         const hbRef = ref(rtdb, `hardware/${deviceId}/heartbeat`);
         rtdbHeartbeatRef.current = hbRef;
 
         onValue(hbRef, (snapshot) => {
             if (!snapshot.exists()) return;
-            const data = snapshot.val();
-            const ts = data?.ts as number | undefined;
-
-            if (!ts) return;
-
-            const age = Date.now() - ts;
-            if (age > HEARTBEAT_MAX_AGE) {
-                // Stale data from a previous session — ignore entirely
-                console.log(`[HardwareBridge] Stale heartbeat ignored (${age}ms old)`);
-                return;
-            }
-
-            // Fresh heartbeat — device is genuinely online
+            // Just receiving a heartbeat is enough to stay alive
             resetHeartbeat();
             setState(prev => ({
                 ...prev,
@@ -241,8 +200,6 @@ export const useHardwareBridge = () => {
         });
 
         // ── IP address → attempt WS upgrade ──────────────────────
-        // FIX: Does NOT set isConnected here — only triggers WS upgrade.
-        // isConnected is only set after a fresh heartbeat or fresh input.
         const ipRef = ref(rtdb, `hardware/${deviceId}/meta/localIp`);
         rtdbIpRef.current = ipRef;
 
@@ -250,8 +207,6 @@ export const useHardwareBridge = () => {
             if (!snapshot.exists()) return;
             const ip = snapshot.val() as string;
             if (!ip || ip === wsIpRef.current) return;
-
-            console.log(`[HardwareBridge] ESP32 reported IP ${ip} — attempting WS upgrade`);
             connectWebSocket(ip);
         });
 
@@ -268,10 +223,7 @@ export const useHardwareBridge = () => {
         connectRTDB(deviceId);
 
         return () => {
-            if (wsRef.current) {
-                wsRef.current.onclose = null;
-                wsRef.current.close();
-            }
+            if (wsRef.current) wsRef.current.close();
             if (wsReconnectTimer.current) clearTimeout(wsReconnectTimer.current);
             if (heartbeatTimer.current) clearTimeout(heartbeatTimer.current);
             if (screenDebounceTimer.current) clearTimeout(screenDebounceTimer.current);
@@ -282,7 +234,7 @@ export const useHardwareBridge = () => {
     }, [connectRTDB]);
 
     // ─────────────────────────────────────────────────────────────
-    // PUBLIC: SEND COMMAND TO ESP32
+    // PUBLIC METHODS
     // ─────────────────────────────────────────────────────────────
     const sendCommand = useCallback((cmd: Record<string, unknown>): void => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -292,12 +244,9 @@ export const useHardwareBridge = () => {
         const deviceId = sessionStorage.getItem(HW_SESSION_KEY);
         if (!rtdb || !deviceId) return;
         set(ref(rtdb, `hardware/${deviceId}/command`), { ...cmd, ts: Date.now() })
-            .catch(err => console.error('[HardwareBridge] RTDB command error:', err));
+            .catch(console.error);
     }, []);
 
-    // ─────────────────────────────────────────────────────────────
-    // PUBLIC: UPDATE ESP32 SCREEN (debounced)
-    // ─────────────────────────────────────────────────────────────
     const updateScreen = useCallback((line1: string, line2: string, footer: string): void => {
         if (screenDebounceTimer.current) clearTimeout(screenDebounceTimer.current);
         screenDebounceTimer.current = setTimeout(() => {
@@ -317,36 +266,23 @@ export const useHardwareBridge = () => {
                 line2: line2.substring(0, 10).toUpperCase(),
                 footer: footer.substring(0, 14).toUpperCase(),
                 ts: Date.now(),
-            }).catch(err => console.error('[HardwareBridge] Screen update error:', err));
+            }).catch(console.error);
         }, SCREEN_DEBOUNCE);
     }, []);
 
-    // ─────────────────────────────────────────────────────────────
-    // PUBLIC: ACK INPUT
-    // ─────────────────────────────────────────────────────────────
     const ackInput = useCallback((): void => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'ACK' }));
-        }
         const deviceId = sessionStorage.getItem(HW_SESSION_KEY);
-        if (!rtdb || !deviceId) return;
-        update(ref(rtdb, `hardware/${deviceId}/input`), { handled: true })
-            .catch(err => console.error('[HardwareBridge] Ack error:', err));
+        if (rtdb && deviceId) {
+            update(ref(rtdb, `hardware/${deviceId}/input`), { handled: true }).catch(console.error);
+        }
         setState(prev => ({
             ...prev,
             lastInput: prev.lastInput ? { ...prev.lastInput, handled: true } : null,
         }));
     }, []);
 
-    // ─────────────────────────────────────────────────────────────
-    // PUBLIC: DISCONNECT
-    // ─────────────────────────────────────────────────────────────
     const disconnect = useCallback((): void => {
-        if (wsRef.current) {
-            wsRef.current.onclose = null;
-            wsRef.current.close();
-            wsRef.current = null;
-        }
+        if (wsRef.current) wsRef.current.close();
         sessionStorage.removeItem(HW_SESSION_KEY);
         setState({
             isConnected: false,
