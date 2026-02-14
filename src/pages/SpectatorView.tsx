@@ -269,7 +269,7 @@ const TeamPanel: React.FC<{
   color: string;
   hasPossession: boolean;
   side: 'left' | 'right';
-  players?: Array<{ name: string; number: number; points: number; fouls: number }>;
+  players?: Array<{ name: string; number: string; points: number; fouls: number }>;
 }> = ({ name, score, fouls, timeouts, color, hasPossession, side, players = [] }) => {
   const topPlayers = [...players]
     .filter(p => p.name)
