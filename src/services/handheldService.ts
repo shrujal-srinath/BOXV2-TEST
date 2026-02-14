@@ -2,16 +2,10 @@
 
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, rtdb } from './firebase';
-import { ref, set } from 'firebase/database';
-
-// ── Single source of truth for session key & collection name ──────
-// Both useHardwareBridge.ts and ConnectControllerModal.tsx import
-// from here — no more key mismatches.
+import { ref, set, remove, get } from 'firebase/database';
 
 export const HW_SESSION_KEY = 'BOX_HARDWARE_ID';
 export const HW_COLLECTION = 'hardware_terminals';
-
-// ── Types ─────────────────────────────────────────────────────────
 
 export interface HandheldDevice {
     id: string;
@@ -23,8 +17,6 @@ export interface HandheldDevice {
 }
 
 // ── linkHandheldDevice ────────────────────────────────────────────
-// Called when user enters the 4-digit code on the website.
-// Writes to Firestore so the ESP32 can poll and detect it was linked.
 
 export const linkHandheldDevice = async (
     code: string,
@@ -35,23 +27,26 @@ export const linkHandheldDevice = async (
     }
 
     try {
+        // ── FIXED: Check RTDB for device existence, not Firestore ──
+        // ESP32 self-registers in RTDB on boot via hardware/{code}/meta/registered
+        // Firestore is never written by the ESP32, so checking it always fails
+        if (!rtdb) {
+            return { success: false, message: 'Database not available.' };
+        }
+
+        const registeredSnap = await get(ref(rtdb, `hardware/${code}/meta/registered`));
+        if (!registeredSnap.exists() || registeredSnap.val() !== true) {
+            return { success: false, message: 'Controller not found. Check the code on your device.' };
+        }
+
+        // Device is real — now handle Firestore record
         const deviceRef = doc(db, HW_COLLECTION, code);
         const deviceSnap = await getDoc(deviceRef);
 
-        if (!deviceSnap.exists()) {
-            // Device not registered yet — create it fresh
-            await setDoc(deviceRef, {
-                id: code,
-                status: 'linked',
-                hostId: userId,
-                activeGameId: null,
-                lastHeartbeat: Date.now(),
-                linkedAt: serverTimestamp(),
-            });
-        } else {
+        if (deviceSnap.exists()) {
             const data = deviceSnap.data() as HandheldDevice;
 
-            // Already linked to a different user
+            // Block if actively linked to someone else
             if (data.status === 'linked' && data.hostId && data.hostId !== userId) {
                 const staleSince = Date.now() - (data.lastHeartbeat || 0);
                 if (staleSince < 30_000) {
@@ -64,29 +59,40 @@ export const linkHandheldDevice = async (
                 hostId: userId,
                 linkedAt: serverTimestamp(),
             });
-        }
 
-        // Persist pairing to session storage so the bridge auto-connects on refresh
-        sessionStorage.setItem(HW_SESSION_KEY, code);
-
-        // Also write to RTDB so the ESP32 detects the link immediately
-        if (rtdb) {
-            await set(ref(rtdb, `hardware/${code}/meta`), {
+        } else {
+            // First time this device has been linked — create the Firestore record
+            await setDoc(deviceRef, {
+                id: code,
                 status: 'linked',
                 hostId: userId,
-                linkedAt: Date.now(),
+                activeGameId: null,
+                lastHeartbeat: Date.now(),
+                linkedAt: serverTimestamp(),
             });
         }
 
+        // Persist to session so bridge auto-connects on refresh
+        sessionStorage.setItem(HW_SESSION_KEY, code);
+
+        // Tell ESP32 it has been linked via RTDB
+        await set(ref(rtdb, `hardware/${code}/meta`), {
+            registered: true,
+            status: 'linked',
+            hostId: userId,
+            linkedAt: Date.now(),
+        });
+
         return { success: true, message: 'Controller linked!' };
-    } catch (error: any) {
+
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Connection failed.';
         console.error('[handheldService] Link error:', error);
-        return { success: false, message: error.message || 'Connection failed.' };
+        return { success: false, message: msg };
     }
 };
 
 // ── unlinkHandheldDevice ──────────────────────────────────────────
-// Called when user clicks "Unlink" in ConnectControllerModal.
 
 export const unlinkHandheldDevice = async (code: string): Promise<void> => {
     try {
@@ -98,22 +104,34 @@ export const unlinkHandheldDevice = async (code: string): Promise<void> => {
         });
 
         if (rtdb) {
+            // Keep registered:true so the device can be re-paired
+            // but reset everything else
             await set(ref(rtdb, `hardware/${code}/meta`), {
+                registered: true,
                 status: 'waiting',
                 hostId: null,
                 linkedAt: null,
             });
+
+            // Clear stale nodes — prevents false isConnected on next session
+            await remove(ref(rtdb, `hardware/${code}/heartbeat`));
+            await remove(ref(rtdb, `hardware/${code}/input`));
+            await set(ref(rtdb, `hardware/${code}/display`), {
+                line1: 'READY',
+                line2: 'TO PAIR',
+                footer: 'IDLE',
+                ts: Date.now(),
+            });
         }
+
     } catch (error) {
         console.error('[handheldService] Unlink error:', error);
     } finally {
-        // Always clear session even if the Firestore write fails
         sessionStorage.removeItem(HW_SESSION_KEY);
     }
 };
 
 // ── bindDeviceToGame ──────────────────────────────────────────────
-// Call this when a game starts so the ESP32 knows which game it controls.
 
 export const bindDeviceToGame = async (
     code: string,
@@ -121,7 +139,6 @@ export const bindDeviceToGame = async (
 ): Promise<void> => {
     try {
         await updateDoc(doc(db, HW_COLLECTION, code), { activeGameId: gameId });
-
         if (rtdb) {
             await set(ref(rtdb, `hardware/${code}/meta/activeGameId`), gameId);
         }

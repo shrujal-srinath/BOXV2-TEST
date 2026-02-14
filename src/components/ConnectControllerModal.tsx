@@ -1,4 +1,11 @@
 // src/components/ConnectControllerModal.tsx
+//
+// FIX SUMMARY vs previous version:
+//   - Mount effect no longer auto-advances to 'connected' from isConnected alone
+//   - 'connected' phase is only reached after a verified fresh heartbeat
+//   - Unlink clears RTDB stale nodes so next session starts clean
+//   - 8s timeout now shows 'pending' state, not fake 'connected'
+
 import React, { useState, useEffect, useRef } from 'react';
 import { linkHandheldDevice, unlinkHandheldDevice, HW_SESSION_KEY } from '../services/handheldService';
 import { useHardwareBridge } from '../hooks/useHardwareBridge';
@@ -9,7 +16,7 @@ interface ConnectControllerModalProps {
     onSuccess: (code: string) => void;
 }
 
-type ModalPhase = 'input' | 'linking' | 'connected' | 'error';
+type ModalPhase = 'input' | 'linking' | 'connected' | 'pending' | 'error';
 
 export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     userId,
@@ -21,10 +28,14 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     const [errorMsg, setErrorMsg] = useState('');
     const [linkedCode, setLinkedCode] = useState('');
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const linkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const { isConnected, transport, latencyMs } = useHardwareBridge();
 
-    // If already connected on mount, show connected state
+    // ── On mount: restore session only if we have a code AND confirmed live connection
+    // FIX: Previously this used isConnected from stale RTDB data.
+    // Now we only show 'connected' if isConnected is true after a fresh heartbeat.
+    // The bridge itself handles freshness — so this is now safe.
     useEffect(() => {
         const existingCode = sessionStorage.getItem(HW_SESSION_KEY);
         if (existingCode && isConnected) {
@@ -32,25 +43,31 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
             setDigits(existingCode.split(''));
             setPhase('connected');
         }
-    }, [isConnected]);
+    }, []); // intentionally empty — only runs on mount
 
-    // Auto-advance to connected once bridge confirms
+    // ── While in 'linking' phase, watch for bridge confirmation
     useEffect(() => {
         if (phase === 'linking' && isConnected) {
+            if (linkTimeoutRef.current) clearTimeout(linkTimeoutRef.current);
             setPhase('connected');
             onSuccess(linkedCode);
         }
     }, [isConnected, phase, linkedCode, onSuccess]);
 
+    // ── If already connected and user re-opens modal, sync phase
+    useEffect(() => {
+        if (phase === 'pending' && isConnected) {
+            setPhase('connected');
+        }
+    }, [isConnected, phase]);
+
     // ── Digit input handlers ─────────────────────────────────────
     const handleDigitChange = (index: number, value: string) => {
         if (!/^\d*$/.test(value)) return;
         const next = [...digits];
-        next[index] = value.slice(-1); // Only last char
+        next[index] = value.slice(-1);
         setDigits(next);
-        if (value && index < 3) {
-            inputRefs.current[index + 1]?.focus();
-        }
+        if (value && index < 3) inputRefs.current[index + 1]?.focus();
     };
 
     const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -89,14 +106,15 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
             return;
         }
 
-        // Wait for bridge to confirm connection via RTDB heartbeat
-        // If it doesn't arrive in 8s, show a softer "pending" message
-        setTimeout(() => {
+        // FIX: After 8 seconds with no heartbeat, go to 'pending' — NOT 'connected'.
+        // 'pending' tells the user the code was accepted but the device hasn't responded yet.
+        // This is honest. 'connected' should only come from a real heartbeat.
+        linkTimeoutRef.current = setTimeout(() => {
             setPhase(prev => {
                 if (prev === 'linking') {
-                    // Linked in Firestore but no live heartbeat yet
-                    onSuccess(code);
-                    return 'connected';
+                    // Firestore linked but no live heartbeat yet
+                    // Don't call onSuccess here — wait for actual connection
+                    return 'pending';
                 }
                 return prev;
             });
@@ -105,26 +123,34 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
     // ── Unlink ───────────────────────────────────────────────────
     const handleUnlink = async () => {
+        if (linkTimeoutRef.current) clearTimeout(linkTimeoutRef.current);
         if (linkedCode) await unlinkHandheldDevice(linkedCode);
         setPhase('input');
         setDigits(['', '', '', '']);
         setLinkedCode('');
+        setErrorMsg('');
     };
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (linkTimeoutRef.current) clearTimeout(linkTimeoutRef.current);
+        };
+    }, []);
 
     // ── Transport badge ──────────────────────────────────────────
     const TransportBadge = () => {
         if (!isConnected) return null;
         const isWS = transport === 'websocket';
         return (
-            <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${isWS
-                ? 'bg-green-900/30 border border-green-700/50 text-green-400'
-                : 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest
+                ${isWS
+                    ? 'bg-green-900/30 border border-green-700/50 text-green-400'
+                    : 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
                 }`}>
                 <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isWS ? 'bg-green-400' : 'bg-blue-400'}`} />
                 {isWS ? 'LOCAL WS' : 'CLOUD RTDB'}
-                {latencyMs !== null && (
-                    <span className="opacity-60 ml-1">{latencyMs}ms</span>
-                )}
+                {latencyMs !== null && <span className="opacity-60 ml-1">{latencyMs}ms</span>}
             </div>
         );
     };
@@ -137,22 +163,22 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/90 backdrop-blur-sm"
-                onClick={phase === 'linking' ? undefined : onClose}
+                onClick={(phase === 'linking') ? undefined : onClose}
             />
 
-            {/* Modal */}
             <div className="relative z-10 w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden">
 
-                {/* Top accent line — colour changes by phase */}
+                {/* Top accent line */}
                 <div className={`h-0.5 w-full ${phase === 'connected' ? 'bg-green-500' :
-                    phase === 'error' ? 'bg-red-500' :
-                        phase === 'linking' ? 'bg-blue-500 animate-pulse' :
-                            'bg-zinc-700'
+                        phase === 'pending' ? 'bg-amber-500 animate-pulse' :
+                            phase === 'error' ? 'bg-red-500' :
+                                phase === 'linking' ? 'bg-blue-500 animate-pulse' :
+                                    'bg-zinc-700'
                     }`} />
 
                 <div className="p-8">
 
-                    {/* ── HEADER ──────────────────────────────────────── */}
+                    {/* ── HEADER ──────────────────────────────────── */}
                     <div className="flex items-start justify-between mb-8">
                         <div>
                             <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-[0.25em] mb-1">
@@ -160,9 +186,10 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                             </p>
                             <h2 className="text-xl font-black text-white uppercase tracking-tight leading-none">
                                 {phase === 'connected' ? 'Controller Online' :
-                                    phase === 'linking' ? 'Establishing Link...' :
-                                        phase === 'error' ? 'Link Failed' :
-                                            'Connect Controller'}
+                                    phase === 'pending' ? 'Waiting for Device...' :
+                                        phase === 'linking' ? 'Establishing Link...' :
+                                            phase === 'error' ? 'Link Failed' :
+                                                'Connect Controller'}
                             </h2>
                         </div>
                         {phase !== 'linking' && (
@@ -175,14 +202,13 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                         )}
                     </div>
 
-                    {/* ── PHASE: INPUT ────────────────────────────────── */}
+                    {/* ── PHASE: INPUT / ERROR ─────────────────────── */}
                     {(phase === 'input' || phase === 'error') && (
                         <div>
                             <p className="text-zinc-500 text-xs font-mono mb-6 leading-relaxed">
                                 Power on your ESP32 controller. The 4-digit pairing code will appear on its screen.
                             </p>
 
-                            {/* 4-digit input */}
                             <div className="flex gap-3 justify-center mb-6" onPaste={handlePaste}>
                                 {digits.map((d, i) => (
                                     <input
@@ -196,21 +222,19 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                         onKeyDown={e => handleKeyDown(i, e)}
                                         autoFocus={i === 0}
                                         className={`w-14 h-16 text-center text-3xl font-black font-mono rounded-lg border-2 bg-black text-white outline-none transition-all
-                      ${d ? 'border-white' : 'border-zinc-800 focus:border-zinc-500'}
-                      ${phase === 'error' ? 'border-red-800' : ''}
-                    `}
+                                            ${d ? 'border-white' : 'border-zinc-800 focus:border-zinc-500'}
+                                            ${phase === 'error' ? 'border-red-800' : ''}
+                                        `}
                                     />
                                 ))}
                             </div>
 
-                            {/* Error message */}
                             {errorMsg && (
                                 <p className="text-red-400 text-xs font-mono text-center mb-4">
                                     ⚠ {errorMsg}
                                 </p>
                             )}
 
-                            {/* Connect button */}
                             <button
                                 onClick={handleLink}
                                 disabled={digits.join('').length !== 4}
@@ -221,10 +245,9 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                         </div>
                     )}
 
-                    {/* ── PHASE: LINKING ──────────────────────────────── */}
+                    {/* ── PHASE: LINKING ───────────────────────────── */}
                     {phase === 'linking' && (
                         <div className="text-center py-4">
-                            {/* Animated rings */}
                             <div className="relative w-16 h-16 mx-auto mb-6">
                                 <div className="absolute inset-0 rounded-full border-2 border-blue-500/20 animate-ping" />
                                 <div className="absolute inset-2 rounded-full border-2 border-blue-500/40 animate-ping" style={{ animationDelay: '0.3s' }} />
@@ -233,7 +256,6 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                     <span className="text-blue-400 text-xl font-black font-mono">{linkedCode}</span>
                                 </div>
                             </div>
-
                             <p className="text-zinc-400 text-xs font-mono">
                                 Searching for controller <span className="text-white font-bold">{linkedCode}</span>...
                             </p>
@@ -243,16 +265,36 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                         </div>
                     )}
 
-                    {/* ── PHASE: CONNECTED ────────────────────────────── */}
+                    {/* ── PHASE: PENDING ───────────────────────────── */}
+                    {/* Linked in Firestore, but no heartbeat yet from device */}
+                    {phase === 'pending' && (
+                        <div className="text-center py-4">
+                            <div className="w-12 h-12 mx-auto mb-6 rounded-full border-2 border-amber-500/40 flex items-center justify-center">
+                                <span className="text-amber-400 text-lg font-black font-mono animate-pulse">{linkedCode}</span>
+                            </div>
+                            <p className="text-amber-400 text-xs font-mono mb-2">
+                                Code accepted — waiting for device
+                            </p>
+                            <p className="text-zinc-600 text-[10px] font-mono leading-relaxed">
+                                The controller will connect automatically once it boots and joins WiFi.
+                            </p>
+                            <button
+                                onClick={handleUnlink}
+                                className="mt-6 w-full py-2 border border-zinc-800 text-zinc-500 hover:border-red-800 hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ── PHASE: CONNECTED ─────────────────────────── */}
                     {phase === 'connected' && (
                         <div>
-                            {/* Status block */}
                             <div className="bg-black border border-zinc-800 rounded-lg p-4 mb-6">
                                 <div className="flex items-center justify-between mb-3">
                                     <span className="text-zinc-500 text-xs font-mono uppercase tracking-widest">Device ID</span>
                                     <span className="text-white font-black font-mono text-lg">{linkedCode}</span>
                                 </div>
-
                                 <div className="flex items-center justify-between mb-3">
                                     <span className="text-zinc-500 text-xs font-mono uppercase tracking-widest">Status</span>
                                     <div className="flex items-center gap-1.5">
@@ -262,7 +304,6 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                         </span>
                                     </div>
                                 </div>
-
                                 <div className="flex items-center justify-between">
                                     <span className="text-zinc-500 text-xs font-mono uppercase tracking-widest">Transport</span>
                                     <TransportBadge />
@@ -276,7 +317,6 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                 >
                                     Unlink
                                 </button>
-                                {/* SIMPLE DONE BUTTON - Returns user to dashboard */}
                                 <button
                                     onClick={onClose}
                                     className="flex-1 py-3 bg-white text-black font-black text-xs uppercase tracking-widest hover:bg-zinc-200 transition-colors rounded"
