@@ -34,7 +34,7 @@ export const linkHandheldDevice = async (
             return { success: false, message: 'Database not available.' };
         }
 
-        const registeredSnap = await get(ref(rtdb, `hardware/${code}/meta/registered`));
+        const registeredSnap = await get(ref(rtdb, `hardware/${code}/registered`));
         if (!registeredSnap.exists() || registeredSnap.val() !== true) {
             return { success: false, message: 'Controller not found. Check the code on your device.' };
         }
@@ -76,12 +76,9 @@ export const linkHandheldDevice = async (
         sessionStorage.setItem(HW_SESSION_KEY, code);
 
         // Tell ESP32 it has been linked via RTDB
-        await set(ref(rtdb, `hardware/${code}/meta`), {
-            registered: true,
-            status: 'linked',
-            hostId: userId,
-            linkedAt: Date.now(),
-        });
+        await set(ref(rtdb, `hardware/${code}/meta/status`), 'linked');
+        await set(ref(rtdb, `hardware/${code}/meta/hostId`), userId);
+        await set(ref(rtdb, `hardware/${code}/meta/linkedAt`), Date.now());
 
         return { success: true, message: 'Controller linked!' };
 
@@ -106,12 +103,9 @@ export const unlinkHandheldDevice = async (code: string): Promise<void> => {
         if (rtdb) {
             // Keep registered:true so the device can be re-paired
             // but reset everything else
-            await set(ref(rtdb, `hardware/${code}/meta`), {
-                registered: true,
-                status: 'waiting',
-                hostId: null,
-                linkedAt: null,
-            });
+            await set(ref(rtdb, `hardware/${code}/meta/status`), 'waiting');
+            await set(ref(rtdb, `hardware/${code}/meta/hostId`), null);
+            await set(ref(rtdb, `hardware/${code}/meta/linkedAt`), null);
 
             // Clear stale nodes — prevents false isConnected on next session
             await remove(ref(rtdb, `hardware/${code}/heartbeat`));
