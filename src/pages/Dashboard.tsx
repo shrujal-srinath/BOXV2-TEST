@@ -1,9 +1,10 @@
 // src/pages/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { BasketballGame } from '../types';
+import type { BasketballGame, Tournament } from '../types';
 import { logoutUser, subscribeToAuth } from '../services/authService';
 import { subscribeToLiveGames, deleteGame } from '../services/gameService';
+import { subscribeToPublicTournaments } from '../services/tournamentService';
 import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
@@ -16,8 +17,10 @@ export const Dashboard: React.FC = () => {
   // --- STATE ---
   const [user, setUser] = useState<User | null>(null);
   const [allGames, setAllGames] = useState<BasketballGame[]>([]);
+  const [liveTournaments, setLiveTournaments] = useState<Tournament[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'my' | 'all'>('all');
+  const [activeTab, setActiveTab] = useState<'my' | 'all' | 'tournaments'>('all');
+  const [isExpanded, setIsExpanded] = useState(false); // Controls "Show More"
   const [selectedSport, setSelectedSport] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -41,6 +44,11 @@ export const Dashboard: React.FC = () => {
   const myGames = user ? allGames.filter(g => g.hostId === user.uid) : [];
   const liveFeed = allGames;
 
+  // --- RESET EXPANSION ON TAB CHANGE ---
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [activeTab]);
+
   // --- EFFECTS ---
   useEffect(() => {
     const unsubAuth = subscribeToAuth((u) => {
@@ -52,9 +60,14 @@ export const Dashboard: React.FC = () => {
       setAllGames(games);
     });
 
+    const unsubTournaments = subscribeToPublicTournaments((tournaments) => {
+      setLiveTournaments(tournaments);
+    });
+
     return () => {
       unsubAuth();
       unsubGames();
+      unsubTournaments();
     };
   }, []);
 
@@ -104,6 +117,171 @@ export const Dashboard: React.FC = () => {
     setActiveModal(null);
     navigate('/tournament');
   };
+
+  // --- RENDER HELPERS ---
+  const renderGameList = (games: BasketballGame[], isMyGames: boolean) => {
+    // VISUAL LIMIT: 
+    // - If "My Games": Show 6 games.
+    // - If "Active Feed": Show 5 games (because slot #1 is the Watch Card) = 6 total items.
+    // - If Expanded: Show all.
+
+    const limit = isMyGames ? 6 : 5;
+    const visibleGames = isExpanded ? games : games.slice(0, limit);
+    const hiddenCount = Math.max(0, games.length - limit);
+
+    if (games.length === 0 && !isMyGames) {
+      // Empty Active Feed state handled in main return
+      return null;
+    }
+
+    return (
+      <>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* SLOT 1 IN ACTIVE FEED: WATCH CARD */}
+          {!isMyGames && (
+            <WatchByCodeCard onWatch={(code) => navigate(`/watch/${code}`)} />
+          )}
+
+          {visibleGames.map((g, index) => (
+            <div key={`${g.code}-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
+              {/* Status Color Bar */}
+              <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${isMyGames ? 'bg-red-600' : 'bg-blue-600'}`}></div>
+
+              {/* Delete Button (Only for My Games) */}
+              {isMyGames && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteGame(g.code); }}
+                  className="absolute top-2 right-2 p-2 bg-black/80 text-zinc-400 hover:text-red-500 hover:bg-zinc-900 rounded-full transition-all z-20 opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-zinc-800"
+                  title="Delete Session"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              )}
+
+              {/* Header */}
+              <div className="flex justify-between items-start mb-4 pl-2">
+                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sport || 'BASKETBALL'}</div>
+                <div className={`w-2 h-2 rounded-full animate-pulse ${isMyGames ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+              </div>
+
+              {/* Title & Code */}
+              <h3 className={`font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 ${isMyGames ? 'group-hover:text-red-400' : 'group-hover:text-blue-400'}`}>
+                {g.settings.gameName}
+              </h3>
+              <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">ID: <span className="text-zinc-500">{g.code}</span></div>
+
+              {/* Score */}
+              <div className="flex items-center justify-between bg-black p-3 rounded border border-zinc-800 mb-3">
+                <div className="font-bold text-white text-lg" style={{ color: g.teamA.color }}>{g.teamA.score}</div>
+                <div className="text-[9px] text-zinc-600 uppercase tracking-widest">VS</div>
+                <div className="font-bold text-white text-lg" style={{ color: g.teamB.color }}>{g.teamB.score}</div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                {isMyGames ? (
+                  <>
+                    <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors">
+                      Console
+                    </button>
+                    <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors">
+                      Tablet
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors flex items-center justify-center gap-2">
+                    <span>●</span> Watch Stream
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* SHOW MORE BUTTON */}
+        {!isExpanded && hiddenCount > 0 && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => setIsExpanded(true)}
+              className="px-6 py-3 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-white text-xs font-bold uppercase tracking-widest rounded-full transition-all"
+            >
+              Show {hiddenCount} More Games ↓
+            </button>
+          </div>
+        )}
+
+        {isExpanded && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="text-zinc-600 hover:text-zinc-400 text-[10px] font-bold uppercase tracking-widest"
+            >
+              Show Less ↑
+            </button>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  const renderTournamentList = (tournaments: Tournament[]) => {
+    const limit = 6;
+    const visibleTournaments = isExpanded ? tournaments : tournaments.slice(0, limit);
+    const hiddenCount = Math.max(0, tournaments.length - limit);
+
+    if (tournaments.length === 0) {
+      return (
+        <div className="border border-dashed border-zinc-800 p-12 text-center rounded-lg hover:bg-zinc-900/30 transition-colors">
+          <div className="text-4xl mb-4 grayscale opacity-20">🏆</div>
+          <p className="text-zinc-600 text-xs font-mono uppercase tracking-widest">No active tournaments found.</p>
+          <button onClick={handleEnterTournament} className="mt-4 text-xs font-bold text-yellow-500 hover:text-yellow-400 uppercase tracking-widest">
+            + Create Tournament
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visibleTournaments.map((t) => (
+            <div key={t.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden hover:border-yellow-600">
+              <div className="absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 bg-yellow-600"></div>
+
+              <div className="flex justify-between items-start mb-4 pl-2">
+                <div className="text-[10px] font-bold text-black uppercase tracking-widest bg-yellow-600 px-2 py-1 rounded">TOURNAMENT</div>
+                <div className="w-2 h-2 rounded-full animate-pulse bg-green-500"></div>
+              </div>
+
+              <h3 className="font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 group-hover:text-yellow-400">
+                {t.name}
+              </h3>
+              <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">Organizer: <span className="text-zinc-500">{t.organizer || 'Unknown'}</span></div>
+
+              <div className="flex gap-2">
+                <button onClick={() => navigate(t.adminId === user?.uid ? `/tournament/${t.id}/manage` : `/tournament`)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors border border-zinc-700">
+                  {t.adminId === user?.uid ? 'Manage' : 'View Details'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* SHOW MORE BUTTON */}
+        {!isExpanded && hiddenCount > 0 && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => setIsExpanded(true)}
+              className="px-6 py-3 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-yellow-600 hover:text-yellow-400 text-xs font-bold uppercase tracking-widest rounded-full transition-all"
+            >
+              Show {hiddenCount} More Tournaments ↓
+            </button>
+          </div>
+        )}
+      </>
+    )
+  };
+
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
@@ -222,12 +400,12 @@ export const Dashboard: React.FC = () => {
           </div>
         </section>
 
-        {/* 2. LIVE GAMES TABS */}
+        {/* 2. LIVE GAMES & TOURNAMENTS TABS */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="flex items-center gap-6 border-b border-zinc-800 pb-0 mb-6">
+          <div className="flex items-center gap-6 border-b border-zinc-800 pb-0 mb-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('all')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative ${activeTab === 'all' ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
+              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'all' ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
             >
               Active Feed
               <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
@@ -238,7 +416,7 @@ export const Dashboard: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('my')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative ${activeTab === 'my' ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
+              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'my' ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
             >
               My Games
               <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'my' ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-500'}`}>
@@ -246,80 +424,27 @@ export const Dashboard: React.FC = () => {
               </span>
               {activeTab === 'my' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-600"></div>}
             </button>
+
+            <button
+              onClick={() => setActiveTab('tournaments')}
+              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'tournaments' ? 'text-yellow-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+            >
+              Live Tournaments
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'tournaments' ? 'bg-yellow-600 text-black' : 'bg-zinc-800 text-zinc-500'}`}>
+                {liveTournaments.length}
+              </span>
+              {activeTab === 'tournaments' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-yellow-500"></div>}
+            </button>
           </div>
 
-          {(activeTab === 'my' ? myGames : liveFeed).length === 0 ? (
-            <div className="border border-dashed border-zinc-800 p-12 text-center rounded-lg hover:bg-zinc-900/30 transition-colors">
-              <div className="text-4xl mb-4 grayscale opacity-20">
-                {activeTab === 'my' ? '📂' : '📡'}
-              </div>
-              <p className="text-zinc-600 text-xs font-mono uppercase tracking-widest">
-                {activeTab === 'my' ? 'You have no active games.' : 'No live games on server.'}
-              </p>
-              {activeTab === 'my' && (
-                <button onClick={() => startNewGame('basketball')} className="mt-4 text-xs font-bold text-red-500 hover:text-red-400 uppercase tracking-widest">
-                  + Create New
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(activeTab === 'my' ? myGames : liveFeed).map((g, index) => (
-                <div key={`${g.code}-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden ${activeTab === 'my' ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
-                  {/* Status Color Bar */}
-                  <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${activeTab === 'my' ? 'bg-red-600' : 'bg-blue-600'}`}></div>
+          {/* CONTENT AREA */}
+          <div className="min-h-[200px]">
+            {activeTab === 'tournaments'
+              ? renderTournamentList(liveTournaments)
+              : renderGameList(activeTab === 'my' ? myGames : liveFeed, activeTab === 'my')
+            }
+          </div>
 
-                  {/* Delete Button (Only for My Games) */}
-                  {activeTab === 'my' && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteGame(g.code); }}
-                      className="absolute top-2 right-2 p-2 bg-black/80 text-zinc-400 hover:text-red-500 hover:bg-zinc-900 rounded-full transition-all z-20 opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-zinc-800"
-                      title="Delete Session"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  )}
-
-                  {/* Header */}
-                  <div className="flex justify-between items-start mb-4 pl-2">
-                    <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sport || 'BASKETBALL'}</div>
-                    <div className={`w-2 h-2 rounded-full animate-pulse ${activeTab === 'my' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
-                  </div>
-
-                  {/* Title & Code */}
-                  <h3 className={`font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 ${activeTab === 'my' ? 'group-hover:text-red-400' : 'group-hover:text-blue-400'}`}>
-                    {g.settings.gameName}
-                  </h3>
-                  <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">ID: <span className="text-zinc-500">{g.code}</span></div>
-
-                  {/* Score */}
-                  <div className="flex items-center justify-between bg-black p-3 rounded border border-zinc-800 mb-3">
-                    <div className="font-bold text-white text-lg" style={{ color: g.teamA.color }}>{g.teamA.score}</div>
-                    <div className="text-[9px] text-zinc-600 uppercase tracking-widest">VS</div>
-                    <div className="font-bold text-white text-lg" style={{ color: g.teamB.color }}>{g.teamB.score}</div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    {activeTab === 'my' ? (
-                      <>
-                        <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors">
-                          Console
-                        </button>
-                        <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors">
-                          Tablet
-                        </button>
-                      </>
-                    ) : (
-                      <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors flex items-center justify-center gap-2">
-                        <span>●</span> Watch Stream
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </section>
       </main>
 
@@ -413,6 +538,46 @@ export const Dashboard: React.FC = () => {
 };
 
 // --- HELPER COMPONENTS ---
+
+/**
+ * WATCH BY CODE CARD - Lives in Slot #1 of Active Feed
+ */
+const WatchByCodeCard = ({ onWatch }: { onWatch: (code: string) => void }) => {
+  const [code, setCode] = useState('');
+
+  return (
+    <div className="bg-zinc-900/80 border border-zinc-700 p-4 rounded-sm flex flex-col justify-between h-[180px] shadow-lg relative overflow-hidden group">
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 blur-3xl rounded-full pointer-events-none"></div>
+
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Spectator Mode</h3>
+        </div>
+        <h2 className="text-white font-black italic text-xl uppercase tracking-tight mb-4">Find a Game</h2>
+      </div>
+
+      <div className="relative z-10 space-y-2">
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="ENTER CODE"
+          className="w-full bg-black/50 border border-zinc-700 text-white text-center font-mono font-bold text-sm py-2 rounded focus:outline-none focus:border-blue-500 transition-colors placeholder:text-zinc-700"
+          maxLength={6}
+        />
+        <button
+          disabled={code.length < 4}
+          onClick={() => onWatch(code)}
+          className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-widest py-2 rounded transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)] hover:shadow-[0_0_20px_rgba(37,99,235,0.5)]"
+        >
+          Watch Now
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
   const accentConfig: any = {

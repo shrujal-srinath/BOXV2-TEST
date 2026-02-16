@@ -1,8 +1,7 @@
-// src/services/gameService.ts (FIXED - REAL FIREBASE)
+// src/services/gameService.ts
 /**
  * GAME SERVICE - FIREBASE IMPLEMENTATION
- * 
- * This replaces the mock in-memory database with actual Firebase operations
+ * * This replaces the mock in-memory database with actual Firebase operations
  */
 
 import { doc, setDoc, updateDoc, getDoc, deleteDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
@@ -50,6 +49,7 @@ export const subscribeToGame = (
 
 /**
  * Subscribe to all live games
+ * UPDATED: Filters out "zombie" games older than 24 hours
  */
 export const subscribeToLiveGames = (
   callback: (games: BasketballGame[]) => void
@@ -63,9 +63,22 @@ export const subscribeToLiveGames = (
     gamesQuery,
     (snapshot) => {
       const games: BasketballGame[] = [];
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
       snapshot.forEach((doc) => {
-        games.push(doc.data() as BasketballGame);
+        const data = doc.data() as BasketballGame;
+        // CLIENT-SIDE FILTER: 
+        // Only show games updated in the last 24 hours.
+        // This cleans up "demo" games automatically without database deletes.
+        if (data.lastUpdate && (now - data.lastUpdate < ONE_DAY_MS)) {
+          games.push(data);
+        }
       });
+
+      // Sort by newest first
+      games.sort((a, b) => b.lastUpdate - a.lastUpdate);
+
       callback(games);
     },
     (error) => {
@@ -78,10 +91,9 @@ export const subscribeToLiveGames = (
 };
 
 /**
- * Update a specific field in Firebase (CRITICAL FIX)
+ * Update a specific field in Firebase
  */
 export const updateGameField = async (gameId: string, fieldPath: string, value: any) => {
-  // This was failing because 'gameId' didn't match the Document ID
   const gameRef = doc(db, 'games', gameId);
   try {
     await updateDoc(gameRef, {
@@ -163,15 +175,8 @@ export const initializeNewGame = async (
   hostId: string
 ): Promise<string> => {
 
-  // 1. Generate the Code
   let gameCode = generateGameCode();
 
-  // 2. Ensure Uniqueness (Optional but good)
-  // while ((await getDoc(doc(db, 'games', gameCode))).exists()) {
-  //    gameCode = generateGameCode();
-  // }
-
-  // 3. Define Initial State
   const initialGameState: GameState = {
     period: 1,
     gameTime: { minutes: settings.periodDuration, seconds: 0, tenths: 0 },
@@ -181,7 +186,6 @@ export const initializeNewGame = async (
     possession: 'A'
   };
 
-  // 4. Merge partial team data with defaults
   const fullTeamA: TeamData = {
     ...createDefaultTeam(teamA.name, teamA.color),
     ...teamA
@@ -206,8 +210,6 @@ export const initializeNewGame = async (
     teamB: fullTeamB
   };
 
-  // 5. CRITICAL FIX: Use setDoc with the gameCode as the ID
-  // DO NOT use addDoc(collection(db, 'games'), newGame)
   await setDoc(doc(db, 'games', gameCode), newGame);
 
   return gameCode;
@@ -261,11 +263,4 @@ export const getGamesByHost = async (hostId: string): Promise<BasketballGame[]> 
   }
 };
 
-// ============================================
-// BACKWARDS COMPATIBILITY ALIASES
-// ============================================
-
-/**
- * Alias for getGameByCode (for backwards compatibility)
- */
 export const getGame = getGameByCode;
