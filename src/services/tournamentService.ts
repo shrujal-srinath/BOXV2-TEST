@@ -1,3 +1,4 @@
+// src/services/tournamentService.ts
 import {
     doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs,
     onSnapshot, arrayUnion, deleteField, orderBy, writeBatch, runTransaction
@@ -447,6 +448,14 @@ export const subscribeToJoinedTournaments = (userId: string, callback: (data: To
         // 3. Update state
         callback(filtered);
     });
+};
+
+/**
+ * SUBSCRIBE TO PUBLIC TOURNAMENTS (NEW)
+ */
+export const subscribeToPublicTournaments = (callback: (data: Tournament[]) => void) => {
+    const q = query(collection(db, 'tournaments'), where('status', '==', 'active'));
+    return onSnapshot(q, (snapshot) => callback(snapshot.docs.map(d => d.data() as Tournament)));
 };
 
 // ============================================

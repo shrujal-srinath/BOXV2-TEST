@@ -59,7 +59,7 @@ export const TournamentDashboard: React.FC = () => {
             if (e.target instanceof HTMLInputElement) return;
 
             if (e.key === 'c' || e.key === 'C') {
-                navigate('/tournament/setup');
+                navigate('/tournament/create');
             } else if (e.key === 'j' || e.key === 'J') {
                 setShowJoinModal(true);
             }
@@ -170,7 +170,7 @@ export const TournamentDashboard: React.FC = () => {
                             <span className="group-hover:scale-110 inline-block transition-transform">Join Event</span>
                         </button>
                         <button
-                            onClick={() => navigate('/tournament/setup')}
+                            onClick={() => navigate('/tournament/create')}
                             className="group bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-black py-4 px-8 rounded-xl uppercase tracking-widest text-xs shadow-lg shadow-yellow-900/30 hover:shadow-yellow-900/50 transition-all flex items-center gap-3 hover:-translate-y-0.5"
                         >
                             <span className="text-xl group-hover:rotate-90 transition-transform duration-300">+</span>
@@ -214,7 +214,7 @@ export const TournamentDashboard: React.FC = () => {
                                 <h3 className="text-xl font-bold text-zinc-400 mb-2">No tournaments yet</h3>
                                 <p className="text-zinc-600 text-sm mb-8">Get started by creating your first event</p>
                                 <button
-                                    onClick={() => navigate('/tournament/setup')}
+                                    onClick={() => navigate('/tournament/create')}
                                     className="bg-yellow-600 hover:bg-yellow-500 text-black font-black py-3 px-6 rounded-lg uppercase text-xs transition-all inline-flex items-center gap-2"
                                 >
                                     <span>Create Tournament</span>

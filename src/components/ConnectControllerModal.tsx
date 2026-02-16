@@ -125,7 +125,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     // ── Unlink ───────────────────────────────────────────────────
     const handleUnlink = async () => {
         if (linkTimeoutRef.current) clearTimeout(linkTimeoutRef.current);
-        if (linkedCode) await unlinkHandheldDevice(linkedCode);
+        if (linkedCode) await unlinkHandheldDevice(linkedCode, userId);
         setPhase('input');
         setDigits(['', '', '', '']);
         setLinkedCode('');

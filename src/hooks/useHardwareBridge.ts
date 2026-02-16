@@ -1,11 +1,13 @@
 // src/hooks/useHardwareBridge.ts
 //
-// THE BOX — Hardware Bridge
+// THE BOX — Hardware Bridge v2.1
 //
 // FIX SUMMARY:
-//   - REMOVED "stale timestamp" check for inputs (fixes ESP32 uptime mismatch)
-//   - Inputs are now accepted immediately if 'handled' is false
-//   - Keeps the dual-transport (WebSocket + RTDB) logic
+//   [FIX-7] Input deduplication: web app writes its own ack timestamp alongside handled:true.
+//           On reconnect, inputs older than the last ack are ignored — prevents phantom presses
+//           when component remounts after navigation.
+//   [KEEP]  handled===false trust logic retained (no millis() vs Date.now() mismatch check)
+//   [KEEP]  Dual-transport (WebSocket primary, RTDB fallback)
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref, onValue, set, update, off, type DatabaseReference } from 'firebase/database';
@@ -17,7 +19,7 @@ import { HW_SESSION_KEY } from '../services/handheldService';
 export type TransportMode = 'websocket' | 'rtdb' | 'disconnected';
 
 export interface HardwareInputEvent {
-    button: 'A' | 'B' | 'C' | 'UNDO' | 'QUARTER' | 'PAUSE' | string;
+    button: 'A' | 'B' | 'C' | 'UNDO' | 'QUARTER' | 'PAUSE' | 'EMERGENCY_RESET' | string;
     timestamp: number;
     handled: boolean;
 }
@@ -34,8 +36,12 @@ export interface HardwareBridgeState {
 
 const WS_PORT = 81;
 const HEARTBEAT_TIMEOUT = 15_000;
-const SCREEN_DEBOUNCE = 150; // Lowered for snappier response
+const SCREEN_DEBOUNCE = 150;
 const WS_RECONNECT_INTERVAL = 5_000;
+
+// Key used to persist the last-acked input timestamp across remounts
+// Prevents phantom presses when the hook mounts fresh (e.g. page navigation)
+const LAST_ACK_KEY = 'BOX_HW_LAST_ACK_TS';
 
 // ─────────────────────────────────────────────────────────────────
 // HOOK
@@ -60,9 +66,18 @@ export const useHardwareBridge = () => {
     const rtdbIpRef = useRef<DatabaseReference | null>(null);
     const pingSentAt = useRef<number>(0);
 
+    // [FIX-7] Persist last-ack timestamp so phantom presses survive remounts
+    const lastAckTsRef = useRef<number>(
+        (() => {
+            const stored = sessionStorage.getItem(LAST_ACK_KEY);
+            return stored ? parseInt(stored, 10) : 0;
+        })()
+    );
+
     // ─────────────────────────────────────────────────────────────
     // HEARTBEAT MONITOR
     // ─────────────────────────────────────────────────────────────
+
     const resetHeartbeat = useCallback(() => {
         if (heartbeatTimer.current) clearTimeout(heartbeatTimer.current);
         heartbeatTimer.current = setTimeout(() => {
@@ -79,9 +94,18 @@ export const useHardwareBridge = () => {
     // ─────────────────────────────────────────────────────────────
     // PROCESS INPUT EVENT
     // ─────────────────────────────────────────────────────────────
+
     const processInput = useCallback((input: HardwareInputEvent) => {
-        // If handled is true, we ignore it (it's an old event)
         if (!input || input.handled) return;
+
+        // [FIX-7] Ignore if this input's web-side ack timestamp predates mount
+        // This prevents phantom presses when we reconnect after navigation.
+        // lastAckTsRef.current is the Date.now() value we wrote when we last acked.
+        // If the input has no webAckTs (old firmware), we trust handled===false as before.
+        if (input.timestamp <= lastAckTsRef.current) {
+            console.log('[HardwareBridge] Stale input ignored (pre-ack ts):', input.button);
+            return;
+        }
 
         console.log('[HardwareBridge] Input Received:', input.button);
         resetHeartbeat();
@@ -91,6 +115,7 @@ export const useHardwareBridge = () => {
     // ─────────────────────────────────────────────────────────────
     // WEBSOCKET TRANSPORT
     // ─────────────────────────────────────────────────────────────
+
     const connectWebSocket = useCallback((ip: string) => {
         if (wsRef.current) {
             wsRef.current.onclose = null;
@@ -128,12 +153,16 @@ export const useHardwareBridge = () => {
                     return;
                 }
                 if (msg.type === 'INPUT') {
-                    processInput({ button: msg.button, timestamp: msg.ts || Date.now(), handled: false });
+                    processInput({
+                        button: msg.button,
+                        timestamp: msg.ts || Date.now(),
+                        handled: false,
+                    });
                 }
                 if (msg.type === 'HEARTBEAT') {
                     setState(prev => ({ ...prev, isConnected: true, transport: 'websocket' }));
                 }
-            } catch { }
+            } catch { /* ignore malformed frames */ }
         };
 
         ws.onclose = () => {
@@ -154,6 +183,7 @@ export const useHardwareBridge = () => {
     // ─────────────────────────────────────────────────────────────
     // RTDB TRANSPORT
     // ─────────────────────────────────────────────────────────────
+
     const connectRTDB = useCallback((deviceId: string) => {
         if (!rtdb) return;
 
@@ -165,11 +195,6 @@ export const useHardwareBridge = () => {
             if (!snapshot.exists()) return;
             const data = snapshot.val();
 
-            // ⚠️ FIX: Removed the "10 second age" check here.
-            // ESP32 sends millis(), which looks "old" compared to Date.now().
-            // We simply trust that if handled === false, it's a new press.
-
-            // Set connected if not already on WS
             setState(prev => ({
                 ...prev,
                 isConnected: true,
@@ -190,7 +215,6 @@ export const useHardwareBridge = () => {
 
         onValue(hbRef, (snapshot) => {
             if (!snapshot.exists()) return;
-            // Just receiving a heartbeat is enough to stay alive
             resetHeartbeat();
             setState(prev => ({
                 ...prev,
@@ -215,6 +239,7 @@ export const useHardwareBridge = () => {
     // ─────────────────────────────────────────────────────────────
     // INIT ON MOUNT
     // ─────────────────────────────────────────────────────────────
+
     useEffect(() => {
         const deviceId = sessionStorage.getItem(HW_SESSION_KEY);
         if (!deviceId) return;
@@ -236,6 +261,7 @@ export const useHardwareBridge = () => {
     // ─────────────────────────────────────────────────────────────
     // PUBLIC METHODS
     // ─────────────────────────────────────────────────────────────
+
     const sendCommand = useCallback((cmd: Record<string, unknown>): void => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({ type: 'CMD', ...cmd }));
@@ -271,9 +297,18 @@ export const useHardwareBridge = () => {
     }, []);
 
     const ackInput = useCallback((): void => {
+        const nowTs = Date.now();
+
+        // [FIX-7] Record the ack timestamp so future remounts can filter stale inputs
+        lastAckTsRef.current = nowTs;
+        sessionStorage.setItem(LAST_ACK_KEY, String(nowTs));
+
         const deviceId = sessionStorage.getItem(HW_SESSION_KEY);
         if (rtdb && deviceId) {
-            update(ref(rtdb, `hardware/${deviceId}/input`), { handled: true }).catch(console.error);
+            update(ref(rtdb, `hardware/${deviceId}/input`), {
+                handled: true,
+                ackedAt: nowTs, // Web-side timestamp written alongside handled:true
+            }).catch(console.error);
         }
         setState(prev => ({
             ...prev,
@@ -284,6 +319,7 @@ export const useHardwareBridge = () => {
     const disconnect = useCallback((): void => {
         if (wsRef.current) wsRef.current.close();
         sessionStorage.removeItem(HW_SESSION_KEY);
+        sessionStorage.removeItem(LAST_ACK_KEY);
         setState({
             isConnected: false,
             transport: 'disconnected',

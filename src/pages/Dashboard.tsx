@@ -8,7 +8,7 @@ import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { ConnectControllerModal } from '../components/ConnectControllerModal';
-import { useHardwareBridge } from '../hooks/useHardwareBridge'; // <--- IMPORT
+import { useHardwareBridge } from '../hooks/useHardwareBridge';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -105,14 +105,6 @@ export const Dashboard: React.FC = () => {
     navigate('/tournament');
   };
 
-  const getInstallMessage = () => {
-    if (prompt) return null;
-    if (isInstalled) return "Device Provisioned";
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    if (isIOS) return "iOS Restriction: Use Share Menu → Add to Home Screen";
-    return "Browser Restriction: Open in Chrome/Edge";
-  };
-
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
       <div className="w-8 h-8 border-3 border-red-600 border-t-transparent rounded-full animate-spin"></div>
@@ -168,7 +160,8 @@ export const Dashboard: React.FC = () => {
             <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Command Menu</h2>
             <button onClick={() => setIsMenuOpen(false)} className="text-2xl text-zinc-500 hover:text-white transition-colors">&times;</button>
           </div>
-          <div className="space-y-1 flex-1 overflow-y-auto">
+          {/* UPDATED: Increased spacing from space-y-1 to space-y-3 */}
+          <div className="space-y-3 flex-1 overflow-y-auto">
             <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
             <MenuItem label="Tournament Mode" icon="🏆" onClick={() => { setIsMenuOpen(false); setActiveModal('confirmTournament'); }} highlight subtitle="League Management" />
 
@@ -359,7 +352,24 @@ export const Dashboard: React.FC = () => {
                 {prompt ? (
                   <button onClick={() => { triggerInstall().then(s => s && setActiveModal(null)); }} className="w-full bg-green-600 hover:bg-green-500 text-black font-black py-4 uppercase tracking-widest text-xs transition-colors shadow-[0_0_20px_rgba(34,197,94,0.4)]">Install Firmware</button>
                 ) : (
-                  <div className="p-3 bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 text-center uppercase tracking-wider font-bold">{getInstallMessage()}</div>
+                  // UPDATED: Manual Installation Instructions
+                  <div className="mt-4 p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+                    <h4 className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mb-3">Manual Installation</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <span className="bg-zinc-800 text-zinc-500 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold shrink-0">1</span>
+                        <p className="text-xs text-zinc-300 leading-tight pt-0.5">
+                          Tap the <span className="font-bold text-blue-400">Share</span> button below
+                        </p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <span className="bg-zinc-800 text-zinc-500 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold shrink-0">2</span>
+                        <p className="text-xs text-zinc-300 leading-tight pt-0.5">
+                          Scroll down and tap <span className="font-bold text-white">Add to Home Screen</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
