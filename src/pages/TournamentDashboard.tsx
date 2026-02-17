@@ -1,13 +1,277 @@
 // src/pages/TournamentDashboard.tsx
-// COMPLETE FILE - FINE-TUNED VERSION
-// All polish improvements included
+// "THE ARENA" — Full-bleed cinematic tournament hub
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logoutUser, subscribeToAuth } from '../services/authService';
 import { subscribeToMyTournaments, subscribeToJoinedTournaments, joinTournament } from '../services/tournamentService';
 import type { User } from 'firebase/auth';
 import type { Tournament } from '../types';
+
+// ─── Sport Icons ──────────────────────────────────────────────
+const sportIcons: Record<string, string> = {
+    basketball: '🏀', badminton: '🏸', volleyball: '🏐',
+    kabaddi: '🤼', football: '⚽', cricket: '🏏',
+};
+
+// ─── Sub-components ───────────────────────────────────────────
+
+// Animated background grid + radial glow
+const ArenaBackground: React.FC = () => (
+    <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        {/* Deep black base */}
+        <div className="absolute inset-0 bg-black" />
+
+        {/* Radial gold glow from top */}
+        <div
+            className="absolute inset-0"
+            style={{
+                background: 'radial-gradient(ellipse 80% 40% at 50% -5%, rgba(202,138,4,0.12) 0%, transparent 70%)',
+            }}
+        />
+
+        {/* Subtle grid lines */}
+        <div
+            className="absolute inset-0 opacity-[0.025]"
+            style={{
+                backgroundImage:
+                    'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+                backgroundSize: '60px 60px',
+            }}
+        />
+
+        {/* Diagonal slash accent — top right */}
+        <div
+            className="absolute -top-20 right-0 w-[600px] h-[400px] opacity-[0.04]"
+            style={{
+                background: 'linear-gradient(135deg, transparent 40%, rgba(202,138,4,1) 41%, rgba(202,138,4,1) 42%, transparent 43%)',
+            }}
+        />
+        <div
+            className="absolute -top-20 right-0 w-[600px] h-[400px] opacity-[0.025]"
+            style={{
+                background: 'linear-gradient(135deg, transparent 46%, rgba(202,138,4,1) 47%, rgba(202,138,4,1) 48%, transparent 49%)',
+            }}
+        />
+
+        {/* Bottom vignette */}
+        <div
+            className="absolute bottom-0 left-0 right-0 h-64"
+            style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)' }}
+        />
+    </div>
+);
+
+// Stats bar pill
+const StatPill: React.FC<{ label: string; value: number | string; accent?: boolean }> = ({ label, value, accent }) => (
+    <div className={`flex items-center gap-3 px-5 py-3 rounded-full border backdrop-blur-sm transition-all
+        ${accent
+            ? 'bg-yellow-950/40 border-yellow-700/40 hover:border-yellow-600/60'
+            : 'bg-zinc-900/60 border-zinc-800/60 hover:border-zinc-700/60'
+        }`}>
+        <span className={`text-xl font-black tracking-tight ${accent ? 'text-yellow-400' : 'text-white'}`}>
+            {value}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{label}</span>
+    </div>
+);
+
+// Arena tournament card — full-bleed, always shows actions
+const ArenaTournamentCard: React.FC<{
+    tournament: Tournament;
+    role: 'admin' | 'scorer';
+    onClick: () => void;
+    index: number;
+}> = ({ tournament, role, onClick, index }) => {
+    const [copied, setCopied] = useState(false);
+
+    const divisions = tournament.divisions ? Object.values(tournament.divisions) : [];
+    const completedDivisions = divisions.filter(d => d.status === 'completed').length;
+    const activeDivisions = divisions.filter(d => d.status === 'published').length;
+    const activeSports = [...new Set(divisions.map(d => d.sport))];
+
+    const statusConfig = tournament.status === 'active'
+        ? { label: 'LIVE', dot: 'bg-green-400 animate-pulse', text: 'text-green-400', border: 'border-green-900/40', glow: 'shadow-green-950/30' }
+        : tournament.status === 'archived'
+            ? { label: 'ENDED', dot: 'bg-zinc-500', text: 'text-zinc-500', border: 'border-zinc-800/60', glow: '' }
+            : { label: 'DRAFT', dot: 'bg-yellow-500', text: 'text-yellow-500', border: 'border-yellow-900/40', glow: 'shadow-yellow-950/20' };
+
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(tournament.id);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div
+            className={`group relative rounded-2xl border bg-zinc-950/80 backdrop-blur-sm cursor-pointer
+                overflow-hidden transition-all duration-300
+                hover:border-yellow-700/50 hover:-translate-y-1 hover:shadow-2xl hover:shadow-yellow-950/20
+                ${statusConfig.border} ${statusConfig.glow}
+            `}
+            style={{ animationDelay: `${index * 80}ms` }}
+            onClick={onClick}
+        >
+            {/* Gold shimmer on hover */}
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                style={{ background: 'linear-gradient(135deg, transparent 60%, rgba(202,138,4,0.04) 100%)' }} />
+
+            {/* Top accent bar */}
+            <div className={`h-[2px] w-full ${role === 'admin'
+                ? 'bg-gradient-to-r from-yellow-600/80 via-yellow-500/60 to-transparent'
+                : 'bg-gradient-to-r from-blue-600/80 via-blue-500/60 to-transparent'}`} />
+
+            {/* Large watermark sport icon */}
+            {activeSports[0] && (
+                <div className="absolute -bottom-4 -right-4 text-[96px] opacity-[0.04] group-hover:opacity-[0.07] transition-opacity duration-500 pointer-events-none select-none rotate-12">
+                    {sportIcons[activeSports[0]] || '🏆'}
+                </div>
+            )}
+
+            <div className="p-6 relative z-10">
+                {/* Header row */}
+                <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        {/* Role badge */}
+                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-md uppercase tracking-widest border
+                            ${role === 'admin'
+                                ? 'bg-yellow-950/50 text-yellow-500 border-yellow-900/50'
+                                : 'bg-blue-950/50 text-blue-500 border-blue-900/50'}`}>
+                            {role}
+                        </span>
+                        {/* Status badge */}
+                        <span className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
+                            <span className={statusConfig.text}>{statusConfig.label}</span>
+                        </span>
+                    </div>
+                    {/* ID chip */}
+                    <span className="text-[9px] font-mono text-zinc-600 bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
+                        {tournament.id}
+                    </span>
+                </div>
+
+                {/* Tournament name */}
+                <h3 className="text-2xl font-black italic uppercase tracking-tight text-white mb-1 group-hover:text-yellow-400 transition-colors duration-300 leading-tight">
+                    {tournament.name}
+                </h3>
+
+                {/* Sports row */}
+                <div className="flex items-center gap-1.5 mb-5">
+                    {activeSports.slice(0, 4).map(sport => (
+                        <span key={sport} className="text-base" title={sport}>{sportIcons[sport] || '🏆'}</span>
+                    ))}
+                    {activeSports.length > 4 && (
+                        <span className="text-[10px] text-zinc-600 font-bold">+{activeSports.length - 4}</span>
+                    )}
+                    {activeSports.length === 0 && (
+                        <span className="text-[10px] text-zinc-700 font-bold uppercase tracking-wider">No sports yet</span>
+                    )}
+                </div>
+
+                {/* Stats row */}
+                <div className="grid grid-cols-3 gap-2 mb-5">
+                    {[
+                        { val: divisions.length, label: 'Divisions' },
+                        { val: activeDivisions, label: 'Active' },
+                        { val: completedDivisions, label: 'Done' },
+                    ].map(({ val, label }) => (
+                        <div key={label} className="bg-zinc-900/60 rounded-lg px-3 py-2 text-center border border-zinc-800/60">
+                            <div className="text-base font-black text-white">{val}</div>
+                            <div className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold mt-0.5">{label}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Progress bar (only if divisions exist) */}
+                {divisions.length > 0 && (
+                    <div className="mb-5">
+                        <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[9px] text-zinc-600 uppercase tracking-widest font-bold">Progress</span>
+                            <span className="text-[9px] font-black text-zinc-400">
+                                {Math.round((completedDivisions / divisions.length) * 100)}%
+                            </span>
+                        </div>
+                        <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full transition-all duration-700"
+                                style={{ width: `${Math.round((completedDivisions / divisions.length) * 100)}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* ALWAYS-VISIBLE action buttons */}
+                <div className="flex gap-2">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onClick(); }}
+                        className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-yellow-600 hover:text-black text-white text-[10px] font-black uppercase tracking-widest transition-all duration-200 border border-zinc-700 hover:border-yellow-600 flex items-center justify-center gap-1.5"
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                        Open
+                    </button>
+                    <button
+                        onClick={handleCopy}
+                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all duration-200 border border-zinc-700 hover:border-zinc-600 flex items-center gap-1.5"
+                        title="Copy Tournament Code"
+                    >
+                        {copied
+                            ? <><svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg><span className="text-green-400">Copied</span></>
+                            : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><span>Code</span></>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Join modal
+const JoinModal: React.FC<{
+    onClose: () => void;
+    onJoin: (code: string) => void;
+    status: 'idle' | 'loading' | 'success' | 'error';
+    code: string;
+    setCode: (v: string) => void;
+}> = ({ onClose, onJoin, status, code, setCode }) => (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <div className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest mb-1">Enter Code</div>
+                    <h2 className="text-2xl font-black italic uppercase text-white">Join Event</h2>
+                </div>
+                <button onClick={onClose} className="w-10 h-10 rounded-full bg-zinc-900 hover:bg-zinc-800 flex items-center justify-center text-zinc-500 hover:text-white transition-all text-xl">×</button>
+            </div>
+            <input
+                className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-600 text-white text-center font-black text-2xl uppercase tracking-widest py-4 rounded-xl outline-none transition-colors placeholder-zinc-700 mb-4"
+                placeholder="XXXXXXXX"
+                value={code}
+                onChange={e => setCode(e.target.value.toUpperCase())}
+                maxLength={12}
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && onJoin(code)}
+            />
+            {status === 'error' && (
+                <p className="text-red-400 text-xs font-bold text-center mb-4 uppercase tracking-wider">
+                    ✗ Code not found or access denied
+                </p>
+            )}
+            <button
+                onClick={() => onJoin(code)}
+                disabled={status === 'loading' || !code.trim()}
+                className="w-full py-4 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed text-black font-black uppercase tracking-widest text-sm rounded-xl transition-all"
+            >
+                {status === 'loading' ? 'Joining...' : 'Join Tournament'}
+            </button>
+        </div>
+    </div>
+);
+
+// ─── Main Component ───────────────────────────────────────────
 
 export const TournamentDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -18,14 +282,14 @@ export const TournamentDashboard: React.FC = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'hosting' | 'volunteering'>('hosting');
 
-    // Join Modal
     const [showJoinModal, setShowJoinModal] = useState(false);
-    const [joinCode, setJoinCode] = useState("");
+    const [joinCode, setJoinCode] = useState('');
     const [joinStatus, setJoinStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
-    // Toast Notification
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
 
+    // ── Auth + Data ───────────────────────────────────────────
     useEffect(() => {
         let unsubMy: () => void;
         let unsubJoined: () => void;
@@ -47,26 +311,20 @@ export const TournamentDashboard: React.FC = () => {
 
         return () => {
             unsubAuth();
-            if (unsubMy) unsubMy();
-            if (unsubJoined) unsubJoined();
+            unsubMy?.();
+            unsubJoined?.();
         };
     }, []);
 
-    // Keyboard shortcuts
+    // ── Keyboard shortcuts ────────────────────────────────────
     useEffect(() => {
-        const handleKeyPress = (e: KeyboardEvent) => {
-            // Only trigger if not typing in input
+        const handler = (e: KeyboardEvent) => {
             if (e.target instanceof HTMLInputElement) return;
-
-            if (e.key === 'c' || e.key === 'C') {
-                navigate('/tournament/create');
-            } else if (e.key === 'j' || e.key === 'J') {
-                setShowJoinModal(true);
-            }
+            if (e.key === 'c' || e.key === 'C') navigate('/tournament/create');
+            if (e.key === 'j' || e.key === 'J') setShowJoinModal(true);
         };
-
-        window.addEventListener('keydown', handleKeyPress);
-        return () => window.removeEventListener('keydown', handleKeyPress);
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
     }, [navigate]);
 
     const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -74,459 +332,360 @@ export const TournamentDashboard: React.FC = () => {
         setTimeout(() => setToast(null), 3000);
     };
 
-    const handleJoin = async () => {
-        if (!joinCode.trim()) {
-            showToast('Please enter a tournament code', 'error');
-            return;
-        }
-
-        setJoinStatus('loading');
-        try {
-            await joinTournament(joinCode.toUpperCase());
-            setJoinStatus('success');
-            showToast(`Successfully joined ${joinCode.toUpperCase()}!`, 'success');
-            setTimeout(() => {
-                setShowJoinModal(false);
-                setJoinCode("");
-                setJoinStatus('idle');
-            }, 1500);
-        } catch (err: any) {
-            setJoinStatus('error');
-            showToast(err.message || 'Failed to join tournament', 'error');
-            setTimeout(() => setJoinStatus('idle'), 2000);
-        }
-    };
-
     const handleLogout = async () => {
         await logoutUser();
         navigate('/');
     };
 
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-black flex items-center justify-center">
-                <div className="space-y-6 w-full max-w-7xl px-6">
-                    {/* Skeleton Header */}
-                    <div className="h-20 bg-zinc-900/50 rounded-xl animate-pulse"></div>
+    const handleJoin = async (code: string) => {
+        if (!code.trim() || !user) return;
+        setJoinStatus('loading');
+        try {
+            await joinTournament(code.trim());
+            setJoinStatus('success');
+            showToast('✓ Joined successfully!', 'success');
+            setShowJoinModal(false);
+            setJoinCode('');
+            setJoinStatus('idle');
+        } catch {
+            setJoinStatus('error');
+            setTimeout(() => setJoinStatus('idle'), 3000);
+        }
+    };
 
-                    {/* Skeleton Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="h-64 bg-zinc-900/50 rounded-2xl animate-pulse"
-                                style={{ animationDelay: `${i * 100}ms` }}></div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    // ── Derived stats ─────────────────────────────────────────
+    const allTournaments = [...myTournaments, ...joinedTournaments];
+    const activeTournaments = allTournaments.filter(t => t.status === 'active');
+    const totalDivisions = allTournaments.reduce((acc, t) =>
+        acc + (t.divisions ? Object.keys(t.divisions).length : 0), 0);
 
+    // ── Filtered tournaments ──────────────────────────────────
+    const displayedTournaments = useMemo(() => {
+        const source = activeTab === 'hosting' ? myTournaments : joinedTournaments;
+        if (!searchQuery.trim()) return source;
+        return source.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    }, [activeTab, myTournaments, joinedTournaments, searchQuery]);
+
+    // ─────────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen bg-black text-white relative">
-            {/* HEADER */}
-            <header className="bg-zinc-950/50 backdrop-blur-md border-b border-zinc-900 sticky top-0 z-30">
-                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="min-h-screen bg-black text-white relative overflow-x-hidden">
+            <ArenaBackground />
+
+            {/* ── TOAST ─────────────────────────────────────── */}
+            {toast && (
+                <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm shadow-2xl animate-in slide-in-from-top-2 duration-300 border backdrop-blur-xl
+                    ${toast.type === 'success' ? 'bg-green-950/90 border-green-800/60 text-green-300'
+                        : toast.type === 'error' ? 'bg-red-950/90 border-red-800/60 text-red-300'
+                            : 'bg-zinc-900/90 border-zinc-700/60 text-white'}`}>
+                    {toast.message}
+                </div>
+            )}
+
+            {/* ── HEADER ────────────────────────────────────── */}
+            <header className="relative z-20 sticky top-0">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-xl border-b border-zinc-900/80" />
+                <div className="relative px-6 lg:px-10 h-[72px] flex items-center justify-between">
+                    {/* Left — Back + Brand */}
                     <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center font-black text-sm border border-zinc-800 overflow-hidden">
-                                {user?.photoURL ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" /> : <span>{user?.displayName?.[0] || 'U'}</span>}
+                        {/* Back button */}
+                        <button
+                            onClick={() => navigate('/dashboard')}
+                            className="group flex items-center gap-2 text-zinc-500 hover:text-white transition-all duration-200"
+                        >
+                            <div className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 group-hover:border-zinc-700 group-hover:bg-zinc-800 flex items-center justify-center transition-all">
+                                <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
                             </div>
-                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-black rounded-full animate-pulse"></div>
+                            <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:block">Dashboard</span>
+                        </button>
+
+                        {/* Separator */}
+                        <div className="h-5 w-px bg-zinc-800 hidden sm:block" />
+
+                        {/* Brand */}
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-yellow-600 flex items-center justify-center">
+                                <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                                </svg>
+                            </div>
+                            <span className="text-white font-black text-sm uppercase tracking-wider hidden md:block">The Arena</span>
+                        </div>
+                    </div>
+
+                    {/* Center — User info */}
+                    <div className="hidden md:flex items-center gap-3 absolute left-1/2 -translate-x-1/2">
+                        <div className="relative">
+                            <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden flex items-center justify-center text-xs font-bold">
+                                {user?.photoURL
+                                    ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                                    : <span>{user?.displayName?.[0]?.toUpperCase() || 'U'}</span>}
+                            </div>
+                            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-black rounded-full" />
                         </div>
                         <div>
-                            <div className="text-[9px] font-bold text-yellow-500 uppercase tracking-widest mb-0.5">Tournament Mode</div>
-                            <div className="text-white font-bold text-sm leading-none">{user?.displayName || 'Operator'}</div>
+                            <div className="text-[9px] font-bold text-yellow-500 uppercase tracking-widest">Tournament Mode</div>
+                            <div className="text-white font-bold text-xs">{user?.displayName || 'Operator'}</div>
                         </div>
                     </div>
 
-                    {/* Keyboard Hint */}
-                    <div className="hidden lg:flex items-center gap-2 text-[10px] text-zinc-600 font-mono">
-                        <kbd className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded">C</kbd>
-                        <span>Create</span>
-                        <kbd className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded ml-4">J</kbd>
-                        <span>Join</span>
-                    </div>
+                    {/* Right — Actions + Menu */}
+                    <div className="flex items-center gap-3">
+                        {/* Keyboard hints — desktop only */}
+                        <div className="hidden xl:flex items-center gap-3 text-[9px] text-zinc-700 font-mono">
+                            <span><kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[9px]">C</kbd> Create</span>
+                            <span><kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[9px]">J</kbd> Join</span>
+                        </div>
 
-                    <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer hover:bg-zinc-900 rounded-lg transition-all">
-                        <div className="w-6 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors"></div>
-                        <div className="w-6 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors"></div>
-                        <div className="w-4 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors ml-auto"></div>
-                    </button>
+                        <button
+                            onClick={() => setIsMenuOpen(true)}
+                            className="group p-2.5 rounded-xl hover:bg-zinc-900 transition-all cursor-pointer space-y-1.5"
+                        >
+                            <div className="w-5 h-0.5 bg-zinc-500 group-hover:bg-white transition-colors" />
+                            <div className="w-5 h-0.5 bg-zinc-500 group-hover:bg-white transition-colors" />
+                            <div className="w-3 h-0.5 bg-zinc-500 group-hover:bg-white transition-colors ml-auto" />
+                        </button>
+                    </div>
                 </div>
             </header>
 
-            {/* MAIN CONTENT */}
-            <main className="max-w-7xl mx-auto p-6 md:p-12">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                    <div>
-                        <h1 className="text-4xl md:text-5xl font-black italic text-white uppercase tracking-tighter mb-2">My Events</h1>
-                        <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Select an event to manage or score</p>
+            {/* ── HERO BANNER ───────────────────────────────── */}
+            <section className="relative z-10 pt-12 pb-10 px-6 lg:px-10">
+                {/* Overline */}
+                <div className="flex items-center gap-3 mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <div className="h-px w-8 bg-yellow-600" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-yellow-500">Tournament Hub</span>
+                </div>
+
+                {/* Headline */}
+                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black italic uppercase tracking-tighter text-white leading-[0.9] mb-6 animate-in fade-in slide-in-from-bottom-3 duration-600">
+                    My Events
+                </h1>
+
+                {/* Stats bar */}
+                <div className="flex flex-wrap gap-3 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <StatPill value={myTournaments.length} label="Hosting" accent />
+                    <StatPill value={joinedTournaments.length} label="Scoring" />
+                    <StatPill value={activeTournaments.length} label="Live Now" accent={activeTournaments.length > 0} />
+                    <StatPill value={totalDivisions} label="Divisions" />
+                </div>
+            </section>
+
+            {/* ── CONTENT AREA ──────────────────────────────── */}
+            <section className="relative z-10 px-6 lg:px-10 pb-16">
+
+                {/* Toolbar — tabs + search + actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8 animate-in fade-in slide-in-from-bottom-3 duration-500">
+                    {/* Tabs */}
+                    <div className="flex items-center gap-1 bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-1 backdrop-blur-sm">
+                        {(['hosting', 'volunteering'] as const).map((tab) => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200
+                                    ${activeTab === tab
+                                        ? 'bg-yellow-600 text-black shadow-lg shadow-yellow-900/30'
+                                        : 'text-zinc-500 hover:text-white'}`}
+                            >
+                                {tab === 'hosting' ? `Hosting (${myTournaments.length})` : `Scoring (${joinedTournaments.length})`}
+                            </button>
+                        ))}
                     </div>
-                    <div className="flex gap-4">
+
+                    {/* Search */}
+                    <div className="relative flex-1 max-w-xs">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="Search events..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full bg-zinc-950/80 border border-zinc-800 focus:border-yellow-700/70 text-white text-xs pl-9 pr-4 py-2.5 rounded-xl outline-none transition-colors placeholder-zinc-600 backdrop-blur-sm"
+                        />
+                    </div>
+
+                    {/* Push buttons right */}
+                    <div className="sm:ml-auto flex items-center gap-3">
                         <button
                             onClick={() => setShowJoinModal(true)}
-                            className="group px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold uppercase tracking-widest text-xs transition-all border border-zinc-800 hover:border-zinc-700 hover:shadow-lg hover:shadow-zinc-900/50"
+                            className="px-5 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-black uppercase tracking-widest text-[10px] transition-all border border-zinc-800 hover:border-zinc-700 flex items-center gap-2"
                         >
-                            <span className="group-hover:scale-110 inline-block transition-transform">Join Event</span>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Join
                         </button>
                         <button
                             onClick={() => navigate('/tournament/create')}
-                            className="group bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-black py-4 px-8 rounded-xl uppercase tracking-widest text-xs shadow-lg shadow-yellow-900/30 hover:shadow-yellow-900/50 transition-all flex items-center gap-3 hover:-translate-y-0.5"
+                            className="px-5 py-3 rounded-xl bg-yellow-600 hover:bg-yellow-500 text-black font-black uppercase tracking-widest text-[10px] transition-all shadow-lg shadow-yellow-900/30 hover:shadow-yellow-900/50 flex items-center gap-2"
                         >
-                            <span className="text-xl group-hover:rotate-90 transition-transform duration-300">+</span>
-                            <span>Create New</span>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Create
                         </button>
                     </div>
                 </div>
 
-                {/* TABS */}
-                <div className="flex gap-8 border-b border-zinc-900 mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: '100ms' }}>
-                    <button
-                        onClick={() => setActiveTab('hosting')}
-                        className={`pb-4 text-sm font-bold uppercase tracking-widest transition-all relative ${activeTab === 'hosting' ? 'text-yellow-500' : 'text-zinc-500 hover:text-white'}`}
-                    >
-                        My Events
-                        {activeTab === 'hosting' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-yellow-600 to-yellow-500 animate-in slide-in-from-left duration-300"></div>
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('volunteering')}
-                        className={`pb-4 text-sm font-bold uppercase tracking-widest transition-all relative ${activeTab === 'volunteering' ? 'text-blue-500' : 'text-zinc-500 hover:text-white'}`}
-                    >
-                        Volunteering
-                        {activeTab === 'volunteering' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-600 to-blue-500 animate-in slide-in-from-left duration-300"></div>
-                        )}
-                    </button>
+                {/* Divider with label */}
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="h-px flex-1 bg-gradient-to-r from-zinc-800 to-transparent" />
+                    <span className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.3em]">
+                        {activeTab === 'hosting' ? 'Your Tournaments' : 'Volunteering As Scorer'}
+                    </span>
+                    <div className="h-px flex-1 bg-gradient-to-l from-zinc-800 to-transparent" />
                 </div>
 
-                {/* HOSTING VIEW */}
-                {activeTab === 'hosting' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {myTournaments.length === 0 ? (
-                            <div className="border-2 border-dashed border-zinc-900 rounded-3xl p-16 text-center">
-                                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-zinc-900 flex items-center justify-center">
-                                    <svg className="w-12 h-12 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-xl font-bold text-zinc-400 mb-2">No tournaments yet</h3>
-                                <p className="text-zinc-600 text-sm mb-8">Get started by creating your first event</p>
-                                <button
-                                    onClick={() => navigate('/tournament/create')}
-                                    className="bg-yellow-600 hover:bg-yellow-500 text-black font-black py-3 px-6 rounded-lg uppercase text-xs transition-all inline-flex items-center gap-2"
-                                >
-                                    <span>Create Tournament</span>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {myTournaments.map((t, index) => (
-                                    <EnhancedTournamentCard
-                                        key={t.id}
-                                        tournament={t}
-                                        role="admin"
-                                        onClick={() => navigate(`/tournament/${t.id}/manage`)}
-                                        index={index}
-                                    />
-                                ))}
-                            </div>
-                        )}
+                {/* Loading */}
+                {loading && (
+                    <div className="flex items-center justify-center py-32">
+                        <div className="w-8 h-8 rounded-full border-2 border-yellow-600/30 border-t-yellow-500 animate-spin" />
                     </div>
                 )}
 
-                {/* VOLUNTEERING VIEW */}
-                {activeTab === 'volunteering' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {joinedTournaments.length === 0 ? (
-                            <div className="border-2 border-dashed border-zinc-900 rounded-3xl p-16 text-center">
-                                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-zinc-900 flex items-center justify-center">
-                                    <svg className="w-12 h-12 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-xl font-bold text-zinc-400 mb-2">Not volunteering yet</h3>
-                                <p className="text-zinc-600 text-sm mb-8">Join a tournament to help with scoring</p>
-                                <button
-                                    onClick={() => setShowJoinModal(true)}
-                                    className="bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-6 rounded-lg uppercase text-xs transition-all inline-flex items-center gap-2"
-                                >
-                                    <span>Join with Code</span>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {joinedTournaments.map((t, index) => (
-                                    <EnhancedTournamentCard
-                                        key={t.id}
-                                        tournament={t}
-                                        role="scorer"
-                                        onClick={() => navigate(`/tournament/${t.id}/manage`)}
-                                        index={index}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </main>
-
-            {/* JOIN MODAL */}
-            {showJoinModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowJoinModal(false)}></div>
-                    <div className="bg-zinc-950 border border-zinc-800 w-full max-w-md p-8 relative z-10 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-black uppercase text-white tracking-wider">Join Tournament</h3>
-                            <button onClick={() => setShowJoinModal(false)} className="text-zinc-500 hover:text-white text-2xl transition-colors">×</button>
+                {/* Empty state */}
+                {!loading && displayedTournaments.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-24 text-center">
+                        <div className="text-6xl mb-6 opacity-20">
+                            {activeTab === 'hosting' ? '🏆' : '🤝'}
                         </div>
-
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Tournament Code</label>
-                                <input
-                                    autoFocus
-                                    value={joinCode}
-                                    onChange={(e) => setJoinCode(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
-                                    placeholder="KREED-2026"
-                                    className="w-full bg-black border-2 border-zinc-800 focus:border-blue-600 p-4 rounded-xl text-white font-mono uppercase tracking-widest text-center text-xl outline-none transition-colors"
-                                    disabled={joinStatus === 'loading'}
-                                />
-                            </div>
-
+                        <h3 className="text-xl font-black italic uppercase text-zinc-400 mb-2">
+                            {searchQuery
+                                ? 'No results found'
+                                : activeTab === 'hosting' ? 'No tournaments yet' : 'Not volunteering anywhere'}
+                        </h3>
+                        <p className="text-zinc-600 text-xs font-bold uppercase tracking-wider mb-8">
+                            {searchQuery
+                                ? `Try a different search term`
+                                : activeTab === 'hosting' ? 'Create your first event to get started' : 'Join an event with a tournament code'}
+                        </p>
+                        {!searchQuery && (
                             <button
-                                onClick={handleJoin}
-                                disabled={joinStatus === 'loading' || !joinCode.trim()}
-                                className={`w-full py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all ${joinStatus === 'success'
-                                    ? 'bg-green-600 text-white'
-                                    : joinStatus === 'error'
-                                        ? 'bg-red-600 text-white'
-                                        : joinStatus === 'loading'
-                                            ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                                            : 'bg-blue-600 hover:bg-blue-500 text-white hover:shadow-lg hover:shadow-blue-900/50'
-                                    }`}
+                                onClick={() => activeTab === 'hosting' ? navigate('/tournament/create') : setShowJoinModal(true)}
+                                className="bg-yellow-600 hover:bg-yellow-500 text-black font-black py-3 px-6 rounded-xl uppercase text-xs tracking-widest transition-all flex items-center gap-2"
                             >
-                                {joinStatus === 'loading' && (
-                                    <span className="inline-block animate-spin mr-2">⟳</span>
-                                )}
-                                {joinStatus === 'success' ? '✓ Joined Successfully' : joinStatus === 'error' ? '✗ Failed to Join' : joinStatus === 'loading' ? 'Verifying...' : 'Request Access'}
+                                {activeTab === 'hosting' ? 'Create Tournament' : 'Join with Code'}
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                </svg>
                             </button>
-
-                            <p className="text-xs text-zinc-600 text-center">
-                                Ask the tournament admin for the access code
-                            </p>
-                        </div>
+                        )}
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* TOAST NOTIFICATION */}
-            {toast && (
-                <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
-                    <div className={`px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 min-w-[300px] ${toast.type === 'success' ? 'bg-green-600 text-white' :
-                        toast.type === 'error' ? 'bg-red-600 text-white' :
-                            'bg-blue-600 text-white'
-                        }`}>
-                        <span className="text-xl">
-                            {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✗' : 'ℹ'}
-                        </span>
-                        <span className="font-bold text-sm">{toast.message}</span>
+                {/* ── FULL-BLEED GRID ───────────────────────── */}
+                {!loading && displayedTournaments.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {displayedTournaments.map((t, index) => (
+                            <ArenaTournamentCard
+                                key={t.id}
+                                tournament={t}
+                                role={activeTab === 'hosting' ? 'admin' : 'scorer'}
+                                onClick={() => navigate(`/tournament/${t.id}/manage`)}
+                                index={index}
+                            />
+                        ))}
+
+                        {/* "Create new" ghost card */}
+                        {activeTab === 'hosting' && (
+                            <button
+                                onClick={() => navigate('/tournament/create')}
+                                className="group rounded-2xl border-2 border-dashed border-zinc-800 hover:border-yellow-700/60 bg-zinc-950/40 hover:bg-zinc-950/80 transition-all duration-300 p-6 flex flex-col items-center justify-center gap-3 min-h-[280px] cursor-pointer"
+                            >
+                                <div className="w-14 h-14 rounded-2xl bg-zinc-900 group-hover:bg-zinc-800 border border-zinc-800 group-hover:border-yellow-700/50 flex items-center justify-center transition-all duration-300">
+                                    <svg className="w-7 h-7 text-zinc-600 group-hover:text-yellow-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-sm font-black italic uppercase text-zinc-500 group-hover:text-white transition-colors">New Event</div>
+                                    <div className="text-[10px] text-zinc-700 font-bold uppercase tracking-wider mt-0.5 group-hover:text-zinc-500 transition-colors">Create Tournament</div>
+                                </div>
+                            </button>
+                        )}
                     </div>
-                </div>
-            )}
+                )}
+            </section>
 
-            {/* SLIDE MENU */}
-            {isMenuOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-in fade-in duration-200" onClick={() => setIsMenuOpen(false)}></div>}
-            <div className={`fixed top-0 right-0 w-[320px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            {/* ── SLIDE MENU ────────────────────────────────── */}
+            {isMenuOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 animate-in fade-in duration-200" onClick={() => setIsMenuOpen(false)} />
+            )}
+            <div className={`fixed top-0 right-0 w-[300px] h-full bg-zinc-950 border-l border-zinc-900 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 <div className="p-8 h-full flex flex-col">
-                    <button onClick={() => setIsMenuOpen(false)} className="self-end text-3xl text-zinc-500 hover:text-white transition-colors mb-8">×</button>
+                    <button onClick={() => setIsMenuOpen(false)} className="self-end text-2xl text-zinc-500 hover:text-white transition-colors mb-10">×</button>
 
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                         <button
                             onClick={() => { navigate('/dashboard'); setIsMenuOpen(false); }}
-                            className="w-full text-left px-4 py-3 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 font-bold uppercase text-xs transition-all"
+                            className="w-full text-left px-4 py-3 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900 font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3"
                         >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
                             Standard Dashboard
+                        </button>
+                        <button
+                            onClick={() => { navigate('/tournament/create'); setIsMenuOpen(false); }}
+                            className="w-full text-left px-4 py-3 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900 font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Create Tournament
+                        </button>
+                        <button
+                            onClick={() => { setShowJoinModal(true); setIsMenuOpen(false); }}
+                            className="w-full text-left px-4 py-3 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900 font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                            </svg>
+                            Join Tournament
                         </button>
                     </div>
 
-                    <div className="mt-auto pt-8 border-t border-zinc-900 space-y-3">
-                        <div className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Account</div>
+                    <div className="mt-auto pt-6 border-t border-zinc-900 space-y-2">
+                        <div className="text-[9px] text-zinc-600 uppercase tracking-[0.3em] font-bold mb-3">Account</div>
+                        {user && (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-zinc-900 mb-2">
+                                <div className="w-8 h-8 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center text-xs font-bold border border-zinc-700">
+                                    {user.photoURL
+                                        ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                                        : user.displayName?.[0]?.toUpperCase() || 'U'}
+                                </div>
+                                <div>
+                                    <div className="text-white font-bold text-xs">{user.displayName}</div>
+                                    <div className="text-[9px] text-zinc-500 truncate max-w-[160px]">{user.email}</div>
+                                </div>
+                            </div>
+                        )}
                         <button
                             onClick={handleLogout}
-                            className="text-red-500 hover:text-red-400 font-bold uppercase text-xs transition-colors"
+                            className="w-full text-left px-4 py-3 rounded-xl text-red-500 hover:text-red-400 hover:bg-red-950/30 font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3"
                         >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
                             Log Out
                         </button>
                     </div>
                 </div>
             </div>
-        </div>
-    );
-};
 
-// ENHANCED TOURNAMENT CARD COMPONENT
-const EnhancedTournamentCard = ({ tournament, role, onClick, index }: {
-    tournament: Tournament;
-    role: 'admin' | 'scorer';
-    onClick: () => void;
-    index: number;
-}) => {
-    const divisions = tournament.divisions ? Object.values(tournament.divisions) : [];
-    const activeSports = Array.from(new Set(divisions.filter(d => d.isActive).map(d => d.sport)));
-    const totalTeams = divisions.reduce((acc, curr) => acc + (curr.bracketSize || 0), 0);
-
-    // Check statuses
-    const hasLiveGames = divisions.some(d => d.status === 'published');
-    const hasDraftGames = divisions.some(d => d.status === 'draft');
-    const completedDivisions = divisions.filter(d => d.status === 'completed').length;
-
-    // Sport icons mapping
-    const sportIcons: { [key: string]: string } = {
-        basketball: '🏀',
-        badminton: '🏸',
-        volleyball: '🏐',
-        kabaddi: '🤼',
-        football: '⚽',
-        cricket: '🏏'
-    };
-
-    return (
-        <div
-            onClick={onClick}
-            className="group bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 hover:border-yellow-600/50 rounded-2xl p-6 relative overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-yellow-900/20 animate-in fade-in slide-in-from-bottom-4"
-            style={{ animationDelay: `${index * 100}ms`, animationDuration: '500ms' }}
-        >
-            {/* Animated gradient overlay on hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-yellow-900/0 via-yellow-900/0 to-yellow-900/0 group-hover:from-yellow-900/5 group-hover:via-yellow-900/10 group-hover:to-transparent transition-all duration-500 pointer-events-none"></div>
-
-            {/* Status Badge - Top Right */}
-            <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
-                {hasLiveGames && (
-                    <div className="flex items-center gap-2 bg-red-600/20 border border-red-600/30 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                        <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Live</span>
-                    </div>
-                )}
-                {hasDraftGames && !hasLiveGames && (
-                    <div className="flex items-center gap-2 bg-yellow-600/20 border border-yellow-600/30 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                        <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-wider">Draft</span>
-                    </div>
-                )}
-            </div>
-
-            {/* Trophy Icon Background */}
-            <div className="absolute -bottom-6 -right-6 opacity-5 group-hover:opacity-10 group-hover:rotate-12 transition-all duration-500 pointer-events-none">
-                <svg className="w-32 h-32 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M5 9v10h14V9H5zm0-4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2H5V5zm12 16H7v-2h10v2z" />
-                </svg>
-            </div>
-
-            <div className="relative z-10">
-                {/* Header - Role Badge + ID */}
-                <div className="flex justify-between items-start mb-4">
-                    <span className={`text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-widest border backdrop-blur-sm ${role === 'admin'
-                        ? 'bg-yellow-900/20 text-yellow-500 border-yellow-900/30'
-                        : 'bg-blue-900/20 text-blue-500 border-blue-900/30'
-                        }`}>
-                        {role}
-                    </span>
-                    <span className="text-[10px] font-mono text-zinc-600 bg-zinc-900/50 px-2 py-1 rounded border border-zinc-800">{tournament.id}</span>
-                </div>
-
-                {/* Tournament Name */}
-                <h3 className="text-2xl font-black italic text-white uppercase tracking-tight mb-4 truncate group-hover:text-yellow-500 transition-colors duration-300">
-                    {tournament.name}
-                </h3>
-
-                {/* Stats Grid - NEW ENHANCED VERSION */}
-                <div className="space-y-3 mb-4">
-                    {/* Sports Row */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Sports</span>
-                        <div className="flex items-center gap-1.5">
-                            {activeSports.slice(0, 3).map(sport => (
-                                <span key={sport} className="text-lg" title={sport}>
-                                    {sportIcons[sport] || '🏆'}
-                                </span>
-                            ))}
-                            {activeSports.length > 3 && (
-                                <span className="text-xs text-zinc-600 ml-1">+{activeSports.length - 3}</span>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="h-px bg-gradient-to-r from-transparent via-zinc-800 to-transparent"></div>
-
-                    {/* Teams Row */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Teams</span>
-                        <div className="flex items-center gap-2">
-                            <svg className="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                            <span className="text-sm font-bold text-white">{totalTeams || 'TBD'}</span>
-                        </div>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="h-px bg-gradient-to-r from-transparent via-zinc-800 to-transparent"></div>
-
-                    {/* Progress Row */}
-                    <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Progress</span>
-                        <div className="flex items-center gap-2">
-                            {completedDivisions > 0 && (
-                                <span className="text-xs text-green-500 font-bold">{completedDivisions} Complete</span>
-                            )}
-                            {divisions.length > 0 && (
-                                <span className="text-xs text-zinc-600">
-                                    {Math.round((completedDivisions / divisions.length) * 100)}%
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Quick Actions - Appears on Hover */}
-                <div className="pt-4 border-t border-zinc-800 opacity-0 group-hover:opacity-100 transition-all duration-300 flex gap-2 transform translate-y-2 group-hover:translate-y-0">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onClick(); }}
-                        className="flex-1 py-2.5 bg-zinc-800/50 hover:bg-yellow-600 hover:text-black backdrop-blur-sm rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border border-zinc-700 hover:border-yellow-600"
-                    >
-                        <span className="flex items-center justify-center gap-2">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                            View
-                        </span>
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            navigator.clipboard.writeText(tournament.id);
-                            // Show toast: "Code copied!"
-                        }}
-                        className="px-3 py-2.5 bg-zinc-800/50 hover:bg-zinc-700 backdrop-blur-sm rounded-lg transition-all border border-zinc-700 hover:border-zinc-600"
-                        title="Copy Tournament Code"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
+            {/* ── JOIN MODAL ────────────────────────────────── */}
+            {showJoinModal && (
+                <JoinModal
+                    onClose={() => { setShowJoinModal(false); setJoinCode(''); setJoinStatus('idle'); }}
+                    onJoin={handleJoin}
+                    status={joinStatus}
+                    code={joinCode}
+                    setCode={setJoinCode}
+                />
+            )}
         </div>
     );
 };

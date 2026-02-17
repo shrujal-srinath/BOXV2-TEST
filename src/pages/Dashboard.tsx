@@ -136,14 +136,14 @@ export const Dashboard: React.FC = () => {
 
     return (
       <>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
           {/* SLOT 1 IN ACTIVE FEED: WATCH CARD */}
           {!isMyGames && (
             <WatchByCodeCard onWatch={(code) => navigate(`/watch/${code}`)} />
           )}
 
           {visibleGames.map((g, index) => (
-            <div key={`${g.code}-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
+            <div key={`${g.code}-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
               {/* Status Color Bar */}
               <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${isMyGames ? 'bg-red-600' : 'bg-blue-600'}`}></div>
 
@@ -165,13 +165,13 @@ export const Dashboard: React.FC = () => {
               </div>
 
               {/* Title & Code */}
-              <h3 className={`font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 ${isMyGames ? 'group-hover:text-red-400' : 'group-hover:text-blue-400'}`}>
+              <h3 className={`font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 truncate ${isMyGames ? 'group-hover:text-red-400' : 'group-hover:text-blue-400'}`}>
                 {g.settings.gameName}
               </h3>
               <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">ID: <span className="text-zinc-500">{g.code}</span></div>
 
               {/* Score */}
-              <div className="flex items-center justify-between bg-black p-3 rounded border border-zinc-800 mb-3">
+              <div className="flex items-center justify-between bg-black p-3 rounded border border-zinc-800 mb-3 mt-auto">
                 <div className="font-bold text-white text-lg" style={{ color: g.teamA.color }}>{g.teamA.score}</div>
                 <div className="text-[9px] text-zinc-600 uppercase tracking-widest">VS</div>
                 <div className="font-bold text-white text-lg" style={{ color: g.teamB.color }}>{g.teamB.score}</div>
@@ -243,9 +243,9 @@ export const Dashboard: React.FC = () => {
 
     return (
       <>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
           {visibleTournaments.map((t) => (
-            <div key={t.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden hover:border-yellow-600">
+            <div key={t.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden hover:border-yellow-600 flex flex-col">
               <div className="absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 bg-yellow-600"></div>
 
               <div className="flex justify-between items-start mb-4 pl-2">
@@ -253,12 +253,12 @@ export const Dashboard: React.FC = () => {
                 <div className="w-2 h-2 rounded-full animate-pulse bg-green-500"></div>
               </div>
 
-              <h3 className="font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 group-hover:text-yellow-400">
+              <h3 className="font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 group-hover:text-yellow-400 truncate">
                 {t.name}
               </h3>
               <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">Organizer: <span className="text-zinc-500">{t.organizer || 'Unknown'}</span></div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 mt-auto">
                 <button onClick={() => navigate(t.adminId === user?.uid ? `/tournament/${t.id}/manage` : `/tournament`)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors border border-zinc-700">
                   {t.adminId === user?.uid ? 'Manage' : 'View Details'}
                 </button>
@@ -332,18 +332,31 @@ export const Dashboard: React.FC = () => {
       </header>
 
       {/* SLIDE-OUT MENU */}
-      <div className={`fixed top-0 right-0 w-[300px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`fixed top-0 right-0 w-[320px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-6 h-full flex flex-col">
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex justify-between items-center mb-8 border-b border-zinc-900 pb-4">
             <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Command Menu</h2>
-            <button onClick={() => setIsMenuOpen(false)} className="text-2xl text-zinc-500 hover:text-white transition-colors">&times;</button>
+            <button onClick={() => setIsMenuOpen(false)} className="text-2xl text-zinc-500 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-900">&times;</button>
           </div>
-          {/* UPDATED: Increased spacing from space-y-1 to space-y-3 */}
-          <div className="space-y-3 flex-1 overflow-y-auto">
-            <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
-            <MenuItem label="Tournament Mode" icon="🏆" onClick={() => { setIsMenuOpen(false); setActiveModal('confirmTournament'); }} highlight subtitle="League Management" />
 
-            <div className="pt-2 mt-2">
+          <div className="flex-1 overflow-y-auto pr-2">
+            {/* 1. NAVIGATION */}
+            <div className="space-y-1 mb-6">
+              <div className="text-[9px] font-black text-zinc-700 uppercase tracking-widest mb-2 px-4">Navigation</div>
+              <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
+              <MenuItem label="Tournament Mode" icon="🏆" onClick={() => { setIsMenuOpen(false); setActiveModal('confirmTournament'); }} highlight subtitle="League Management" />
+            </div>
+
+            {/* 2. PERSONAL */}
+            <div className="space-y-1 mb-6">
+              <div className="text-[9px] font-black text-zinc-700 uppercase tracking-widest mb-2 px-4">Personal</div>
+              <MenuItem label="My Profile" icon="👤" onClick={() => { setIsMenuOpen(false); setActiveModal('profile'); }} disabled={!user} />
+              <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
+            </div>
+
+            {/* 3. HARDWARE */}
+            <div className="space-y-1 mb-6">
+              <div className="text-[9px] font-black text-zinc-700 uppercase tracking-widest mb-2 px-4">Hardware</div>
               <MenuItem
                 label={isConnected ? "Handheld Connected" : "Connect Handheld"}
                 icon={isConnected ? "🎮" : "🔗"}
@@ -353,24 +366,23 @@ export const Dashboard: React.FC = () => {
                 badge={isConnected ? "ON" : undefined}
               />
               <MenuItem label={isInstalled ? "Unit Provisioned" : "Provision Hardware"} icon={isInstalled ? "✅" : "📱"} onClick={() => { setIsMenuOpen(false); setActiveModal('provision'); }} highlight={!isInstalled && !controllerLinked} subtitle={isInstalled ? "Device Ready" : "Setup Referee Unit"} />
+
+              {myGames.length > 0 && (
+                <MenuItem label="Tablet Controller" icon="📱" onClick={() => { setIsMenuOpen(false); goToTabletMode(); }} highlight={true} subtitle={`Control ${myGames.length} active games`} badge={myGames.length} />
+              )}
             </div>
 
-            <MenuItem label="My Profile" icon="👤" onClick={() => { setIsMenuOpen(false); setActiveModal('profile'); }} disabled={!user} />
-            <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
-            {myGames.length > 0 && (
-              <div className="pt-4 mt-4 border-t border-zinc-900">
-                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2 px-4 font-bold">Quick Actions</div>
-                <MenuItem label="Tablet Controller" icon="🎮" onClick={() => { setIsMenuOpen(false); goToTabletMode(); }} highlight={true} subtitle={`Control ${myGames.length} active games`} badge={myGames.length} />
-              </div>
-            )}
-            <div className="pt-4 mt-4 border-t border-zinc-900">
+            {/* 4. SYSTEM */}
+            <div className="space-y-1 mb-6">
+              <div className="text-[9px] font-black text-zinc-700 uppercase tracking-widest mb-2 px-4">System</div>
               <MenuItem label="System Status" icon="⚡" onClick={() => { setIsMenuOpen(false); setActiveModal('status'); }} />
               <MenuItem label="Settings" icon="⚙" onClick={() => { setIsMenuOpen(false); setActiveModal('settings'); }} />
             </div>
           </div>
-          <div className="pt-6 border-t border-zinc-900">
-            <button onClick={handleLogout} className="w-full text-left flex items-center gap-4 p-4 hover:bg-red-900/10 text-red-500 transition-colors uppercase font-bold text-xs tracking-widest rounded">
-              <span className="text-lg">↪</span> <span>Log Out</span>
+
+          <div className="pt-6 border-t border-zinc-900 mt-auto">
+            <button onClick={handleLogout} className="w-full text-left flex items-center gap-4 p-4 hover:bg-red-900/10 text-red-500 transition-colors uppercase font-bold text-xs tracking-widest rounded group">
+              <span className="text-lg group-hover:-translate-x-1 transition-transform">↪</span> <span>Log Out</span>
             </button>
           </div>
         </div>
@@ -541,30 +553,34 @@ export const Dashboard: React.FC = () => {
 
 /**
  * WATCH BY CODE CARD - Lives in Slot #1 of Active Feed
+ * REFINED: Matches Game Card visuals + Fluid Height
  */
 const WatchByCodeCard = ({ onWatch }: { onWatch: (code: string) => void }) => {
   const [code, setCode] = useState('');
 
   return (
-    <div className="bg-zinc-900/80 border border-zinc-700 p-4 rounded-sm flex flex-col justify-between h-[180px] shadow-lg relative overflow-hidden group">
-      {/* Background Decor */}
-      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 blur-3xl rounded-full pointer-events-none"></div>
+    <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm flex flex-col justify-between min-h-[220px] h-full shadow-none relative overflow-hidden group hover:border-blue-500 transition-all">
+      {/* Visual Consistency Bar */}
+      <div className="absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 bg-blue-600"></div>
 
-      <div className="relative z-10">
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-3xl rounded-full pointer-events-none"></div>
+
+      <div className="relative z-10 pl-2">
         <div className="flex items-center gap-2 mb-2">
+          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">SPECTATOR</div>
           <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Spectator Mode</h3>
         </div>
-        <h2 className="text-white font-black italic text-xl uppercase tracking-tight mb-4">Find a Game</h2>
+        <h2 className="text-white font-black italic text-xl uppercase tracking-tight mb-4 group-hover:text-blue-400 transition-colors">Find a Game</h2>
       </div>
 
-      <div className="relative z-10 space-y-2">
+      <div className="relative z-10 space-y-2 mt-auto pl-2">
         <input
           type="text"
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder="ENTER CODE"
-          className="w-full bg-black/50 border border-zinc-700 text-white text-center font-mono font-bold text-sm py-2 rounded focus:outline-none focus:border-blue-500 transition-colors placeholder:text-zinc-700"
+          className="w-full bg-black/50 border border-zinc-700 text-white text-center font-mono font-bold text-sm py-2 rounded focus:outline-none focus:border-blue-500 transition-colors placeholder:text-zinc-700 uppercase"
           maxLength={6}
         />
         <button
@@ -622,7 +638,7 @@ const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
 };
 
 const MenuItem = ({ label, icon, onClick, active, disabled, highlight, subtitle, badge }: any) => (
-  <button onClick={onClick} disabled={disabled} className={`w-full text-left flex items-center justify-between p-4 rounded transition-all uppercase font-bold text-[10px] tracking-widest relative ${active ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-900'} ${disabled ? 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-zinc-500' : ''} ${highlight ? 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300 border border-blue-900/50' : ''}`}>
+  <button onClick={onClick} disabled={disabled} className={`w-full text-left flex items-center justify-between p-4 rounded-sm transition-all uppercase font-bold text-[10px] tracking-widest relative ${active ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-900'} ${disabled ? 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-zinc-500' : ''} ${highlight ? 'bg-blue-900/10 text-blue-400 hover:bg-blue-900/20 hover:text-blue-300 border border-blue-900/30' : ''}`}>
     <div className="flex items-center gap-4 flex-1 min-w-0">
       <span className="text-lg w-6 text-center flex-shrink-0">{icon}</span>
       <div className="flex-1 min-w-0">
