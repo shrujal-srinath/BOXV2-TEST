@@ -49,6 +49,7 @@ export interface RTDBTimerReturn {
     // Display values — use these directly in JSX instead of game.gameState.*
     minutes: number;
     seconds: number;
+    tenths: number;
     shotClock: number;
     period: number;
     gameRunning: boolean;
@@ -62,7 +63,7 @@ export interface RTDBTimerReturn {
     resetShotClock14: () => void;
     resetShotClock: (value: number) => void;
     nextPeriod: () => void;
-    editClocks: (minutes: number, seconds: number, shotClock: number) => void;
+    editClocks: (minutes: number, seconds: number, tenths: number, shotClock: number) => void;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ export const useRTDBTimer = ({
         shotClockRunning: false,
         minutes: periodDuration,
         seconds: 0,
+        tenths: 0,
         shotClock: shotClockDuration,
         period: 1,
         startedAt: null,
@@ -112,6 +114,7 @@ export const useRTDBTimer = ({
 
     // ── Step 2: Host only — run the interval that writes ticks to RTDB ────────
     // Spectators skip this entire block. They just receive from step 1.
+    // RUN AT 100ms (10 times a second) for tenth-of-a-second precision
     useEffect(() => {
         if (!isHost) return;
 
@@ -136,34 +139,39 @@ export const useRTDBTimer = ({
                 return;
             }
 
-            const totalSec = c.minutes * 60 + c.seconds;
+            // Calculate total tenths: (Minutes * 60 * 10) + (Seconds * 10) + Tenths
+            let totalTenths = (c.minutes * 600) + (c.seconds * 10) + c.tenths;
 
-            if (totalSec <= 0) {
+            if (totalTenths <= 0) {
                 // Period ended — stop everything
                 clearInterval(intervalRef.current!);
                 intervalRef.current = null;
-                await pushClockStop(gameCode, 0, 0, c.shotClock, c.period);
+                await pushClockStop(gameCode, 0, 0, 0, c.shotClock, c.period);
                 // Horn sound trigger — dispatch a custom event that HostConsole listens for
                 window.dispatchEvent(new CustomEvent('periodEnd', { detail: { period: c.period } }));
                 return;
             }
 
-            // Tick down one second
-            const newTotal = totalSec - 1;
-            const newMin = Math.floor(newTotal / 60);
-            const newSec = newTotal % 60;
+            // Decrement by 1 tenth
+            totalTenths -= 1;
 
-            // Shot clock ticks down independently
-            // It has its own startedAt (shotClockStartedAt) but for the interval
-            // we just decrement it in sync since they start/stop together
-            const newShot = c.shotClockRunning
+            // Convert back to minutes, seconds, tenths
+            const newMin = Math.floor(totalTenths / 600);
+            const remainder = totalTenths % 600;
+            const newSec = Math.floor(remainder / 10);
+            const newTenths = remainder % 10;
+
+            // Shot clock logic: decrement once per second (when tenths wraps from 0 to 9)
+            // We detect a second boundary by checking if we just crossed from X.0 to (X-1).9
+            const secondBoundary = (newTenths === 9 && c.tenths === 0);
+            const newShot = (c.shotClockRunning && secondBoundary)
                 ? Math.max(0, c.shotClock - 1)
                 : c.shotClock;
 
             // This single write is what every spectator receives
-            await pushClockTick(gameCode, newMin, newSec, newShot);
+            await pushClockTick(gameCode, newMin, newSec, newTenths, newShot);
 
-        }, 1000);
+        }, 100); // 100ms interval for tenth-of-a-second precision
 
         return () => {
             if (intervalRef.current) {
@@ -181,7 +189,7 @@ export const useRTDBTimer = ({
     const startClock = useCallback(() => {
         if (!isHost) return;
         const c = clockRef.current;
-        pushClockStart(gameCode, c.minutes, c.seconds, c.shotClock, c.period);
+        pushClockStart(gameCode, c.minutes, c.seconds, c.tenths, c.shotClock, c.period);
     }, [isHost, gameCode]);
 
     const stopClock = useCallback(() => {
@@ -192,7 +200,7 @@ export const useRTDBTimer = ({
             intervalRef.current = null;
         }
         const c = clockRef.current;
-        pushClockStop(gameCode, c.minutes, c.seconds, c.shotClock, c.period);
+        pushClockStop(gameCode, c.minutes, c.seconds, c.tenths, c.shotClock, c.period);
     }, [isHost, gameCode]);
 
     const toggleClock = useCallback(() => {
@@ -228,9 +236,9 @@ export const useRTDBTimer = ({
         pushPeriodChange(gameCode, c.period + 1, periodDuration, shotClockDuration);
     }, [isHost, gameCode, periodDuration, shotClockDuration]);
 
-    const editClocks = useCallback((minutes: number, seconds: number, shotClock: number) => {
+    const editClocks = useCallback((minutes: number, seconds: number, tenths: number, shotClock: number) => {
         if (!isHost) return;
-        pushClockEdit(gameCode, minutes, seconds, shotClock);
+        pushClockEdit(gameCode, minutes, seconds, tenths, shotClock);
     }, [isHost, gameCode]);
 
     // ── Return ────────────────────────────────────────────────────────────────
@@ -238,6 +246,7 @@ export const useRTDBTimer = ({
     return {
         minutes: clock.minutes,
         seconds: clock.seconds,
+        tenths: clock.tenths,
         shotClock: clock.shotClock,
         period: clock.period,
         gameRunning: clock.gameRunning,

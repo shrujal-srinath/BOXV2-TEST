@@ -1,158 +1,112 @@
 // src/pages/TournamentWallView.tsx
-// FIXED: replaced non-existent GameState fields with correct ones:
-//   timeLeft        → gameTime.minutes / gameTime.seconds
-//   possessionTeam  → possession
-//   shotClockActive → shotClockRunning
-//   settings.sport  → game.sport (top-level field on BasketballGame)
-
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useParams } from 'react-router-dom';
-import { subscribeToGame } from '../services/gameService';
-import type { BasketballGame } from '../types';
+import { useBasketballGame } from '../hooks/useBasketballGame';
+import { useRTDBTimer } from '../hooks/useRTDBTimer';
 
 export const TournamentWallView: React.FC = () => {
-    const { gameCode } = useParams<{ gameCode: string }>();
-    const [game, setGame] = useState<BasketballGame | null>(null);
+    const { code } = useParams<{ code: string }>();
+    const { game } = useBasketballGame(code || '', 'online');
 
-    useEffect(() => {
-        if (!gameCode) return;
-        return subscribeToGame(gameCode, setGame);
-    }, [gameCode]);
+    const timer = useRTDBTimer({
+        gameCode: code || '',
+        isHost: false,
+        periodDuration: game.settings.periodDuration,
+        shotClockDuration: game.settings.shotClockDuration
+    });
 
-    if (!game) {
-        return (
-            <div className="min-h-screen bg-black flex items-center justify-center">
-                <div className="text-zinc-500 font-mono text-sm animate-pulse uppercase tracking-widest">
-                    Connecting to game…
-                </div>
-            </div>
-        );
-    }
+    const showTenths = timer.minutes === 0; // Show tenths in last minute
+    const isLowTime = timer.minutes === 0 && timer.seconds < 10;
 
-    const { gameState, teamA, teamB, settings, sport } = game;
-
-    // ── Derived display values ────────────────────────────
-    // FIX: was gameState.timeLeft — correct field is gameTime
-    const minutes = gameState.gameTime.minutes;
-    const seconds = gameState.gameTime.seconds;
-    const timeDisplay = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    const isLowTime = minutes === 0 && seconds <= 30;
-
-    // FIX: was gameState.possessionTeam — correct field is possession
-    const possessionName = gameState.possession === 'A' ? teamA.name : teamB.name;
-    const possessionColor = gameState.possession === 'A' ? teamA.color : teamB.color;
-
-    // FIX: was gameState.shotClockActive — correct field is shotClockRunning
-    const showShotClock = settings.shotClockDuration > 0;
-
-    // FIX: was settings.sport — correct field is game.sport (top-level)
-    const sportLabel = sport || 'Basketball';
-
-    const periodLabel = () => {
-        if (settings.periodType === 'half') {
-            return gameState.period <= 2 ? `Half ${gameState.period}` : 'OT';
-        }
-        return gameState.period <= 4 ? `Q${gameState.period}` : `OT${gameState.period - 4}`;
-    };
+    if (!game) return <div className="bg-black min-h-screen"></div>;
 
     return (
-        <div className="min-h-screen bg-black text-white overflow-hidden select-none">
+        <div className="min-h-screen bg-black text-white overflow-hidden flex flex-col font-sans">
 
-            {/* Status bar */}
-            <div className="flex items-center justify-between px-8 py-3 bg-zinc-950 border-b border-zinc-900">
-                <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${gameState.gameRunning ? 'bg-green-500 animate-pulse' : 'bg-zinc-700'}`} />
-                    <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">
-                        {gameState.gameRunning ? 'Live' : 'Paused'} · {sportLabel}
+            {/* HEADER: PERIOD & LOGO */}
+            <div className="h-24 bg-zinc-900 flex items-center justify-between px-12 border-b-4 border-zinc-800">
+                <div className="text-zinc-400 font-bold uppercase tracking-[0.2em] text-xl">
+                    {game.settings.gameName || 'TOURNAMENT MATCH'}
+                </div>
+                <div className="flex items-center gap-4">
+                    <span className="text-zinc-500 font-bold uppercase tracking-widest text-lg">Period</span>
+                    <span className="bg-yellow-500 text-black font-black text-4xl px-6 py-1 rounded-sm">
+                        {timer.period}
                     </span>
                 </div>
-                <span className="text-xs font-mono text-zinc-600 uppercase tracking-widest">
-                    {periodLabel()} · {settings.gameName}
-                </span>
             </div>
 
-            {/* Main scoreboard */}
-            <div className="flex items-stretch min-h-[calc(100vh-48px)]">
+            {/* MAIN CONTENT */}
+            <div className="flex-1 flex">
 
-                {/* Team A */}
-                <div className="flex-1 flex flex-col items-center justify-center gap-4 p-12"
-                    style={{ borderRight: `3px solid ${teamA.color}20` }}>
-                    <div className="text-3xl font-black uppercase tracking-widest text-center"
-                        style={{ color: teamA.color }}>
-                        {teamA.name}
+                {/* TEAM A */}
+                <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black border-r border-zinc-800 relative">
+                    <div className="absolute top-0 left-0 w-full h-4" style={{ backgroundColor: game.teamA.color }}></div>
+                    <h1 className="text-6xl md:text-8xl font-black italic uppercase mb-8 text-center px-4 leading-tight">
+                        {game.teamA.name}
+                    </h1>
+                    <div className="text-[12rem] md:text-[16rem] font-black leading-none tracking-tighter" style={{ color: game.teamA.color, textShadow: '0 0 50px rgba(0,0,0,0.5)' }}>
+                        {game.teamA.score}
                     </div>
-                    <div className="text-[10rem] font-black font-mono leading-none tabular-nums text-white"
-                        style={{ textShadow: `0 0 60px ${teamA.color}40` }}>
-                        {teamA.score}
-                    </div>
-                    <div className="flex gap-6 text-xs text-zinc-600 font-bold uppercase tracking-widest">
-                        <span>Fouls: {teamA.fouls}</span>
-                        <span>TO: {teamA.timeouts}</span>
-                    </div>
-                    {/* Possession indicator */}
-                    {gameState.possession === 'A' && (
-                        <div className="mt-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest"
-                            style={{ background: `${teamA.color}30`, color: teamA.color, border: `1px solid ${teamA.color}60` }}>
-                            ◀ Possession
-                        </div>
-                    )}
-                </div>
-
-                {/* Center: Clock */}
-                <div className="flex-none w-72 flex flex-col items-center justify-center gap-6 px-8">
-                    {/* Period */}
-                    <div className="text-zinc-500 text-xs font-bold uppercase tracking-[0.3em]">
-                        {periodLabel()}
-                    </div>
-
-                    {/* Game clock */}
-                    <div className={`text-7xl font-mono font-black tabular-nums ${isLowTime ? 'text-red-500' : 'text-white'}`}
-                        style={isLowTime ? { textShadow: '0 0 30px rgba(239,68,68,0.6)' } : {}}>
-                        {timeDisplay}
-                    </div>
-
-                    {/* Shot clock */}
-                    {showShotClock && (
-                        <div className="flex flex-col items-center gap-1">
-                            <div className="text-[9px] text-zinc-600 uppercase tracking-widest">Shot Clock</div>
-                            <div className={`text-4xl font-mono font-black tabular-nums ${gameState.shotClock <= 5 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
-                                {gameState.shotClock}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Possession label */}
-                    <div className="text-center">
-                        <div className="text-[9px] text-zinc-600 uppercase tracking-widest mb-1">Possession</div>
-                        <div className="text-sm font-black uppercase tracking-widest" style={{ color: possessionColor }}>
-                            {possessionName}
-                        </div>
+                    <div className="mt-12 flex gap-12">
+                        <StatBox label="FOULS" value={game.teamA.fouls} />
+                        <StatBox label="TIMEOUTS" value={game.teamA.timeouts} />
                     </div>
                 </div>
 
-                {/* Team B */}
-                <div className="flex-1 flex flex-col items-center justify-center gap-4 p-12"
-                    style={{ borderLeft: `3px solid ${teamB.color}20` }}>
-                    <div className="text-3xl font-black uppercase tracking-widest text-center"
-                        style={{ color: teamB.color }}>
-                        {teamB.name}
+                {/* CENTER CLOCK COLUMN */}
+                <div className="w-[30%] bg-black flex flex-col items-center justify-center border-x-4 border-zinc-900 z-10 relative">
+
+                    {/* GAME CLOCK */}
+                    <div className={`font-mono font-black text-8xl md:text-9xl mb-12 tracking-tighter ${isLowTime ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                        {showTenths
+                            ? `${timer.seconds}.${timer.tenths}`
+                            : `${timer.minutes}:${timer.seconds.toString().padStart(2, '0')}`
+                        }
                     </div>
-                    <div className="text-[10rem] font-black font-mono leading-none tabular-nums text-white"
-                        style={{ textShadow: `0 0 60px ${teamB.color}40` }}>
-                        {teamB.score}
-                    </div>
-                    <div className="flex gap-6 text-xs text-zinc-600 font-bold uppercase tracking-widest">
-                        <span>Fouls: {teamB.fouls}</span>
-                        <span>TO: {teamB.timeouts}</span>
-                    </div>
-                    {gameState.possession === 'B' && (
-                        <div className="mt-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest"
-                            style={{ background: `${teamB.color}30`, color: teamB.color, border: `1px solid ${teamB.color}60` }}>
-                            Possession ▶
+
+                    {/* SHOT CLOCK */}
+                    <div className="bg-zinc-900/80 p-6 rounded-2xl border-2 border-zinc-800 mb-12">
+                        <div className="text-center text-zinc-500 text-sm font-bold uppercase tracking-widest mb-2">Shot Clock</div>
+                        <div className={`font-mono font-black text-8xl leading-none ${timer.shotClock < 5 ? 'text-red-500' : 'text-yellow-400'}`}>
+                            {timer.shotClock}
                         </div>
-                    )}
+                    </div>
+
+                    {/* POSSESSION ARROW */}
+                    <div className="flex items-center gap-8 opacity-80">
+                        <div className={`w-0 h-0 border-y-[20px] border-y-transparent border-r-[30px] transition-all duration-300 ${game.gameState.possession === 'A' ? 'border-r-red-600 scale-125' : 'border-r-zinc-800'}`}></div>
+                        <div className="text-zinc-600 font-bold uppercase tracking-widest text-sm">Possession</div>
+                        <div className={`w-0 h-0 border-y-[20px] border-y-transparent border-l-[30px] transition-all duration-300 ${game.gameState.possession === 'B' ? 'border-l-blue-600 scale-125' : 'border-l-zinc-800'}`}></div>
+                    </div>
+
                 </div>
+
+                {/* TEAM B */}
+                <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-bl from-zinc-900 to-black border-l border-zinc-800 relative">
+                    <div className="absolute top-0 right-0 w-full h-4" style={{ backgroundColor: game.teamB.color }}></div>
+                    <h1 className="text-6xl md:text-8xl font-black italic uppercase mb-8 text-center px-4 leading-tight">
+                        {game.teamB.name}
+                    </h1>
+                    <div className="text-[12rem] md:text-[16rem] font-black leading-none tracking-tighter" style={{ color: game.teamB.color, textShadow: '0 0 50px rgba(0,0,0,0.5)' }}>
+                        {game.teamB.score}
+                    </div>
+                    <div className="mt-12 flex gap-12">
+                        <StatBox label="FOULS" value={game.teamB.fouls} />
+                        <StatBox label="TIMEOUTS" value={game.teamB.timeouts} />
+                    </div>
+                </div>
+
             </div>
         </div>
     );
 };
+
+const StatBox = ({ label, value }: { label: string, value: number }) => (
+    <div className="text-center">
+        <div className="text-zinc-600 font-bold text-xs uppercase tracking-widest mb-1">{label}</div>
+        <div className="text-4xl font-black text-white bg-zinc-900/50 px-4 py-2 rounded border border-zinc-800 min-w-[80px]">
+            {value}
+        </div>
+    </div>
+);

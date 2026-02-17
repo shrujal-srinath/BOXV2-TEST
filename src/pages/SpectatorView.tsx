@@ -1,7 +1,9 @@
+// src/pages/SpectatorView.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToGame } from '../services/gameService';
 import { getLocalGame } from '../services/localGameService';
+import { useRTDBTimer } from '../hooks/useRTDBTimer'; // NEW: Import RTDB Hook
 import { BasketballGame } from '../types';
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
@@ -133,12 +135,17 @@ const ScoreDisplay: React.FC<{
 const ClockDisplay: React.FC<{
   minutes: number;
   seconds: number;
+  tenths?: number; // UPDATED: Added tenths support
   running: boolean;
-}> = ({ minutes, seconds, running }) => {
+}> = ({ minutes, seconds, tenths, running }) => {
   const isLow = minutes === 0 && seconds <= 30;
   const isCritical = minutes === 0 && seconds <= 10;
 
-  const timeStr = `${pad(minutes)}:${pad(seconds)}`;
+  // UPDATED: Show tenths if minutes are 0 and tenths are provided
+  const showTenths = minutes === 0 && tenths !== undefined;
+  const timeStr = showTenths
+    ? `${seconds}.${tenths}`
+    : `${pad(minutes)}:${pad(seconds)}`;
 
   return (
     <div style={{ textAlign: 'center', position: 'relative' }}>
@@ -155,7 +162,7 @@ const ClockDisplay: React.FC<{
             : isLow
               ? '0 0 40px #FF8C0066'
               : '0 0 30px rgba(255,255,255,0.15)',
-          transition: 'color 0.5s ease, text-shadow 0.5s ease',
+          transition: 'color 0.1s ease, text-shadow 0.5s ease', // Faster color transition for precision
           animation: isCritical && running ? 'clockPulse 0.5s ease-in-out infinite alternate' : 'none',
           fontVariantNumeric: 'tabular-nums',
           fontFeatureSettings: '"tnum"',
@@ -595,10 +602,11 @@ const CenterPanel: React.FC<{
         </div>
       </div>
 
-      {/* Clock */}
+      {/* Clock - UPDATED to pass tenths */}
       <ClockDisplay
         minutes={gameTime.minutes}
         seconds={gameTime.seconds}
+        tenths={gameTime.tenths}
         running={gameRunning}
       />
 
@@ -1016,6 +1024,15 @@ export const SpectatorView: React.FC = () => {
 
   const isLocalGame = gameCode?.startsWith('LOCAL-');
 
+  // NEW: Connect to the High-Frequency RTDB Clock
+  // This will return the precise minutes/seconds/tenths if online
+  const rtdbTimer = useRTDBTimer({
+    gameCode: gameCode || '',
+    isHost: false, // This is a read-only view
+    periodDuration: game?.settings?.periodDuration || 10,
+    shotClockDuration: game?.settings?.shotClockDuration || 24
+  });
+
   useEffect(() => {
     if (!gameCode) {
       setError('No game code provided');
@@ -1053,6 +1070,25 @@ export const SpectatorView: React.FC = () => {
     }
   }, [gameCode, isLocalGame, loading]);
 
+  // NEW: Merge Logic
+  // If we are ONLINE, we override the stale Firestore clock with the fresh RTDB clock
+  const activeGame = game ? {
+    ...game,
+    gameState: {
+      ...game.gameState,
+      // If local game, stick to game state. If online, use RTDB.
+      gameTime: isLocalGame ? game.gameState.gameTime : {
+        minutes: rtdbTimer.minutes,
+        seconds: rtdbTimer.seconds,
+        tenths: rtdbTimer.tenths
+      },
+      // Only override high-frequency fields if online
+      period: isLocalGame ? game.gameState.period : rtdbTimer.period,
+      gameRunning: isLocalGame ? game.gameState.gameRunning : rtdbTimer.gameRunning,
+      shotClock: isLocalGame ? game.gameState.shotClock : rtdbTimer.shotClock
+    }
+  } : null;
+
   if (loading) return (
     <>
       <GlobalStyles />
@@ -1060,7 +1096,7 @@ export const SpectatorView: React.FC = () => {
     </>
   );
 
-  if (error || !game) return (
+  if (error || !activeGame) return (
     <>
       <GlobalStyles />
       <ErrorScreen message={error || 'Game unavailable'} />
@@ -1095,8 +1131,8 @@ export const SpectatorView: React.FC = () => {
 
         {/* Header bar */}
         <Header
-          gameName={game.settings?.gameName || 'BASKETBALL'}
-          period={game.gameState.period}
+          gameName={activeGame.settings?.gameName || 'BASKETBALL'}
+          period={activeGame.gameState.period}
         />
 
         {/* Main content */}
@@ -1111,14 +1147,14 @@ export const SpectatorView: React.FC = () => {
         >
           {/* Team A */}
           <TeamPanel
-            name={game.teamA.name}
-            score={game.teamA.score}
-            fouls={game.teamA.fouls}
-            timeouts={game.teamA.timeouts}
-            color={game.teamA.color || '#DC2626'}
-            hasPossession={game.gameState.possession === 'A'}
+            name={activeGame.teamA.name}
+            score={activeGame.teamA.score}
+            fouls={activeGame.teamA.fouls}
+            timeouts={activeGame.teamA.timeouts}
+            color={activeGame.teamA.color || '#DC2626'}
+            hasPossession={activeGame.gameState.possession === 'A'}
             side="left"
-            players={game.teamA.players}
+            players={activeGame.teamA.players}
           />
 
           {/* Divider */}
@@ -1131,7 +1167,7 @@ export const SpectatorView: React.FC = () => {
           />
 
           {/* Center */}
-          <CenterPanel game={game} />
+          <CenterPanel game={activeGame} />
 
           {/* Divider */}
           <div
@@ -1144,19 +1180,19 @@ export const SpectatorView: React.FC = () => {
 
           {/* Team B */}
           <TeamPanel
-            name={game.teamB.name}
-            score={game.teamB.score}
-            fouls={game.teamB.fouls}
-            timeouts={game.teamB.timeouts}
-            color={game.teamB.color || '#2563EB'}
-            hasPossession={game.gameState.possession === 'B'}
+            name={activeGame.teamB.name}
+            score={activeGame.teamB.score}
+            fouls={activeGame.teamB.fouls}
+            timeouts={activeGame.teamB.timeouts}
+            color={activeGame.teamB.color || '#2563EB'}
+            hasPossession={activeGame.gameState.possession === 'B'}
             side="right"
-            players={game.teamB.players}
+            players={activeGame.teamB.players}
           />
         </div>
 
         {/* Ticker */}
-        <TickerBar game={game} />
+        <TickerBar game={activeGame} />
       </div>
     </>
   );

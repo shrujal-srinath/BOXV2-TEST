@@ -1,18 +1,4 @@
 // src/hooks/useBasketballGame.ts
-//
-// CHANGE LOG (RTDB clock migration):
-//   - toggleTimer, updateGameTime REMOVED — clock is now controlled
-//     entirely by useRTDBTimer. HostConsole calls timer.toggleClock() directly.
-//   - toggleShotClock REMOVED — use timer.resetShotClock() instead.
-//   - setPeriod now only writes durable state to Firestore (fouls reset,
-//     period number). The clock reset is handled by useRTDBTimer.nextPeriod().
-//   - updateFouls now uses batchUpdateGame (1 write instead of 2).
-//   - All scoring still goes to Firestore for the permanent game record.
-//
-// USAGE in HostConsole:
-//   const game = useBasketballGame(gameCode, 'online');   // scores, fouls, roster
-//   const timer = useRTDBTimer({ gameCode, isHost: true, ... }); // clock display + controls
-
 import { useState, useEffect, useCallback } from 'react';
 import type { BasketballGame, TeamData, Player } from '../types';
 import { updateGameField, batchUpdateGame, subscribeToGame } from '../services/gameService';
@@ -60,6 +46,7 @@ export const useBasketballGame = (
       periodDuration: 10,
       shotClockDuration: 24,
       periodType: 'quarter',
+      periods: 4,
     },
     sport: 'basketball',
     status: 'live',
@@ -69,7 +56,7 @@ export const useBasketballGame = (
   });
 
   // Subscribe to Firestore for durable state (scores, fouls, rosters)
-  // Clock display comes from useRTDBTimer, not from here
+  // NOTE: We do NOT use this for the clock display. Clock comes from useRTDBTimer.
   useEffect(() => {
     if (!code) return;
     const unsubscribe = subscribeToGame(code, (updatedGame) => {
@@ -78,10 +65,9 @@ export const useBasketballGame = (
     return unsubscribe;
   }, [code]);
 
-  // ─── Helper: push score update to RTDB for instant spectator display ──────
-  // This mirrors the Firestore write to RTDB so the SpectatorView
-  // (which subscribes to RTDB score) gets the update in <10ms.
+  // ─── Helper: Push to RTDB for <10ms Spectator Updates ─────────────────────
   const syncScoreToRTDB = useCallback((updatedGame: BasketballGame) => {
+    if (gameType === 'local') return;
     pushScoreUpdate(
       code,
       updatedGame.teamA.score,
@@ -90,9 +76,9 @@ export const useBasketballGame = (
       updatedGame.teamB.fouls,
       updatedGame.teamA.timeouts,
       updatedGame.teamB.timeouts,
-      updatedGame.gameState.possession
+      updatedGame.gameState.possession || 'A'
     );
-  }, [code]);
+  }, [code, gameType]);
 
   // ─── Score ────────────────────────────────────────────────────────────────
 
@@ -100,10 +86,10 @@ export const useBasketballGame = (
     const teamKey = team === 'A' ? 'teamA' : 'teamB';
     const newScore = Math.max(0, game[teamKey].score + points);
 
-    // Write to Firestore (permanent record)
+    // 1. Durable Write (Firestore)
     updateGameField(code, `${teamKey}.score`, newScore);
 
-    // Mirror to RTDB immediately (spectator display)
+    // 2. Instant Mirror (RTDB)
     const updatedGame = {
       ...game,
       [teamKey]: { ...game[teamKey], score: newScore },
@@ -118,13 +104,11 @@ export const useBasketballGame = (
     const newFouls = Math.max(0, game[teamKey].fouls + increment);
     const newFoulsThisQ = Math.max(0, game[teamKey].foulsThisQuarter + increment);
 
-    // Single Firestore write for both foul fields
     batchUpdateGame(code, {
       [`${teamKey}.fouls`]: newFouls,
       [`${teamKey}.foulsThisQuarter`]: newFoulsThisQ,
     });
 
-    // Mirror to RTDB
     const updatedGame = {
       ...game,
       [teamKey]: { ...game[teamKey], fouls: newFouls, foulsThisQuarter: newFoulsThisQ },
@@ -153,36 +137,37 @@ export const useBasketballGame = (
     const nextPos = game.gameState.possession === 'A' ? 'B' : 'A';
     updateGameField(code, 'gameState.possession', nextPos);
 
-    // Mirror to RTDB
-    pushScoreUpdate(
-      code,
-      game.teamA.score, game.teamB.score,
-      game.teamA.fouls, game.teamB.fouls,
-      game.teamA.timeouts, game.teamB.timeouts,
-      nextPos
-    );
-  }, [code, game]);
+    // Manual sync because 'game' state might be stale in this closure
+    if (gameType !== 'local') {
+      pushScoreUpdate(
+        code,
+        game.teamA.score, game.teamB.score,
+        game.teamA.fouls, game.teamB.fouls,
+        game.teamA.timeouts, game.teamB.timeouts,
+        nextPos
+      );
+    }
+  }, [code, game, gameType]);
 
-  // ─── Period transition (Firestore only — clock handled by useRTDBTimer) ───
-  // Call this AND timer.nextPeriod() from HostConsole when advancing period.
-  // This handles the durable state: fouls reset, period number, gameRunning flag.
+  // ─── Period Transition ────────────────────────────────────────────────────
+  // This handles DURABLE state only. The Clock reset is handled by timer.nextPeriod()
   const advancePeriodFirestore = useCallback((newPeriod: number) => {
     batchUpdateGame(code, {
       'gameState.period': newPeriod,
-      'gameState.gameRunning': false,
-      'gameState.shotClockRunning': false,
-      'gameState.gameTime': {
+      'gameState.gameRunning': false,       // Safety reset
+      'gameState.shotClockRunning': false,  // Safety reset
+      'gameState.gameTime': {               // Reset snapshot time
         minutes: game.settings.periodDuration || 10,
         seconds: 0,
         tenths: 0,
       },
       'gameState.shotClock': game.settings.shotClockDuration || 24,
-      'teamA.foulsThisQuarter': 0,
+      'teamA.foulsThisQuarter': 0, // FIBA Rule: Team fouls reset every quarter
       'teamB.foulsThisQuarter': 0,
     });
   }, [code, game.settings]);
 
-  // ─── Player data ──────────────────────────────────────────────────────────
+  // ─── Roster/Player Updates ────────────────────────────────────────────────
 
   const updateTeamData = useCallback((
     team: 'A' | 'B',
@@ -206,17 +191,17 @@ export const useBasketballGame = (
     updateGameField(code, `${teamKey}.players`, updatedPlayers);
   }, [code, game]);
 
-  // ─── Finish game ──────────────────────────────────────────────────────────
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
 
   const finishGame = useCallback(() => {
     batchUpdateGame(code, {
-      status: 'finished',
+      status: 'completed',
       'gameState.gameRunning': false,
       'gameState.shotClockRunning': false,
     });
   }, [code]);
 
-  // ─── Generic action handler (for components that use the old API) ─────────
+  // ─── Legacy Handler (for generic components) ──────────────────────────────
 
   const handleAction = useCallback((
     team: 'A' | 'B',
@@ -230,18 +215,14 @@ export const useBasketballGame = (
 
   return {
     game,
-    // Scoring actions
     updateScore,
     updateFouls,
     updateTimeouts,
     togglePossession,
     handleAction,
-    // Period
     advancePeriodFirestore,
-    // Roster
     updateTeamData,
     updatePlayerData,
-    // Game lifecycle
     finishGame,
   };
 };

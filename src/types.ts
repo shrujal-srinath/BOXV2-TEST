@@ -1,10 +1,7 @@
 // src/types.ts
 //
-// CHANGE LOG (RTDB clock migration):
-//   - GameState now includes startedAt and shotClockStartedAt
-//     These are written to RTDB (not Firestore) by rtdbClockService.
-//     They are optional so existing Firestore documents don't break.
-//   - All other types unchanged.
+// HYBRID ARCHITECTURE TYPES
+// Merges Tournament System + Live Game Engine (Firestore/RTDB)
 
 // ══════════════════════════════════════════════
 // 1. PLAYER
@@ -53,41 +50,50 @@ export interface GameSettings {
   periodDuration: number;
   shotClockDuration: number;
   periodType: 'quarter' | 'half';
+  // Optional/Contextual fields
+  periods?: number;      // Total periods (e.g., 4)
+  venue?: string;        // Venue name
   courtNumber?: string;
   tournamentId?: string;
   sport?: string;
 }
 
 // ══════════════════════════════════════════════
-// 4. GAME STATE
-//
-// NOTE: startedAt and shotClockStartedAt are RTDB-only fields.
-// They are never stored in Firestore game documents.
-// They are typed here so TypeScript doesn't complain when
-// RTDBClockState (which extends this shape) includes them.
+// 4. GAME TIME
 // ══════════════════════════════════════════════
-export interface GameState {
-  period: number;
-  gameTime: { minutes: number; seconds: number; tenths: number };
-  shotClock: number;
-  gameRunning: boolean;
-  shotClockRunning: boolean;
-  possession: 'A' | 'B';
-
-  // RTDB clock anchor fields — present in RTDB, absent in Firestore
-  // Optional so existing Firestore documents remain valid
-  startedAt?: number | null;
-  shotClockStartedAt?: number | null;
+export interface GameTime {
+  minutes: number;
+  seconds: number;
+  tenths: number;
 }
 
 // ══════════════════════════════════════════════
-// 5. BASKETBALL GAME (Firestore document shape)
+// 5. GAME STATE
+// ══════════════════════════════════════════════
+export interface GameState {
+  period: number;
+  gameTime: GameTime;
+  shotClock: number;
+  gameRunning: boolean;
+  shotClockRunning: boolean;
+  possession: 'A' | 'B' | null;
+
+  // ─── RTDB / HYBRID FIELDS ───
+  // These are used by rtdbClockService to calculate precise drift.
+  // Optional so Firestore docs without them don't break TS.
+  startedAt?: number | null;
+  shotClockStartedAt?: number | null;
+  timerStartEpoch?: number | null; // Legacy/Backup
+}
+
+// ══════════════════════════════════════════════
+// 6. BASKETBALL GAME (Firestore document shape)
 // ══════════════════════════════════════════════
 export interface BasketballGame {
   code: string;
   hostId: string;
   sport: string;
-  status: 'live' | 'finished';
+  status: 'live' | 'completed' | 'finished'; // Normalized status
   gameType: 'local' | 'online';
   createdAt: number;
   lastUpdate: number;
@@ -98,7 +104,7 @@ export interface BasketballGame {
 }
 
 // ══════════════════════════════════════════════
-// 6. SPORT TYPE
+// 7. SPORT TYPES & TOURNAMENT CONFIGS
 // ══════════════════════════════════════════════
 export type SportType =
   | 'basketball'
@@ -106,14 +112,13 @@ export type SportType =
   | 'volleyball'
   | 'kabaddi'
   | 'football'
-  | 'cricket';
+  | 'cricket'
+  | 'tabletennis'
+  | 'general';
 
 export type TournamentFormat = 'random' | 'knockout' | 'league';
 export type GenderCategory = 'men' | 'women' | 'mixed';
 
-// ══════════════════════════════════════════════
-// 7. DIVISION CONFIG
-// ══════════════════════════════════════════════
 export interface DivisionConfig {
   id: string;
   sport: SportType;
@@ -179,10 +184,11 @@ export interface Tournament {
     };
   };
   createdAt: number;
+  accessCode?: string; // Legacy/Helper field
 }
 
 // ══════════════════════════════════════════════
-// 10. BACKWARD COMPAT
+// 10. UTILITY / COMPAT
 // ══════════════════════════════════════════════
 export interface TournamentConfig {
   sports: { [key in SportType]?: { isActive: boolean; courts: number } };

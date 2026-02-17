@@ -20,6 +20,7 @@ export interface RTDBClockState {
     shotClockRunning: boolean;
     minutes: number;
     seconds: number;
+    tenths: number;
     shotClock: number;
     period: number;
     startedAt: number | null;
@@ -59,11 +60,12 @@ export const pushClockTick = async (
     gameCode: string,
     minutes: number,
     seconds: number,
+    tenths: number,
     shotClock: number
 ): Promise<void> => {
     if (!rtdb) return;
     try {
-        await update(clockRef(gameCode), { minutes, seconds, shotClock });
+        await update(clockRef(gameCode), { minutes, seconds, tenths, shotClock });
     } catch (err) {
         console.error('[RTDB] pushClockTick failed:', err);
     }
@@ -77,6 +79,7 @@ export const pushClockStart = async (
     gameCode: string,
     minutes: number,
     seconds: number,
+    tenths: number,
     shotClock: number,
     period: number
 ): Promise<void> => {
@@ -87,6 +90,7 @@ export const pushClockStart = async (
             shotClockRunning: true,
             minutes,
             seconds,
+            tenths,
             shotClock,
             period,
             startedAt: Date.now(),
@@ -106,6 +110,7 @@ export const pushClockStop = async (
     gameCode: string,
     minutes: number,
     seconds: number,
+    tenths: number,
     shotClock: number,
     period: number
 ): Promise<void> => {
@@ -116,6 +121,7 @@ export const pushClockStop = async (
             shotClockRunning: false,
             minutes,
             seconds,
+            tenths,
             shotClock,
             period,
             startedAt: null,
@@ -143,6 +149,7 @@ export const pushPeriodChange = async (
             shotClockRunning: false,
             minutes: periodMinutes,
             seconds: 0,
+            tenths: 0,
             shotClock: shotClockDuration,
             period: newPeriod,
             startedAt: null,
@@ -183,6 +190,7 @@ export const pushClockEdit = async (
     gameCode: string,
     minutes: number,
     seconds: number,
+    tenths: number,
     shotClock: number
 ): Promise<void> => {
     if (!rtdb) return;
@@ -190,6 +198,7 @@ export const pushClockEdit = async (
         await update(clockRef(gameCode), {
             minutes,
             seconds,
+            tenths,
             shotClock,
             startedAt: null,
             shotClockStartedAt: null,

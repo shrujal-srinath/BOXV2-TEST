@@ -46,7 +46,9 @@ const getPeriodName = (period: number) => {
 };
 
 export const HostConsole: React.FC = () => {
-    const { gameCode } = useParams<{ gameCode: string }>();
+    const { code } = useParams<{ code: string }>(); // NOTE: Renamed to 'code' to match route param usually, or kept as gameCode if your route is :gameCode
+    const gameCode = code; // Alias for compatibility
+
     const navigate = useNavigate();
     const [copied, setCopied] = useState(false);
     const [shareMenuOpen, setShareMenuOpen] = useState(false);
@@ -62,11 +64,18 @@ export const HostConsole: React.FC = () => {
         value: number;
     } | null>(null);
 
-    // Firestore: scores, fouls, timeouts, possession, roster
-    const { game, handleAction, togglePossession, advancePeriodFirestore } =
-        useBasketballGame(gameCode || '', 'online');
+    // 1. FIRESTORE: Cold Data (Scores, Fouls, Possession, Roster)
+    const {
+        game,
+        updateScore,
+        updateFouls,
+        updateTimeouts,
+        togglePossession,
+        advancePeriodFirestore,
+        finishGame
+    } = useBasketballGame(gameCode || '', 'online');
 
-    // RTDB: clock display + controls — replaces the old timerRef setInterval
+    // 2. RTDB: Hot Data (Clock, Tenths, Shot Clock)
     const timer = useRTDBTimer({
         gameCode: gameCode || '',
         isHost: true,
@@ -90,7 +99,7 @@ export const HostConsole: React.FC = () => {
         return () => window.removeEventListener('periodEnd', onPeriodEnd);
     }, []);
 
-    // Hardware screen sync
+    // Hardware screen sync - UPDATED to use timer values
     useEffect(() => {
         if (!game) return;
         updateScreen(
@@ -147,7 +156,11 @@ export const HostConsole: React.FC = () => {
         if (!pendingAction) return;
         const { team, type, value } = pendingAction;
         recordAction({ type: type === 'points' ? 'score' : 'foul', team, value, playerId: player.id, timestamp: Date.now() });
-        handleAction(team, type, value);
+
+        // Use hook updaters
+        if (type === 'points') updateScore(team, value);
+        else if (type === 'foul') updateFouls(team);
+
         // FIBA: clock stops on foul
         if (type === 'foul' && timer.gameRunning) timer.stopClock();
         if (isConnected && type === 'points') sendCommand({ cmd: 'BEEP' });
@@ -159,7 +172,10 @@ export const HostConsole: React.FC = () => {
         if (!pendingAction) return;
         const { team, type, value } = pendingAction;
         recordAction({ type: type === 'points' ? 'score' : 'foul', team, value, timestamp: Date.now() });
-        handleAction(team, type, value);
+
+        if (type === 'points') updateScore(team, value);
+        else if (type === 'foul') updateFouls(team);
+
         if (type === 'foul' && timer.gameRunning) timer.stopClock();
         if (isConnected && type === 'points') sendCommand({ cmd: 'BEEP' });
         setShowPlayerPopup(false);
@@ -169,14 +185,16 @@ export const HostConsole: React.FC = () => {
     const handleTimeout = (e: React.MouseEvent | null, team: 'A' | 'B') => {
         e?.stopPropagation();
         recordAction({ type: 'timeout', team, value: -1, timestamp: Date.now() });
-        handleAction(team, 'timeout', -1);
+        updateTimeouts(team, -1);
         // FIBA: clock stops on timeout
         if (timer.gameRunning) timer.stopClock();
     };
 
     const handleResetShot = (e: React.MouseEvent | null, val: number) => {
         e?.stopPropagation();
-        timer.resetShotClock(val);
+        // Uses RTDB
+        if (val === 14) timer.resetShotClock14();
+        else timer.resetShotClock24();
     };
 
     const handleTimerToggle = (e: React.MouseEvent | null) => {
@@ -192,9 +210,12 @@ export const HostConsole: React.FC = () => {
     const handleUndo = () => {
         if (actionHistory.length === 0) { alert('No actions to undo'); return; }
         const lastAction = actionHistory[actionHistory.length - 1];
-        if (lastAction.type === 'score') handleAction(lastAction.team, 'points', -lastAction.value);
-        else if (lastAction.type === 'foul') handleAction(lastAction.team, 'foul', -lastAction.value);
-        else if (lastAction.type === 'timeout') handleAction(lastAction.team, 'timeout', -lastAction.value);
+
+        // Simple undo logic using the hooks
+        if (lastAction.type === 'score') updateScore(lastAction.team, -lastAction.value);
+        else if (lastAction.type === 'foul') updateFouls(lastAction.team, -1); // Assuming foul value is always 1
+        else if (lastAction.type === 'timeout') updateTimeouts(lastAction.team, 1);
+
         setActionHistory(prev => prev.slice(0, -1));
     };
 
@@ -204,14 +225,15 @@ export const HostConsole: React.FC = () => {
         advancePeriodFirestore(newPeriod); // Firestore: fouls reset, period number
     };
 
-    const handleClockSave = (min: number, sec: number, shot: number) => {
-        timer.editClocks(min, sec, shot);
+    const handleClockSave = (min: number, sec: number, tenths: number, shot: number) => {
+        timer.editClocks(min, sec, tenths, shot);
         setShowTimeEdit(false);
     };
 
     const handleEndGame = async () => {
-        if (!confirm('End this game?')) return;
-        await deleteGame(gameCode || '');
+        if (!window.confirm('End this game? This will remove it from live view.')) return;
+        finishGame(); // Sets status to 'completed' in Firestore
+        // Optionally delete: await deleteGame(gameCode || '');
         navigate('/dashboard');
     };
 
@@ -320,7 +342,15 @@ export const HostConsole: React.FC = () => {
                                 {/* timer.minutes / timer.seconds from RTDB */}
                                 <div className={`relative z-10 flex items-baseline gap-1 transition-colors duration-300 ${timer.gameRunning ? 'text-white' : 'text-zinc-400'}`}>
                                     <span className="text-[6rem] lg:text-[8.5rem] font-mono font-bold leading-none tracking-tight tabular-nums drop-shadow-xl">
-                                        {formatTime(timer.minutes)}:{formatTime(timer.seconds)}
+                                        {/* If minutes is 0, we show tenths like 4.9. Else MM:SS */}
+                                        {timer.minutes === 0 ? (
+                                            <>
+                                                {formatTime(timer.seconds)}
+                                                <span className="text-[0.6em]">.{timer.tenths}</span>
+                                            </>
+                                        ) : (
+                                            `${formatTime(timer.minutes)}:${formatTime(timer.seconds)}`
+                                        )}
                                     </span>
                                 </div>
                             </div>
@@ -528,8 +558,10 @@ export const HostConsole: React.FC = () => {
             <TimeEditModal
                 isOpen={showTimeEdit}
                 onClose={() => setShowTimeEdit(false)}
-                gameTime={{ minutes: timer.minutes, seconds: timer.seconds }}
-                shotClock={timer.shotClock}
+                initialMinutes={timer.minutes}
+                initialSeconds={timer.seconds}
+                initialTenths={timer.tenths}
+                initialShotClock={timer.shotClock}
                 onSave={handleClockSave}
             />
 
