@@ -1,82 +1,112 @@
-// src/hooks/useLocalGameTimer.ts
-// ─────────────────────────────────────────────────────────────
-// STANDALONE TIMER HOOK — replaces useLocalGameTimer in useLocalGame.ts
-//
-// THE BUG THAT WAS KILLED:
-//   The old useLocalGameTimer called useLocalGame(gameId) internally.
-//   React hooks create isolated state per call-site.
-//   So the timer was ticking against a GHOST COPY of the game —
-//   a second independent state instance that nobody else could read.
-//   The visible game state never changed. Clock appeared frozen.
-//
-// THE FIX:
-//   The timer no longer creates its own useLocalGame instance.
-//   Instead, TabletController passes its OWN updateGameState + game
-//   directly into this hook. One state owner. No ghost copies.
-//
-// USAGE in TabletController.tsx:
-//   Replace:
-//     useLocalGameTimer(gameCode || '');
-//   With:
-//     useStandaloneTimer(
-//       localGameHook.game?.gameState.gameRunning ?? false,
-//       localGameHook.updateGameState
-//     );
-// ─────────────────────────────────────────────────────────────
+import { useState, useRef, useEffect, useCallback } from 'react';
 
-import { useEffect, useRef } from 'react';
+interface StandaloneTimerOptions {
+    initialMinutes?: number;
+    initialSeconds?: number;
+    shotClockDuration?: number;
+}
 
-type UpdateFn = (updater: (game: any) => void) => void;
+export const useStandaloneTimer = ({
+    initialMinutes = 10,
+    initialSeconds = 0,
+    shotClockDuration = 24
+}: StandaloneTimerOptions = {}) => {
 
-export const useStandaloneTimer = (
-    isRunning: boolean,
-    updateGameState: UpdateFn
-) => {
-    const timerRef = useRef<number | null>(null);
-    // Keep a stable ref to updateGameState so the interval closure never goes stale
-    const updateRef = useRef<UpdateFn>(updateGameState);
-    useEffect(() => { updateRef.current = updateGameState; }, [updateGameState]);
+    // Internal State
+    const [minutes, setMinutes] = useState(initialMinutes);
+    const [seconds, setSeconds] = useState(initialSeconds);
+    const [tenths, setTenths] = useState(0);
+    const [shotClock, setShotClock] = useState(shotClockDuration);
 
+    const [gameRunning, setGameRunning] = useState(false);
+    const [shotClockRunning, setShotClockRunning] = useState(false);
+    const [period, setPeriod] = useState(1);
+
+    const intervalRef = useRef<number | null>(null);
+
+    // THE LOCAL ENGINE LOOP (Runs every 100ms)
     useEffect(() => {
-        if (!isRunning) {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
-            return;
+        if (gameRunning) {
+            intervalRef.current = window.setInterval(() => {
+                setTenths(prevT => {
+                    if (prevT > 0) return prevT - 1;
+
+                    // Tenths hit 0, decrement seconds
+                    setSeconds(prevS => {
+                        if (prevS > 0) return prevS - 1;
+
+                        // Seconds hit 0, decrement minutes
+                        setMinutes(prevM => {
+                            if (prevM > 0) return prevM - 1;
+
+                            // TIME EXPIRED
+                            setGameRunning(false);
+                            setShotClockRunning(false);
+                            return 0;
+                        });
+                        return 59;
+                    });
+
+                    // Decrement Shot Clock roughly every second (when tenths roll over)
+                    setShotClock(prevSC => {
+                        if (!shotClockRunning) return prevSC;
+                        return prevSC > 0 ? prevSC - 1 : 0;
+                    });
+
+                    return 9; // Reset tenths
+                });
+            }, 100);
+        } else {
+            if (intervalRef.current) clearInterval(intervalRef.current);
         }
 
-        timerRef.current = window.setInterval(() => {
-            updateRef.current((g) => {
-                const totalSec =
-                    g.gameState.gameTime.minutes * 60 + g.gameState.gameTime.seconds;
-
-                if (totalSec > 0) {
-                    const newTotal = totalSec - 1;
-                    g.gameState.gameTime.minutes = Math.floor(newTotal / 60);
-                    g.gameState.gameTime.seconds = newTotal % 60;
-
-                    // Shot clock counts down in sync (stops at 0)
-                    if (g.gameState.shotClock > 0) {
-                        g.gameState.shotClock = Math.max(0, g.gameState.shotClock - 1);
-                    }
-                } else {
-                    // Period ended
-                    g.gameState.gameRunning = false;
-                    g.gameState.gameTime.minutes = 0;
-                    g.gameState.gameTime.seconds = 0;
-                    if (navigator.vibrate) {
-                        navigator.vibrate([200, 100, 200, 100, 200]);
-                    }
-                }
-            });
-        }, 1000);
-
         return () => {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
+            if (intervalRef.current) clearInterval(intervalRef.current);
         };
-    }, [isRunning]); // only re-subscribe when running state changes
+    }, [gameRunning, shotClockRunning]);
+
+    // CONTROLS
+    const toggleClock = useCallback(() => {
+        setGameRunning(prev => !prev);
+        setShotClockRunning(prev => !prev);
+    }, []);
+
+    const stopClock = useCallback(() => {
+        setGameRunning(false);
+        setShotClockRunning(false);
+    }, []);
+
+    const startClock = useCallback(() => {
+        setGameRunning(true);
+        setShotClockRunning(true);
+    }, []);
+
+    const resetShotClock24 = useCallback(() => setShotClock(24), []);
+    const resetShotClock14 = useCallback(() => setShotClock(14), []);
+    const resetShotClock = useCallback((val: number) => setShotClock(val), []);
+
+    const nextPeriod = useCallback(() => {
+        setPeriod(p => p + 1);
+        setGameRunning(false);
+        setShotClockRunning(false);
+        setMinutes(initialMinutes); // Reset to default duration
+        setSeconds(0);
+        setTenths(0);
+        setShotClock(shotClockDuration);
+    }, [initialMinutes, shotClockDuration]);
+
+    const editClocks = useCallback((m: number, s: number, t: number, sc: number) => {
+        setMinutes(m);
+        setSeconds(s);
+        setTenths(t);
+        setShotClock(sc);
+    }, []);
+
+    return {
+        minutes, seconds, tenths, shotClock, period,
+        gameRunning, shotClockRunning,
+        toggleClock, stopClock, startClock,
+        resetShotClock, resetShotClock24, resetShotClock14,
+        nextPeriod, editClocks
+    };
 };
