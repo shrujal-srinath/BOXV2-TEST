@@ -78,16 +78,8 @@ export const TabletController: React.FC = () => {
   const isLocalGame = gameCode?.startsWith('LOCAL-');
 
   // ── Local game hook (primary) ─────────────────────────────
+  // Timer is already managed within useLocalGame hook
   const localGameHook = useLocalGame(gameCode || '');
-
-  // ── TIMER FIX: feed THIS hook's updateGameState into the timer
-  //    The old code called useLocalGameTimer(gameCode) which created
-  //    a SECOND isolated state instance. Clicks went into one state,
-  //    the timer ticked in another. Both invisible to each other.
-  useStandaloneTimer(
-    localGameHook.game?.gameState.gameRunning ?? false,
-    localGameHook.updateGameState
-  );
 
   // ── Cloud game (fallback) ─────────────────────────────────
   const [cloudGame, setCloudGame] = useState<BasketballGame | null>(null);
