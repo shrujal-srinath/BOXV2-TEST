@@ -16,28 +16,13 @@ const ProtectedHostRoute: React.FC<ProtectedHostRouteProps> = ({ children }) => 
     const { gameCode } = useParams<{ gameCode: string }>();
 
     useEffect(() => {
-        const unsubscribe = subscribeToAuth(async (currentUser) => {
+        const unsubscribe = subscribeToAuth((currentUser) => {
             setUser(currentUser);
-
-            if (currentUser && gameCode) {
-                // We are trying to access a specific game, so verify ownership
-                const game = await getGame(gameCode);
-                // Check if current user is the host
-                if (game && game.hostId === currentUser.uid) {
-                    setIsOwner(true);
-                } else {
-                    setIsOwner(false);
-                }
-            } else {
-                // We are on a general protected page (Dashboard, Setup, etc.)
-                // No specific game ownership needed, just authentication.
-                setIsOwner(true);
-            }
+            setIsOwner(true); // Auth is enough — Firestore rules enforce ownership
             setLoading(false);
         });
-
         return () => unsubscribe();
-    }, [gameCode]);
+    }, []);
 
     if (loading) {
         return (

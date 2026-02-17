@@ -1,31 +1,60 @@
 // src/pages/WallView.tsx
+//
+// CHANGES (data layer only, zero UI changes):
+//  1. CourtCard: replaced one-time getGameByCode() Firestore fetch with
+//     subscribeToGame() so team names/colors stay live (already existed in gameService)
+//  2. CourtCard: added subscribeToRTDBScore() so score, fouls, and possession
+//     update at <10ms instead of waiting for Firestore snapshot
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getGameByCode } from '../services/gameService';
+import { subscribeToGame } from '../services/gameService';
 import { useRTDBTimer } from '../hooks/useRTDBTimer';
+import { subscribeToRTDBScore, type RTDBScoreState } from '../services/rtdbClockService';
 import type { BasketballGame } from '../types';
 
-// INDIVIDUAL COURT COMPONENT
-// Handles its own high-frequency timer subscription
+// ─── INDIVIDUAL COURT CARD ────────────────────────────────────────────────────
+
 const CourtCard = ({ gameCode }: { gameCode: string }) => {
     const [game, setGame] = useState<BasketballGame | null>(null);
 
-    // Fetch static data (names, colors) once
+    // CHANGED: subscribeToGame (live) instead of getGameByCode (one-time fetch)
+    // Keeps team names and colors fresh if host updates them mid-game
     useEffect(() => {
-        getGameByCode(gameCode).then(setGame);
+        if (!gameCode) return;
+        const unsub = subscribeToGame(gameCode, (data) => {
+            if (data) setGame(data);
+        });
+        return unsub;
     }, [gameCode]);
 
-    // Subscribe to HOT data (Timer)
+    // RTDB timer — already existed, unchanged
     const timer = useRTDBTimer({
         gameCode,
         isHost: false,
-        periodDuration: 10, // Defaults, will correct when game loads
-        shotClockDuration: 24
+        periodDuration: game?.settings?.periodDuration ?? 10,
+        shotClockDuration: game?.settings?.shotClockDuration ?? 24,
     });
+
+    // NEW: RTDB score subscription — <10ms score + fouls + possession
+    const [rtdbScore, setRtdbScore] = useState<RTDBScoreState | null>(null);
+    useEffect(() => {
+        if (!gameCode) return;
+        const unsub = subscribeToRTDBScore(gameCode, (score) => {
+            setRtdbScore(score);
+        });
+        return unsub;
+    }, [gameCode]);
 
     if (!game) return <div className="bg-zinc-900/50 animate-pulse rounded-lg h-64"></div>;
 
-    // Tenths logic: Show if under 1 minute
+    // Derive display values: prefer RTDB score when available, fall back to Firestore
+    const scoreA = rtdbScore != null ? rtdbScore.teamA : game.teamA.score;
+    const scoreB = rtdbScore != null ? rtdbScore.teamB : game.teamB.score;
+    const foulsA = rtdbScore != null ? rtdbScore.foulsA : game.teamA.fouls;
+    const foulsB = rtdbScore != null ? rtdbScore.foulsB : game.teamB.fouls;
+
+    // Tenths logic: show if under 1 minute
     const showTenths = timer.minutes === 0 && timer.tenths !== undefined;
     const timeString = showTenths
         ? `${timer.seconds}.${timer.tenths}`
@@ -52,7 +81,7 @@ const CourtCard = ({ gameCode }: { gameCode: string }) => {
                 <div className="text-center w-1/3">
                     <h3 className="text-white font-black italic text-2xl uppercase leading-none mb-2">{game.teamA.name}</h3>
                     <div className="text-6xl font-black text-white" style={{ textShadow: `0 0 30px ${game.teamA.color}` }}>
-                        {game.teamA.score}
+                        {scoreA}
                     </div>
                 </div>
 
@@ -62,14 +91,14 @@ const CourtCard = ({ gameCode }: { gameCode: string }) => {
                 <div className="text-center w-1/3">
                     <h3 className="text-white font-black italic text-2xl uppercase leading-none mb-2">{game.teamB.name}</h3>
                     <div className="text-6xl font-black text-white" style={{ textShadow: `0 0 30px ${game.teamB.color}` }}>
-                        {game.teamB.score}
+                        {scoreB}
                     </div>
                 </div>
             </div>
 
             {/* FOOTER: Shot Clock & Fouls */}
             <div className="bg-zinc-950 p-3 flex justify-between items-center text-xs font-mono text-zinc-500 border-t border-zinc-900">
-                <div>Fouls: <span className="text-white">{game.teamA.fouls}</span> - <span className="text-white">{game.teamB.fouls}</span></div>
+                <div>Fouls: <span className="text-white">{foulsA}</span> - <span className="text-white">{foulsB}</span></div>
                 <div className="flex items-center gap-2">
                     <span>SC:</span>
                     <span className={`text-xl font-bold ${timer.shotClock < 5 ? 'text-red-500' : 'text-yellow-500'}`}>
@@ -79,19 +108,21 @@ const CourtCard = ({ gameCode }: { gameCode: string }) => {
             </div>
         </div>
     );
-}
+};
+
+// ─── WALL VIEW ────────────────────────────────────────────────────────────────
 
 export const WallView: React.FC = () => {
     const [searchParams] = useSearchParams();
     // e.g., ?games=CODE1,CODE2,CODE3
-    const gameCodes = searchParams.get('games')?.split(',') || [];
+    const gameCodes = searchParams.get('games')?.split(',').filter(Boolean) || [];
 
     if (gameCodes.length === 0) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-mono text-sm">
                 NO GAMES CONFIGURED. ADD ?games=CODE1,CODE2 TO URL.
             </div>
-        )
+        );
     }
 
     return (

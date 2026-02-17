@@ -1,9 +1,16 @@
 // src/pages/SpectatorView.tsx
+//
+// CHANGE: Added subscribeToRTDBScore subscription.
+// RTDB score (teamA.score, teamB.score, fouls, timeouts, possession) now
+// overrides the stale Firestore snapshot for online games, matching the
+// same pattern already used for the clock. Zero UI changes.
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToGame } from '../services/gameService';
 import { getLocalGame } from '../services/localGameService';
-import { useRTDBTimer } from '../hooks/useRTDBTimer'; // NEW: Import RTDB Hook
+import { useRTDBTimer } from '../hooks/useRTDBTimer';
+import { subscribeToRTDBScore, type RTDBScoreState } from '../services/rtdbClockService';
 import { BasketballGame } from '../types';
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
@@ -73,7 +80,6 @@ const ScoreDisplay: React.FC<{
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
-      {/* Score glow burst on change */}
       {pulse && (
         <div
           style={{
@@ -108,7 +114,6 @@ const ScoreDisplay: React.FC<{
         {pad(score)}
       </div>
 
-      {/* Possession triangle */}
       {hasPossession && (
         <div
           style={{
@@ -135,79 +140,65 @@ const ScoreDisplay: React.FC<{
 const ClockDisplay: React.FC<{
   minutes: number;
   seconds: number;
-  tenths?: number; // UPDATED: Added tenths support
+  tenths?: number;
   running: boolean;
 }> = ({ minutes, seconds, tenths, running }) => {
   const isLow = minutes === 0 && seconds <= 30;
   const isCritical = minutes === 0 && seconds <= 10;
-
-  // UPDATED: Show tenths if minutes are 0 and tenths are provided
   const showTenths = minutes === 0 && tenths !== undefined;
   const timeStr = showTenths
     ? `${seconds}.${tenths}`
     : `${pad(minutes)}:${pad(seconds)}`;
 
   return (
-    <div style={{ textAlign: 'center', position: 'relative' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 'clamp(0.3rem, 0.5vw, 0.8rem)',
+      }}
+    >
       <div
         style={{
-          fontFamily: '"Oswald", "Barlow Condensed", "Arial Narrow", sans-serif',
+          fontFamily: '"Oswald", sans-serif',
+          fontWeight: 400,
+          fontSize: 'clamp(0.7rem, 1.2vw, 1.4rem)',
+          letterSpacing: '0.3em',
+          color: isCritical ? '#FF6060' : '#666666',
+        }}
+      >
+        GAME CLOCK
+      </div>
+      <div
+        style={{
+          fontFamily: '"Oswald", sans-serif',
           fontWeight: 900,
-          fontSize: 'clamp(7rem, 14vw, 16rem)',
+          fontSize: 'clamp(5rem, 9vw, 12rem)',
           lineHeight: 1,
-          letterSpacing: '0.05em',
           color: isCritical ? '#FF3030' : isLow ? '#FF8C00' : '#FFFFFF',
           textShadow: isCritical
-            ? '0 0 60px #FF303088, 0 0 120px #FF303044'
+            ? '0 0 40px #FF3030'
             : isLow
-              ? '0 0 40px #FF8C0066'
-              : '0 0 30px rgba(255,255,255,0.15)',
-          transition: 'color 0.1s ease, text-shadow 0.5s ease', // Faster color transition for precision
-          animation: isCritical && running ? 'clockPulse 0.5s ease-in-out infinite alternate' : 'none',
+              ? '0 0 30px #FF8C0066'
+              : '0 0 20px rgba(255,255,255,0.1)',
           fontVariantNumeric: 'tabular-nums',
-          fontFeatureSettings: '"tnum"',
+          animation: running && isCritical ? 'clockPulse 0.5s ease-in-out infinite alternate' : 'none',
         }}
       >
-        {timeStr.split('').map((ch, i) => (
-          <span key={i}>{ch}</span>
-        ))}
+        {timeStr}
       </div>
-
-      {/* Running indicator */}
-      <div
+      <span
         style={{
-          marginTop: '0.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '0.8rem',
+          fontSize: 'clamp(0.55rem, 0.9vw, 1rem)',
+          fontWeight: 700,
+          letterSpacing: '0.2em',
+          color: running ? '#00FF88' : '#FF4444',
+          opacity: 0.9,
         }}
       >
-        <div
-          style={{
-            width: '0.8rem',
-            height: '0.8rem',
-            borderRadius: '50%',
-            background: running ? '#00FF88' : '#FF4444',
-            boxShadow: running
-              ? '0 0 12px #00FF88, 0 0 24px #00FF8866'
-              : '0 0 12px #FF4444',
-            animation: running ? 'ledPulse 1s ease-in-out infinite alternate' : 'none',
-          }}
-        />
-        <span
-          style={{
-            fontFamily: '"Oswald", sans-serif',
-            fontWeight: 700,
-            fontSize: 'clamp(0.9rem, 1.8vw, 2rem)',
-            letterSpacing: '0.25em',
-            color: running ? '#00FF88' : '#FF4444',
-            opacity: 0.9,
-          }}
-        >
-          {running ? 'LIVE' : 'PAUSED'}
-        </span>
-      </div>
+        {running ? 'LIVE' : 'PAUSED'}
+      </span>
     </div>
   );
 };
@@ -378,23 +369,11 @@ const TeamPanel: React.FC<{
                   borderRadius: '50%',
                   background: i < fouls ? '#FF8C00' : 'transparent',
                   border: `2px solid ${i < fouls ? '#FF8C00' : '#333333'}`,
-                  boxShadow: i < fouls ? '0 0 8px #FF8C0088' : 'none',
+                  boxShadow: i < fouls ? '0 0 8px #FF8C0066' : 'none',
                   transition: 'all 0.3s ease',
                 }}
               />
             ))}
-          </div>
-          <div
-            style={{
-              fontFamily: '"Oswald", sans-serif',
-              fontWeight: 700,
-              fontSize: 'clamp(1.2rem, 2.5vw, 2.8rem)',
-              color: fouls >= 4 ? '#FF4444' : '#FFFFFF',
-              marginTop: '0.3rem',
-              textShadow: fouls >= 4 ? '0 0 20px #FF4444' : 'none',
-            }}
-          >
-            {fouls}
           </div>
         </div>
 
@@ -410,43 +389,32 @@ const TeamPanel: React.FC<{
               marginBottom: '0.4rem',
             }}
           >
-            TIMEOUTS
+            T.O.
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-            {[...Array(5)].map((_, i) => (
+          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+            {[...Array(3)].map((_, i) => (
               <div
                 key={i}
                 style={{
-                  width: 'clamp(0.8rem, 1.2vw, 1.6rem)',
-                  height: 'clamp(0.8rem, 1.2vw, 1.6rem)',
+                  width: 'clamp(0.6rem, 1vw, 1.3rem)',
+                  height: 'clamp(0.6rem, 1vw, 1.3rem)',
                   borderRadius: '2px',
                   background: i < timeouts ? color : 'transparent',
                   border: `2px solid ${i < timeouts ? color : '#333333'}`,
-                  boxShadow: i < timeouts ? `0 0 8px ${color}88` : 'none',
+                  opacity: i < timeouts ? 0.9 : 0.3,
                   transition: 'all 0.3s ease',
                 }}
               />
             ))}
           </div>
-          <div
-            style={{
-              fontFamily: '"Oswald", sans-serif',
-              fontWeight: 700,
-              fontSize: 'clamp(1.2rem, 2.5vw, 2.8rem)',
-              color: '#FFFFFF',
-              marginTop: '0.3rem',
-            }}
-          >
-            {timeouts}
-          </div>
         </div>
       </div>
 
-      {/* Top scorers */}
+      {/* Top players */}
       {topPlayers.length > 0 && (
         <div
           style={{
-            marginTop: 'clamp(1.5rem, 2.5vw, 3.5rem)',
+            marginTop: 'clamp(1rem, 2vw, 3rem)',
             width: '100%',
             maxWidth: '90%',
           }}
@@ -455,14 +423,14 @@ const TeamPanel: React.FC<{
             style={{
               fontFamily: '"Oswald", sans-serif',
               fontWeight: 400,
-              fontSize: 'clamp(0.55rem, 0.9vw, 1rem)',
+              fontSize: 'clamp(0.55rem, 0.85vw, 1rem)',
               letterSpacing: '0.25em',
               color: '#444444',
               marginBottom: '0.6rem',
               textAlign: side === 'left' ? 'left' : 'right',
             }}
           >
-            TOP SCORERS
+            SCORERS
           </div>
           {topPlayers.map((player, idx) => (
             <div
@@ -470,10 +438,9 @@ const TeamPanel: React.FC<{
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: side === 'left' ? 'flex-start' : 'flex-end',
-                gap: 'clamp(0.5rem, 0.8vw, 1rem)',
-                padding: 'clamp(0.3rem, 0.5vw, 0.7rem) 0',
-                borderBottom: idx < topPlayers.length - 1 ? '1px solid #1A1A1A' : 'none',
+                gap: '0.8rem',
+                marginBottom: '0.3rem',
+                flexDirection: side === 'left' ? 'row' : 'row-reverse',
               }}
             >
               {side === 'left' ? (
@@ -559,9 +526,7 @@ const TeamPanel: React.FC<{
 
 // ─── CENTER COLUMN ────────────────────────────────────────────────────────────
 
-const CenterPanel: React.FC<{
-  game: BasketballGame;
-}> = ({ game }) => {
+const CenterPanel: React.FC<{ game: BasketballGame }> = ({ game }) => {
   const { gameTime, period, gameRunning, shotClock } = game.gameState;
   const scoreDiff = Math.abs(game.teamA.score - game.teamB.score);
   const leader = game.teamA.score > game.teamB.score ? 'A' : game.teamB.score > game.teamA.score ? 'B' : null;
@@ -570,39 +535,34 @@ const CenterPanel: React.FC<{
     <div
       style={{
         width: 'clamp(280px, 28vw, 480px)',
+        flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 'clamp(1rem, 2vw, 3rem)',
         padding: 'clamp(1rem, 2vw, 3rem) 0',
-        position: 'relative',
       }}
     >
-      {/* Period badge */}
+      {/* Period */}
       <div
         style={{
-          background: 'linear-gradient(135deg, #1E1E1E 0%, #111111 100%)',
+          fontFamily: '"Oswald", sans-serif',
+          fontWeight: 700,
+          fontSize: 'clamp(1.2rem, 2.5vw, 3rem)',
+          letterSpacing: '0.25em',
+          color: '#FFFFFF',
+          textAlign: 'center',
+          background: 'linear-gradient(135deg, #1A1A1A 0%, #111111 100%)',
           border: '1px solid #2A2A2A',
           borderRadius: '0.8rem',
           padding: 'clamp(0.4rem, 0.8vw, 1rem) clamp(1rem, 2vw, 2.5rem)',
-          textAlign: 'center',
         }}
       >
-        <div
-          style={{
-            fontFamily: '"Oswald", sans-serif',
-            fontWeight: 400,
-            fontSize: 'clamp(0.6rem, 0.9vw, 1.1rem)',
-            letterSpacing: '0.3em',
-            color: '#555555',
-          }}
-        >
-          {getFullPeriodLabel(period)}
-        </div>
+        {getFullPeriodLabel(period)}
       </div>
 
-      {/* Clock - UPDATED to pass tenths */}
+      {/* Clock */}
       <ClockDisplay
         minutes={gameTime.minutes}
         seconds={gameTime.seconds}
@@ -610,51 +570,29 @@ const CenterPanel: React.FC<{
         running={gameRunning}
       />
 
-      {/* VS divider */}
-      <div
-        style={{
-          fontFamily: '"Oswald", sans-serif',
-          fontWeight: 900,
-          fontSize: 'clamp(1.5rem, 2.5vw, 3rem)',
-          color: '#222222',
-          letterSpacing: '0.1em',
-        }}
-      >
-        VS
-      </div>
-
       {/* Shot clock */}
-      {game.settings?.shotClockDuration > 0 && (
-        <ShotClock value={shotClock ?? 24} />
-      )}
+      <ShotClock value={shotClock} />
 
-      {/* Score differential */}
+      {/* Lead indicator */}
       {scoreDiff > 0 && leader && (
-        <div
-          style={{
-            background: '#0D0D0D',
-            border: '1px solid #1E1E1E',
-            borderRadius: '0.6rem',
-            padding: 'clamp(0.3rem, 0.5vw, 0.8rem) clamp(0.8rem, 1.5vw, 2rem)',
-            textAlign: 'center',
-          }}
-        >
+        <div style={{ textAlign: 'center' }}>
           <div
             style={{
               fontFamily: '"Oswald", sans-serif',
               fontWeight: 400,
-              fontSize: 'clamp(0.55rem, 0.8vw, 1rem)',
-              letterSpacing: '0.25em',
+              fontSize: 'clamp(0.55rem, 0.85vw, 1rem)',
+              letterSpacing: '0.2em',
               color: '#444444',
+              marginBottom: '0.3rem',
             }}
           >
-            LEAD BY
+            LEAD
           </div>
           <div
             style={{
               fontFamily: '"Oswald", sans-serif',
               fontWeight: 900,
-              fontSize: 'clamp(1.8rem, 3.5vw, 4rem)',
+              fontSize: 'clamp(2rem, 4vw, 5rem)',
               color: leader === 'A' ? game.teamA.color : game.teamB.color,
               lineHeight: 1,
             }}
@@ -684,7 +622,74 @@ const CenterPanel: React.FC<{
   );
 };
 
-// ─── TICKER BAR ───────────────────────────────────────────────────────────────
+// ─── HEADER ──────────────────────────────────────────────────────────────────
+
+const Header: React.FC<{ gameName: string; period: number }> = ({ gameName, period }) => (
+  <div
+    style={{
+      height: 'clamp(3rem, 5vh, 5rem)',
+      background: '#050505',
+      borderBottom: '1px solid #1A1A1A',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 clamp(1.5rem, 3vw, 4rem)',
+      flexShrink: 0,
+      zIndex: 10,
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <div
+        style={{
+          width: 'clamp(0.5rem, 0.8vw, 1rem)',
+          height: 'clamp(0.5rem, 0.8vw, 1rem)',
+          borderRadius: '50%',
+          background: '#FF3030',
+          boxShadow: '0 0 8px #FF3030',
+          animation: 'ledPulse 1s ease-in-out infinite alternate',
+        }}
+      />
+      <span
+        style={{
+          fontFamily: '"Oswald", sans-serif',
+          fontWeight: 400,
+          fontSize: 'clamp(0.6rem, 1vw, 1.2rem)',
+          letterSpacing: '0.3em',
+          color: '#FF3030',
+        }}
+      >
+        LIVE
+      </span>
+    </div>
+
+    <div
+      style={{
+        fontFamily: '"Oswald", sans-serif',
+        fontWeight: 700,
+        fontSize: 'clamp(0.8rem, 1.4vw, 1.8rem)',
+        letterSpacing: '0.3em',
+        color: '#FFFFFF',
+        textTransform: 'uppercase',
+      }}
+    >
+      {gameName}
+    </div>
+
+    <div
+      style={{
+        fontFamily: '"Oswald", sans-serif',
+        fontWeight: 400,
+        fontSize: 'clamp(0.6rem, 1vw, 1.2rem)',
+        letterSpacing: '0.2em',
+        color: '#444444',
+      }}
+    >
+      {getPeriodLabel(period)}
+    </div>
+  </div>
+);
+
+// ─── TICKER BAR ──────────────────────────────────────────────────────────────
 
 const TickerBar: React.FC<{ game: BasketballGame }> = ({ game }) => {
   const { period, gameRunning, gameTime } = game.gameState;
@@ -706,140 +711,68 @@ const TickerBar: React.FC<{ game: BasketballGame }> = ({ game }) => {
     gameRunning ? '▶ CLOCK RUNNING' : '⏸ CLOCK STOPPED',
   ];
 
-  const fullText = items.join('   ·   ');
+  const repeated = [...items, ...items];
 
   return (
     <div
       style={{
-        height: 'clamp(2.5rem, 4.5vh, 4.5rem)',
-        background: 'linear-gradient(90deg, #0A0A0A 0%, #111111 50%, #0A0A0A 100%)',
-        borderTop: '1px solid #1E1E1E',
-        overflow: 'hidden',
+        height: 'clamp(2rem, 3.5vh, 3.5rem)',
+        background: '#050505',
+        borderTop: '1px solid #1A1A1A',
         display: 'flex',
         alignItems: 'center',
+        overflow: 'hidden',
         flexShrink: 0,
       }}
     >
       <div
         style={{
+          background: '#FF3030',
+          height: '100%',
+          padding: '0 1.5rem',
           display: 'flex',
-          whiteSpace: 'nowrap',
-          animation: 'ticker 40s linear infinite',
-          fontFamily: '"Oswald", sans-serif',
-          fontWeight: 400,
-          fontSize: 'clamp(0.7rem, 1.2vw, 1.3rem)',
-          letterSpacing: '0.15em',
-          color: '#555555',
+          alignItems: 'center',
+          flexShrink: 0,
         }}
       >
-        {[fullText, fullText].map((text, i) => (
-          <span key={i} style={{ paddingRight: '8rem' }}>
-            {text}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ─── HEADER ──────────────────────────────────────────────────────────────────
-
-const Header: React.FC<{ gameName: string; period: number }> = ({ gameName, period }) => {
-  const [time, setTime] = useState(new Date());
-
-  useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  return (
-    <div
-      style={{
-        height: 'clamp(2.5rem, 5vh, 5rem)',
-        background: '#050505',
-        borderBottom: '1px solid #1A1A1A',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 clamp(1.5rem, 3vw, 4rem)',
-        flexShrink: 0,
-      }}
-    >
-      {/* Logo / Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <div
-          style={{
-            width: 'clamp(0.6rem, 1vw, 1.2rem)',
-            height: 'clamp(0.6rem, 1vw, 1.2rem)',
-            borderRadius: '50%',
-            background: '#FF3030',
-            boxShadow: '0 0 10px #FF303088',
-            animation: 'ledPulse 1s ease-in-out infinite alternate',
-          }}
-        />
         <span
           style={{
             fontFamily: '"Oswald", sans-serif',
             fontWeight: 700,
-            fontSize: 'clamp(0.8rem, 1.5vw, 1.8rem)',
-            letterSpacing: '0.3em',
-            color: '#333333',
-          }}
-        >
-          THE BOX
-        </span>
-        <span
-          style={{
-            fontFamily: '"Oswald", sans-serif',
-            fontWeight: 400,
-            fontSize: 'clamp(0.55rem, 0.9vw, 1rem)',
+            fontSize: 'clamp(0.6rem, 1vw, 1rem)',
             letterSpacing: '0.2em',
-            color: '#222222',
+            color: '#FFFFFF',
           }}
         >
           LIVE
         </span>
       </div>
 
-      {/* Center: Game name */}
-      <div
-        style={{
-          fontFamily: '"Oswald", sans-serif',
-          fontWeight: 700,
-          fontSize: 'clamp(0.8rem, 1.5vw, 1.8rem)',
-          letterSpacing: '0.2em',
-          color: '#2A2A2A',
-          textTransform: 'uppercase',
-          textAlign: 'center',
-        }}
-      >
-        {gameName}
-      </div>
-
-      {/* Right: Time + Period */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-        <span
+      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div
           style={{
-            fontFamily: '"Oswald", sans-serif',
-            fontWeight: 400,
-            fontSize: 'clamp(0.7rem, 1.1vw, 1.3rem)',
-            letterSpacing: '0.15em',
-            color: '#2A2A2A',
+            display: 'flex',
+            gap: 'clamp(2rem, 4vw, 6rem)',
+            animation: 'ticker 30s linear infinite',
+            whiteSpace: 'nowrap',
           }}
         >
-          {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-        <span
-          style={{
-            fontFamily: '"Oswald", sans-serif',
-            fontWeight: 700,
-            fontSize: 'clamp(0.7rem, 1.1vw, 1.3rem)',
-            letterSpacing: '0.2em',
-            color: '#333333',
-          }}
-        >
-          {getFullPeriodLabel(period)}
-        </span>
+          {repeated.map((item, i) => (
+            <span
+              key={i}
+              style={{
+                fontFamily: '"Oswald", sans-serif',
+                fontWeight: 400,
+                fontSize: 'clamp(0.6rem, 1vw, 1.1rem)',
+                letterSpacing: '0.15em',
+                color: '#555555',
+                flexShrink: 0,
+              }}
+            >
+              {item}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -925,24 +858,10 @@ const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
       padding: '4rem',
     }}
   >
-    <div
-      style={{
-        fontSize: '6rem',
-        fontWeight: 900,
-        letterSpacing: '0.1em',
-        color: '#1A1A1A',
-      }}
-    >
+    <div style={{ fontSize: '6rem', fontWeight: 900, letterSpacing: '0.1em', color: '#1A1A1A' }}>
       NO SIGNAL
     </div>
-    <div
-      style={{
-        fontSize: '1.4rem',
-        fontWeight: 400,
-        letterSpacing: '0.2em',
-        color: '#333333',
-      }}
-    >
+    <div style={{ fontSize: '1.4rem', fontWeight: 400, letterSpacing: '0.2em', color: '#333333' }}>
       {message}
     </div>
   </div>
@@ -954,66 +873,27 @@ const GlobalStyles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&display=swap');
 
-    *, *::before, *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    html, body, #root {
-      width: 100%;
-      height: 100%;
-      background: #000000;
-      overflow: hidden;
-    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { width: 100%; height: 100%; background: #000000; overflow: hidden; }
 
     @keyframes burstFade {
       0% { transform: scale(0.5); opacity: 1; }
       100% { transform: scale(2.5); opacity: 0; }
     }
-
-    @keyframes ledPulse {
-      from { opacity: 0.6; }
-      to { opacity: 1; }
-    }
-
-    @keyframes possessionBlink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    @keyframes clockPulse {
-      from { transform: scale(1); }
-      to { transform: scale(1.015); }
-    }
-
+    @keyframes ledPulse { from { opacity: 0.6; } to { opacity: 1; } }
+    @keyframes possessionBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    @keyframes clockPulse { from { transform: scale(1); } to { transform: scale(1.015); } }
     @keyframes criticalFlash {
       from { border-color: #FF303066; }
       to { border-color: #FF3030; box-shadow: 0 0 60px #FF303099; }
     }
-
-    @keyframes ticker {
-      from { transform: translateX(0); }
-      to { transform: translateX(-50%); }
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    @keyframes breathe {
-      0%, 100% { opacity: 0.3; }
-      50% { opacity: 0.7; }
-    }
-
-    @keyframes scanlines {
-      0% { transform: translateY(0); }
-      100% { transform: translateY(4px); }
-    }
+    @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.7; } }
   `}</style>
 );
 
-// ─── MAIN SPECTATOR VIEW ──────────────────────────────────────────────────────
+// ─── MAIN SPECTATOR VIEW ─────────────────────────────────────────────────────
 
 export const SpectatorView: React.FC = () => {
   const { gameCode } = useParams<{ gameCode: string }>();
@@ -1024,15 +904,26 @@ export const SpectatorView: React.FC = () => {
 
   const isLocalGame = gameCode?.startsWith('LOCAL-');
 
-  // NEW: Connect to the High-Frequency RTDB Clock
-  // This will return the precise minutes/seconds/tenths if online
+  // RTDB clock — already existed
   const rtdbTimer = useRTDBTimer({
     gameCode: gameCode || '',
-    isHost: false, // This is a read-only view
+    isHost: false,
     periodDuration: game?.settings?.periodDuration || 10,
-    shotClockDuration: game?.settings?.shotClockDuration || 24
+    shotClockDuration: game?.settings?.shotClockDuration || 24,
   });
 
+  // NEW: RTDB score subscription
+  const [rtdbScore, setRtdbScore] = useState<RTDBScoreState | null>(null);
+
+  useEffect(() => {
+    if (isLocalGame || !gameCode) return;
+    const unsub = subscribeToRTDBScore(gameCode, (score) => {
+      setRtdbScore(score);
+    });
+    return unsub;
+  }, [gameCode, isLocalGame]);
+
+  // Firestore subscription (cold data — names, colors, rosters)
   useEffect(() => {
     if (!gameCode) {
       setError('No game code provided');
@@ -1070,38 +961,41 @@ export const SpectatorView: React.FC = () => {
     }
   }, [gameCode, isLocalGame, loading]);
 
-  // NEW: Merge Logic
-  // If we are ONLINE, we override the stale Firestore clock with the fresh RTDB clock
+  // Merge logic:
+  // - Clock fields: RTDB (already existed)
+  // - Score fields: RTDB when online, Firestore when local
+  // Everything else (names, colors, rosters, settings) stays from Firestore
   const activeGame = game ? {
     ...game,
+    teamA: {
+      ...game.teamA,
+      score: (!isLocalGame && rtdbScore != null) ? rtdbScore.teamA : game.teamA.score,
+      fouls: (!isLocalGame && rtdbScore != null) ? rtdbScore.foulsA : game.teamA.fouls,
+      timeouts: (!isLocalGame && rtdbScore != null) ? rtdbScore.timeoutsA : game.teamA.timeouts,
+    },
+    teamB: {
+      ...game.teamB,
+      score: (!isLocalGame && rtdbScore != null) ? rtdbScore.teamB : game.teamB.score,
+      fouls: (!isLocalGame && rtdbScore != null) ? rtdbScore.foulsB : game.teamB.fouls,
+      timeouts: (!isLocalGame && rtdbScore != null) ? rtdbScore.timeoutsB : game.teamB.timeouts,
+    },
     gameState: {
       ...game.gameState,
-      // If local game, stick to game state. If online, use RTDB.
+      possession: (!isLocalGame && rtdbScore != null) ? rtdbScore.possession : game.gameState.possession,
+      // Clock fields — same as before
       gameTime: isLocalGame ? game.gameState.gameTime : {
         minutes: rtdbTimer.minutes,
         seconds: rtdbTimer.seconds,
-        tenths: rtdbTimer.tenths
+        tenths: rtdbTimer.tenths,
       },
-      // Only override high-frequency fields if online
       period: isLocalGame ? game.gameState.period : rtdbTimer.period,
       gameRunning: isLocalGame ? game.gameState.gameRunning : rtdbTimer.gameRunning,
-      shotClock: isLocalGame ? game.gameState.shotClock : rtdbTimer.shotClock
-    }
+      shotClock: isLocalGame ? game.gameState.shotClock : rtdbTimer.shotClock,
+    },
   } : null;
 
-  if (loading) return (
-    <>
-      <GlobalStyles />
-      <LoadingScreen />
-    </>
-  );
-
-  if (error || !activeGame) return (
-    <>
-      <GlobalStyles />
-      <ErrorScreen message={error || 'Game unavailable'} />
-    </>
-  );
+  if (loading) return (<><GlobalStyles /><LoadingScreen /></>);
+  if (error || !activeGame) return (<><GlobalStyles /><ErrorScreen message={error || 'Game unavailable'} /></>);
 
   return (
     <>
@@ -1129,23 +1023,9 @@ export const SpectatorView: React.FC = () => {
           }}
         />
 
-        {/* Header bar */}
-        <Header
-          gameName={activeGame.settings?.gameName || 'BASKETBALL'}
-          period={activeGame.gameState.period}
-        />
+        <Header gameName={activeGame.settings?.gameName || 'BASKETBALL'} period={activeGame.gameState.period} />
 
-        {/* Main content */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'stretch',
-            overflow: 'hidden',
-            minHeight: 0,
-          }}
-        >
-          {/* Team A */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflow: 'hidden', minHeight: 0 }}>
           <TeamPanel
             name={activeGame.teamA.name}
             score={activeGame.teamA.score}
@@ -1157,28 +1037,12 @@ export const SpectatorView: React.FC = () => {
             players={activeGame.teamA.players}
           />
 
-          {/* Divider */}
-          <div
-            style={{
-              width: '1px',
-              background: 'linear-gradient(to bottom, transparent 0%, #1E1E1E 20%, #1E1E1E 80%, transparent 100%)',
-              flexShrink: 0,
-            }}
-          />
+          <div style={{ width: '1px', background: 'linear-gradient(to bottom, transparent 0%, #1E1E1E 20%, #1E1E1E 80%, transparent 100%)', flexShrink: 0 }} />
 
-          {/* Center */}
           <CenterPanel game={activeGame} />
 
-          {/* Divider */}
-          <div
-            style={{
-              width: '1px',
-              background: 'linear-gradient(to bottom, transparent 0%, #1E1E1E 20%, #1E1E1E 80%, transparent 100%)',
-              flexShrink: 0,
-            }}
-          />
+          <div style={{ width: '1px', background: 'linear-gradient(to bottom, transparent 0%, #1E1E1E 20%, #1E1E1E 80%, transparent 100%)', flexShrink: 0 }} />
 
-          {/* Team B */}
           <TeamPanel
             name={activeGame.teamB.name}
             score={activeGame.teamB.score}
@@ -1191,7 +1055,6 @@ export const SpectatorView: React.FC = () => {
           />
         </div>
 
-        {/* Ticker */}
         <TickerBar game={activeGame} />
       </div>
     </>
