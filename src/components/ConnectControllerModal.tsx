@@ -1,7 +1,22 @@
 // src/components/ConnectControllerModal.tsx
+//
+// REWRITE — AirPods-style pairing with true 4-phase handshake
+//
+// Phases:
+//   input       → User enters 4-char code
+//   searching   → Checking RTDB for registered device
+//   found       → Device found, sending pairRequest
+//   handshaking → Waiting for ESP32 pairAck (the real confirmation)
+//   confirmed   → ESP32 acknowledged — truly paired
+//   error       → Any failure with specific reason
 
-import React, { useState, useEffect, useRef } from 'react';
-import { linkHandheldDevice, unlinkHandheldDevice, HW_SESSION_KEY } from '../services/handheldService';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+    pairHandheldDevice,
+    unpairHandheldDevice,
+    subscribeToDeviceHeartbeat,
+    HW_SESSION_KEY,
+} from '../services/handheldService';
 import { useHardwareBridge } from '../hooks/useHardwareBridge';
 
 interface ConnectControllerModalProps {
@@ -10,8 +25,77 @@ interface ConnectControllerModalProps {
     onSuccess: (code: string) => void;
 }
 
-type ModalPhase = 'input' | 'linking' | 'connected' | 'pending' | 'error';
+type ModalPhase =
+    | 'input'
+    | 'searching'
+    | 'found'
+    | 'handshaking'
+    | 'confirmed'
+    | 'error';
 
+// ─── Animated Icon Components ─────────────────────────────────────────────────
+
+const SearchingRings = () => (
+    <div className="relative w-20 h-20 mx-auto">
+        {[0, 1, 2].map(i => (
+            <div
+                key={i}
+                className="absolute inset-0 rounded-full border border-amber-500/40 animate-ping"
+                style={{ animationDelay: `${i * 0.35}s`, animationDuration: '1.4s' }}
+            />
+        ))}
+        <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/60 flex items-center justify-center">
+                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            </div>
+        </div>
+    </div>
+);
+
+const HandshakingRings = ({ code }: { code: string }) => (
+    <div className="relative w-20 h-20 mx-auto">
+        <div className="absolute inset-0 rounded-full border-2 border-blue-500/20 animate-ping" style={{ animationDuration: '1s' }} />
+        <div className="absolute inset-2 rounded-full border-2 border-blue-500/40 animate-ping" style={{ animationDelay: '0.25s', animationDuration: '1s' }} />
+        <div className="absolute inset-4 rounded-full border-2 border-blue-500/60 animate-ping" style={{ animationDelay: '0.5s', animationDuration: '1s' }} />
+        <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-blue-400 text-sm font-black font-mono tracking-widest">{code}</span>
+        </div>
+    </div>
+);
+
+const ConfirmedIcon = () => (
+    <div className="relative w-20 h-20 mx-auto">
+        <div className="absolute inset-0 rounded-full bg-green-500/10 border-2 border-green-500 flex items-center justify-center">
+            <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+        </div>
+        {/* Glow */}
+        <div className="absolute inset-0 rounded-full bg-green-500/20 blur-md" />
+    </div>
+);
+
+const FoundIcon = () => (
+    <div className="relative w-20 h-20 mx-auto">
+        <div className="absolute inset-0 rounded-full bg-zinc-900 border-2 border-white/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+            </svg>
+        </div>
+    </div>
+);
+
+// ─── Phase config ─────────────────────────────────────────────────────────────
+const PHASE_META: Record<ModalPhase, { bar: string; title: string }> = {
+    input: { bar: 'bg-zinc-700', title: 'Connect Controller' },
+    searching: { bar: 'bg-amber-500 animate-pulse', title: 'Searching...' },
+    found: { bar: 'bg-blue-500', title: 'Device Found' },
+    handshaking: { bar: 'bg-blue-500 animate-pulse', title: 'Handshaking...' },
+    confirmed: { bar: 'bg-green-500', title: 'Controller Paired' },
+    error: { bar: 'bg-red-500', title: 'Pairing Failed' },
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     userId,
     onClose,
@@ -20,68 +104,55 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     const [phase, setPhase] = useState<ModalPhase>('input');
     const [digits, setDigits] = useState(['', '', '', '']);
     const [errorMsg, setErrorMsg] = useState('');
-    const [linkedCode, setLinkedCode] = useState('');
+    const [pairedCode, setPairedCode] = useState('');
+    const [deviceOnline, setDeviceOnline] = useState(false);
+    const [lastSeen, setLastSeen] = useState(0);
+
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const linkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const heartbeatUnsubRef = useRef<(() => void) | null>(null);
+    const { transport, latencyMs } = useHardwareBridge();
 
-    const { isConnected, transport, latencyMs } = useHardwareBridge();
-
-    // ── On mount: restore session only if we have a code AND confirmed live connection
+    // ── On mount: restore if already paired this session ─────────────────────
     useEffect(() => {
-        const existingCode = sessionStorage.getItem(HW_SESSION_KEY);
-        if (existingCode && isConnected) {
-            setLinkedCode(existingCode);
-            setDigits(existingCode.split(''));
-            setPhase('connected');
+        const stored = sessionStorage.getItem(HW_SESSION_KEY);
+        if (stored) {
+            setPairedCode(stored);
+            setDigits(stored.split(''));
+            setPhase('confirmed');
+            startHeartbeatWatch(stored);
         }
-    }, []); // intentionally empty — only runs on mount
+        return () => { heartbeatUnsubRef.current?.(); };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── While in 'linking' phase, watch for bridge confirmation
-    useEffect(() => {
-        if (phase === 'linking' && isConnected) {
-            if (linkTimeoutRef.current) clearTimeout(linkTimeoutRef.current);
-            setPhase('connected');
-            onSuccess(linkedCode);
-        }
-    }, [isConnected, phase, linkedCode, onSuccess]);
+    const startHeartbeatWatch = useCallback((code: string) => {
+        heartbeatUnsubRef.current?.();
+        heartbeatUnsubRef.current = subscribeToDeviceHeartbeat(code, (online, ts) => {
+            setDeviceOnline(online);
+            setLastSeen(ts);
+        });
+    }, []);
 
-    // ── If already connected and user re-opens modal, sync phase
-    useEffect(() => {
-        if (phase === 'pending' && isConnected) {
-            setPhase('connected');
-        }
-    }, [isConnected, phase]);
-
-    // ── Digit input handlers (UPDATED for Alphanumeric) ────────────────
+    // ── Digit input ───────────────────────────────────────────────────────────
     const handleDigitChange = (index: number, value: string) => {
-        // Allow A-Z and 0-9 (Case insensitive check)
         if (!/^[a-zA-Z0-9]*$/.test(value)) return;
-
         const next = [...digits];
-        // Take the last character typed and force Uppercase
         next[index] = value.slice(-1).toUpperCase();
         setDigits(next);
-
-        // Auto-advance focus if value was entered
         if (value && index < 3) inputRefs.current[index + 1]?.focus();
     };
 
     const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-        // Backspace handling
         if (e.key === 'Backspace' && !digits[index] && index > 0) {
             inputRefs.current[index - 1]?.focus();
         }
-        // Enter key to submit
-        if (e.key === 'Enter') handleLink();
+        if (e.key === 'Enter') handlePair();
     };
 
     const handlePaste = (e: React.ClipboardEvent) => {
-        // Clean paste data: keep only alphanumeric, max 4 chars, force uppercase
         const pasted = e.clipboardData.getData('text')
             .replace(/[^a-zA-Z0-9]/g, '')
             .slice(0, 4)
             .toUpperCase();
-
         if (pasted.length === 4) {
             setDigits(pasted.split(''));
             inputRefs.current[3]?.focus();
@@ -89,19 +160,27 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
         e.preventDefault();
     };
 
-    // ── Link action ──────────────────────────────────────────────
-    const handleLink = async () => {
+    // ── Main pairing action ───────────────────────────────────────────────────
+    const handlePair = async () => {
         const code = digits.join('');
         if (code.length !== 4) {
             setErrorMsg('Enter all 4 characters.');
             return;
         }
 
-        setPhase('linking');
         setErrorMsg('');
-        setLinkedCode(code);
 
-        const result = await linkHandheldDevice(code, userId);
+        const result = await pairHandheldDevice(code, userId, (handshakePhase) => {
+            // Map internal phases to modal phases
+            const map: Record<string, ModalPhase> = {
+                searching: 'searching',
+                found: 'found',
+                handshaking: 'handshaking',
+                confirmed: 'confirmed',
+                timeout: 'error',
+            };
+            setPhase(map[handshakePhase] || 'searching');
+        });
 
         if (!result.success) {
             setPhase('error');
@@ -109,101 +188,64 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
             return;
         }
 
-        // FIX: After 8 seconds with no heartbeat, go to 'pending' — NOT 'connected'.
-        // 'pending' tells the user the code was accepted but the device hasn't responded yet.
-        linkTimeoutRef.current = setTimeout(() => {
-            setPhase(prev => {
-                if (prev === 'linking') {
-                    // Firestore linked but no live heartbeat yet
-                    return 'pending';
-                }
-                return prev;
-            });
-        }, 8_000);
+        setPairedCode(code);
+        setPhase('confirmed');
+        startHeartbeatWatch(code);
+        onSuccess(code);
     };
 
-    // ── Unlink ───────────────────────────────────────────────────
-    const handleUnlink = async () => {
-        if (linkTimeoutRef.current) clearTimeout(linkTimeoutRef.current);
-        if (linkedCode) await unlinkHandheldDevice(linkedCode, userId);
+    // ── Unpair ────────────────────────────────────────────────────────────────
+    const handleUnpair = async () => {
+        heartbeatUnsubRef.current?.();
+        if (pairedCode) await unpairHandheldDevice(pairedCode, userId);
         setPhase('input');
         setDigits(['', '', '', '']);
-        setLinkedCode('');
+        setPairedCode('');
+        setDeviceOnline(false);
         setErrorMsg('');
     };
 
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            if (linkTimeoutRef.current) clearTimeout(linkTimeoutRef.current);
-        };
-    }, []);
+    const { bar, title } = PHASE_META[phase];
+    const code = digits.join('');
+    const canPair = code.length === 4 && phase === 'input';
+    const isTransitioning = ['searching', 'found', 'handshaking'].includes(phase);
 
-    // ── Transport badge ──────────────────────────────────────────
-    const TransportBadge = () => {
-        if (!isConnected) return null;
-        const isWS = transport === 'websocket';
-        return (
-            <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest
-                ${isWS
-                    ? 'bg-green-900/30 border border-green-700/50 text-green-400'
-                    : 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
-                }`}>
-                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isWS ? 'bg-green-400' : 'bg-blue-400'}`} />
-                {isWS ? 'LOCAL WS' : 'CLOUD RTDB'}
-                {latencyMs !== null && <span className="opacity-60 ml-1">{latencyMs}ms</span>}
-            </div>
-        );
-    };
-
-    // ─────────────────────────────────────────────────────────────
-    // RENDER
-    // ─────────────────────────────────────────────────────────────
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/90 backdrop-blur-sm"
-                onClick={(phase === 'linking') ? undefined : onClose}
+                onClick={isTransitioning ? undefined : onClose}
             />
 
-            <div className="relative z-10 w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden">
+            <div className="relative z-10 w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
 
-                {/* Top accent line */}
-                <div className={`h-0.5 w-full ${phase === 'connected' ? 'bg-green-500' :
-                    phase === 'pending' ? 'bg-amber-500 animate-pulse' :
-                        phase === 'error' ? 'bg-red-500' :
-                            phase === 'linking' ? 'bg-blue-500 animate-pulse' :
-                                'bg-zinc-700'
-                    }`} />
+                {/* Top accent bar */}
+                <div className={`h-0.5 w-full transition-all duration-500 ${bar}`} />
 
                 <div className="p-8">
-
-                    {/* ── HEADER ──────────────────────────────────── */}
+                    {/* ── HEADER ── */}
                     <div className="flex items-start justify-between mb-8">
                         <div>
-                            <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-[0.25em] mb-1">
+                            <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-[0.25em] mb-1 font-mono">
                                 Hardware Controller
                             </p>
                             <h2 className="text-xl font-black text-white uppercase tracking-tight leading-none">
-                                {phase === 'connected' ? 'Controller Online' :
-                                    phase === 'pending' ? 'Waiting for Device...' :
-                                        phase === 'linking' ? 'Establishing Link...' :
-                                            phase === 'error' ? 'Link Failed' :
-                                                'Connect Controller'}
+                                {title}
                             </h2>
                         </div>
-                        {phase !== 'linking' && (
+                        {!isTransitioning && (
                             <button
                                 onClick={onClose}
-                                className="text-zinc-600 hover:text-white transition-colors text-xl leading-none mt-0.5"
+                                className="text-zinc-600 hover:text-white transition-colors text-xl leading-none mt-0.5 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-800"
                             >
                                 ✕
                             </button>
                         )}
                     </div>
 
-                    {/* ── PHASE: INPUT / ERROR ─────────────────────── */}
+                    {/* ── PHASE: INPUT / ERROR ── */}
                     {(phase === 'input' || phase === 'error') && (
                         <div>
                             <p className="text-zinc-500 text-xs font-mono mb-6 leading-relaxed">
@@ -216,7 +258,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                         key={i}
                                         ref={el => { inputRefs.current[i] = el; }}
                                         type="text"
-                                        inputMode="text" /* CHANGED: was numeric */
+                                        inputMode="text"
                                         maxLength={1}
                                         value={d}
                                         onChange={e => handleDigitChange(i, e.target.value)}
@@ -231,103 +273,118 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                             </div>
 
                             {errorMsg && (
-                                <p className="text-red-400 text-xs font-mono text-center mb-4">
-                                    ⚠ {errorMsg}
-                                </p>
+                                <div className="bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-3 mb-5">
+                                    <p className="text-red-400 text-xs font-mono leading-relaxed">
+                                        ⚠ {errorMsg}
+                                    </p>
+                                </div>
                             )}
 
                             <button
-                                onClick={handleLink}
-                                disabled={digits.join('').length !== 4}
-                                className="w-full py-3 bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                onClick={handlePair}
+                                disabled={!canPair}
+                                className="w-full py-3.5 bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-lg"
                             >
-                                Connect →
+                                Pair Controller →
                             </button>
                         </div>
                     )}
 
-                    {/* ── PHASE: LINKING ───────────────────────────── */}
-                    {phase === 'linking' && (
+                    {/* ── PHASE: SEARCHING ── */}
+                    {phase === 'searching' && (
                         <div className="text-center py-4">
-                            <div className="relative w-16 h-16 mx-auto mb-6">
-                                <div className="absolute inset-0 rounded-full border-2 border-blue-500/20 animate-ping" />
-                                <div className="absolute inset-2 rounded-full border-2 border-blue-500/40 animate-ping" style={{ animationDelay: '0.3s' }} />
-                                <div className="absolute inset-4 rounded-full border-2 border-blue-500 animate-pulse" />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className="text-blue-400 text-xl font-black font-mono">{linkedCode}</span>
-                                </div>
-                            </div>
-                            <p className="text-zinc-400 text-xs font-mono">
-                                Searching for controller <span className="text-white font-bold">{linkedCode}</span>...
-                            </p>
-                            <p className="text-zinc-600 text-[10px] font-mono mt-2">
-                                Make sure the controller is powered on and connected to WiFi
-                            </p>
+                            <SearchingRings />
+                            <p className="text-amber-400 text-sm font-bold mt-6 mb-1">Searching for device</p>
+                            <p className="text-zinc-600 text-xs font-mono">Looking for controller <span className="text-white">{code}</span>...</p>
                         </div>
                     )}
 
-                    {/* ── PHASE: PENDING ───────────────────────────── */}
-                    {/* Linked in Firestore, but no heartbeat yet from device */}
-                    {phase === 'pending' && (
+                    {/* ── PHASE: FOUND ── */}
+                    {phase === 'found' && (
                         <div className="text-center py-4">
-                            <div className="w-12 h-12 mx-auto mb-6 rounded-full border-2 border-amber-500/40 flex items-center justify-center">
-                                <span className="text-amber-400 text-lg font-black font-mono animate-pulse">{linkedCode}</span>
-                            </div>
-                            <p className="text-amber-400 text-xs font-mono mb-2">
-                                Code accepted — waiting for device
-                            </p>
-                            <p className="text-zinc-600 text-[10px] font-mono leading-relaxed">
-                                The controller will connect automatically once it boots and joins WiFi.
-                            </p>
-                            <button
-                                onClick={handleUnlink}
-                                className="mt-6 w-full py-2 border border-zinc-800 text-zinc-500 hover:border-red-800 hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded"
-                            >
-                                Cancel
-                            </button>
+                            <FoundIcon />
+                            <p className="text-white text-sm font-bold mt-6 mb-1">Device Found</p>
+                            <p className="text-zinc-500 text-xs font-mono">Initiating pairing handshake...</p>
                         </div>
                     )}
 
-                    {/* ── PHASE: CONNECTED ─────────────────────────── */}
-                    {phase === 'connected' && (
+                    {/* ── PHASE: HANDSHAKING ── */}
+                    {phase === 'handshaking' && (
+                        <div className="text-center py-4">
+                            <HandshakingRings code={code} />
+                            <p className="text-blue-400 text-sm font-bold mt-6 mb-1">Waiting for confirmation</p>
+                            <p className="text-zinc-500 text-xs font-mono">ESP32 is confirming the link...</p>
+                            <p className="text-zinc-700 text-[10px] font-mono mt-2">Check your device display</p>
+                        </div>
+                    )}
+
+                    {/* ── PHASE: CONFIRMED ── */}
+                    {phase === 'confirmed' && (
                         <div>
-                            <div className="bg-black border border-zinc-800 rounded-lg p-4 mb-6">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-zinc-500 text-xs font-mono uppercase tracking-widest">Device ID</span>
-                                    <span className="text-white font-black font-mono text-lg">{linkedCode}</span>
+                            <div className="flex flex-col items-center mb-6">
+                                <ConfirmedIcon />
+                                <p className="text-green-400 text-sm font-bold mt-4 mb-1">Controller Paired</p>
+                                <p className="text-zinc-500 text-xs font-mono">Device is ready</p>
+                            </div>
+
+                            {/* Device status card */}
+                            <div className="bg-black border border-zinc-800 rounded-xl p-4 mb-6 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Device ID</span>
+                                    <span className="text-white font-black font-mono text-base tracking-widest">{pairedCode}</span>
                                 </div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-zinc-500 text-xs font-mono uppercase tracking-widest">Status</span>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
-                                        <span className={`text-xs font-bold ${isConnected ? 'text-green-400' : 'text-amber-400'}`}>
-                                            {isConnected ? 'LIVE' : 'STANDBY'}
+
+                                <div className="flex items-center justify-between">
+                                    <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Status</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`w-2 h-2 rounded-full ${deviceOnline ? 'bg-green-400 animate-pulse' : 'bg-zinc-600'}`} />
+                                        <span className={`text-xs font-bold font-mono ${deviceOnline ? 'text-green-400' : 'text-zinc-500'}`}>
+                                            {deviceOnline ? 'ONLINE' : 'OFFLINE'}
                                         </span>
                                     </div>
                                 </div>
+
                                 <div className="flex items-center justify-between">
-                                    <span className="text-zinc-500 text-xs font-mono uppercase tracking-widest">Transport</span>
-                                    <TransportBadge />
+                                    <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Transport</span>
+                                    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest
+                                        ${transport === 'websocket'
+                                            ? 'bg-green-900/30 border border-green-700/50 text-green-400'
+                                            : transport === 'rtdb'
+                                                ? 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
+                                                : 'bg-zinc-900 border border-zinc-700 text-zinc-500'
+                                        }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${transport === 'websocket' ? 'bg-green-400 animate-pulse' : transport === 'rtdb' ? 'bg-blue-400' : 'bg-zinc-600'}`} />
+                                        {transport === 'websocket' ? 'LOCAL WS' : transport === 'rtdb' ? 'CLOUD RTDB' : 'DISCONNECTED'}
+                                        {latencyMs !== null && <span className="opacity-60 ml-1">{latencyMs}ms</span>}
+                                    </div>
                                 </div>
+
+                                {lastSeen > 0 && (
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Last Seen</span>
+                                        <span className="text-zinc-400 text-[10px] font-mono">
+                                            {deviceOnline ? 'Just now' : `${Math.round((Date.now() - lastSeen) / 1000)}s ago`}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex gap-3">
                                 <button
-                                    onClick={handleUnlink}
-                                    className="flex-1 py-3 border border-zinc-800 text-zinc-500 hover:border-red-800 hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded"
-                                >
-                                    Unlink
-                                </button>
-                                <button
                                     onClick={onClose}
-                                    className="flex-1 py-3 bg-white text-black font-black text-xs uppercase tracking-widest hover:bg-zinc-200 transition-colors rounded"
+                                    className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white font-bold text-sm uppercase tracking-widest transition-colors rounded-lg"
                                 >
                                     Done
+                                </button>
+                                <button
+                                    onClick={handleUnpair}
+                                    className="py-3 px-4 border border-zinc-800 hover:border-red-800 text-zinc-600 hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded-lg"
+                                >
+                                    Unpair
                                 </button>
                             </div>
                         </div>
                     )}
-
                 </div>
             </div>
         </div>

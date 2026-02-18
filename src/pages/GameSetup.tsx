@@ -5,6 +5,7 @@ import { initializeNewGame } from '../services/gameService';
 import { subscribeToAuth } from '../services/authService';
 import { SplashScreen } from '../components/SplashScreen';
 import { useHardwareBridge } from '../hooks/useHardwareBridge';
+import { activateGameOnDevice, HW_SESSION_KEY } from '../services/handheldService';
 import type { Player } from '../types';
 import type { User } from 'firebase/auth';
 
@@ -198,6 +199,26 @@ export const GameSetup: React.FC = () => {
       );
 
       setLaunchedGameCode(gameCode);
+
+      // ── Hardware activation ───────────────────────────────────────────────────
+      // If a controller is paired, notify it the game has started and
+      // transfer control to hardware mode.
+      const pairedDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
+      if (pairedDeviceId && useHardware) {
+        try {
+          await activateGameOnDevice(
+            pairedDeviceId,
+            gameCode,
+            teamAName || 'TEAM A',
+            teamBName || 'TEAM B',
+            'hardware', // Default: hardware has control when game starts
+          );
+          console.log('[GameSetup] Hardware controller activated for game', gameCode);
+        } catch (err) {
+          console.warn('[GameSetup] Could not activate hardware controller:', err);
+          // Non-fatal — game still launches without hardware
+        }
+      }
 
       setTimeout(() => {
         setIsGameReady(true);
