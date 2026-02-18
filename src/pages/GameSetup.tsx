@@ -58,7 +58,8 @@ export const GameSetup: React.FC = () => {
   const numberInputRef = useRef<HTMLInputElement>(null);
 
   // --- HARDWARE BRIDGE INTEGRATION ---
-  const { isConnected, updateScreen } = useHardwareBridge();
+  // FIXED: Removed updateScreen (deprecated)
+  const { isConnected, controlMode, setAuthority } = useHardwareBridge();
 
   // Control whether we are using the controller for this game
   // Defaults to true if connected, but user can toggle it off
@@ -68,21 +69,6 @@ export const GameSetup: React.FC = () => {
   useEffect(() => {
     if (isConnected) setUseHardware(true);
   }, [isConnected]);
-
-  // --- MIRROR EFFECT ---
-  // Updates the ESP32 screen whenever you type a team name or change duration
-  // Only active if device is connected AND enabled
-  useEffect(() => {
-    if (isConnected && useHardware) {
-      const nameA = teamAName.substring(0, 8).toUpperCase() || "TEAM A";
-      const nameB = teamBName.substring(0, 8).toUpperCase() || "TEAM B";
-      // Format: "BSK 10M" or "VOL 3SETS"
-      const footer = `${sportType.substring(0, 3).toUpperCase()} ${periodDuration}M`;
-
-      updateScreen(nameA, nameB, footer);
-    }
-  }, [teamAName, teamBName, periodDuration, sportType, isConnected, useHardware, updateScreen]);
-
 
   // --- EFFECT: Load User State ---
   useEffect(() => {
@@ -270,11 +256,22 @@ export const GameSetup: React.FC = () => {
                 <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
                   {step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}
                 </div>
-                {/* Hardware Indicator */}
-                <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ml-2 ${isConnected && useHardware ? 'bg-green-900/30 border border-green-800' : 'hidden'}`}>
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-[8px] font-bold text-green-500 uppercase tracking-wide">LINKED</span>
-                </div>
+                {/* Authority Switcher */}
+                {isConnected && (
+                  <div className="flex items-center gap-2 ml-2">
+                    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${controlMode === 'hardware' ? 'bg-green-900/30 border border-green-800' : 'bg-blue-900/30 border border-blue-800'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${controlMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
+                      <span className={`text-[8px] font-bold uppercase tracking-wide ${controlMode === 'hardware' ? 'text-green-500' : 'text-blue-400'}`}>
+                        {controlMode === 'hardware' ? 'ESP CTRL' : controlMode === 'shared' ? 'SPLIT' : 'WEB CTRL'}
+                      </span>
+                    </div>
+                    <div className="flex bg-black p-0.5 rounded border border-zinc-800">
+                      <button onClick={() => setAuthority('hardware')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'hardware' ? 'bg-green-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>ESP</button>
+                      <button onClick={() => setAuthority('web')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'web' ? 'bg-blue-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>WEB</button>
+                      <button onClick={() => setAuthority('shared')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'shared' ? 'bg-zinc-700 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>SPL</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -290,31 +287,49 @@ export const GameSetup: React.FC = () => {
             {/* Rules Section */}
             <div className="lg:col-span-7 flex flex-col gap-8">
 
-              {/* --- NEW HARDWARE STATUS BANNER --- */}
+              {/* --- AUTHORITY & STATUS BANNER --- */}
               {isConnected && (
-                <div className="bg-green-900/10 border border-green-800/50 p-4 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-green-900/30 text-green-500 rounded-full flex items-center justify-center text-xl">
-                      🎮
+                <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-xl space-y-6 mb-8">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-green-900/30 text-green-500 rounded-full flex items-center justify-center text-xl animate-pulse">🎮</div>
+                      <div>
+                        <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest">Hardware Controller Linked</h3>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase">Mode: {controlMode === 'hardware' ? 'ESP32 is Parent' : 'Web is Parent'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest">Hardware Controller Ready</h3>
-                      <p className="text-[10px] text-zinc-500 font-bold">Device is online and ready to score.</p>
-                    </div>
+
+                    <button
+                      onClick={() => setUseHardware(!useHardware)}
+                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${useHardware ? 'bg-green-600 text-black border-green-600' : 'text-zinc-500 border-zinc-700'}`}
+                    >
+                      {useHardware ? 'ENABLED' : 'DISABLED'}
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => setUseHardware(!useHardware)}
-                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${useHardware
-                      ? 'bg-green-500 text-black border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.4)]'
-                      : 'bg-transparent text-zinc-500 border-zinc-700 hover:text-white'
-                      }`}
-                  >
-                    {useHardware ? 'ENABLED' : 'DISABLED'}
-                  </button>
+                  <div className="grid grid-cols-3 gap-2 bg-black p-1 rounded-lg border border-zinc-800">
+                    <button
+                      onClick={() => setAuthority('hardware')}
+                      className={`py-2 text-[9px] font-black rounded uppercase transition-all ${controlMode === 'hardware' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      ESP Parent
+                    </button>
+                    <button
+                      onClick={() => setAuthority('web')}
+                      className={`py-2 text-[9px] font-black rounded uppercase transition-all ${controlMode === 'web' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      Web Parent
+                    </button>
+                    <button
+                      onClick={() => setAuthority('shared')}
+                      className={`py-2 text-[9px] font-black rounded uppercase transition-all ${controlMode === 'shared' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      Shared
+                    </button>
+                  </div>
                 </div>
               )}
-              {/* ---------------------------------- */}
+
 
               {/* Match Details */}
               <section className="bg-zinc-900/50 p-6 rounded-xl border border-zinc-800">

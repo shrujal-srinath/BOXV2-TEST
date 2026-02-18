@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { BasketballGame, TeamData, Player } from '../types';
 import { updateGameField, batchUpdateGame, subscribeToGame } from '../services/gameService';
 import { pushScoreUpdate } from '../services/rtdbClockService';
+import { useHardwareBridge } from './useHardwareBridge';
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,6 @@ export const useBasketballGame = (
   });
 
   // Subscribe to Firestore for durable state (scores, fouls, rosters)
-  // NOTE: We do NOT use this for the clock display. Clock comes from useRTDBTimer.
   useEffect(() => {
     if (!code) return;
     const unsubscribe = subscribeToGame(code, (updatedGame) => {
@@ -64,6 +64,55 @@ export const useBasketballGame = (
     });
     return unsubscribe;
   }, [code]);
+
+  // ─── HARDWARE INTEGRATION ──────────────────────────────────────────────────
+  const { pushGameState, remoteState, controlMode } = useHardwareBridge();
+
+  // 1. PUSH: Sync Web State -> ESP32 (Hardware Bridge)
+  // Whenever the game state changes on the web, we push it to the hardware bridge.
+  useEffect(() => {
+    if (gameType === 'local') return;
+
+    pushGameState({
+      scoreA: game.teamA.score,
+      scoreB: game.teamB.score,
+      quarter: game.gameState.period,
+      shotClock: game.gameState.shotClock,
+    });
+  }, [
+    game.teamA.score,
+    game.teamB.score,
+    game.gameState.period,
+    game.gameState.shotClock,
+    pushGameState,
+    gameType
+  ]);
+
+  // 2. PULL: Sync ESP32 -> Web State (Authority Aware)
+  useEffect(() => {
+    // Only accept scores from ESP32 if it is the Parent or in Shared mode
+    if (!remoteState || controlMode === 'web') return;
+
+    const updates: Record<string, any> = {};
+    let hasUpdates = false;
+
+    // Check Score A
+    if (remoteState.scoreA !== game.teamA.score) {
+      updates['teamA.score'] = remoteState.scoreA;
+      hasUpdates = true;
+    }
+    // Check Score B
+    if (remoteState.scoreB !== game.teamB.score) {
+      updates['teamB.score'] = remoteState.scoreB;
+      hasUpdates = true;
+    }
+
+    if (hasUpdates) {
+      // This updates Firestore only when the ESP32 actually changes the number
+      batchUpdateGame(code, updates);
+    }
+  }, [remoteState, controlMode, game.teamA.score, game.teamB.score, code]);
+
 
   // ─── Helper: Push to RTDB for <10ms Spectator Updates ─────────────────────
   const syncScoreToRTDB = useCallback((updatedGame: BasketballGame) => {
@@ -150,19 +199,18 @@ export const useBasketballGame = (
   }, [code, game, gameType]);
 
   // ─── Period Transition ────────────────────────────────────────────────────
-  // This handles DURABLE state only. The Clock reset is handled by timer.nextPeriod()
   const advancePeriodFirestore = useCallback((newPeriod: number) => {
     batchUpdateGame(code, {
       'gameState.period': newPeriod,
-      'gameState.gameRunning': false,       // Safety reset
-      'gameState.shotClockRunning': false,  // Safety reset
-      'gameState.gameTime': {               // Reset snapshot time
+      'gameState.gameRunning': false,
+      'gameState.shotClockRunning': false,
+      'gameState.gameTime': {
         minutes: game.settings.periodDuration || 10,
         seconds: 0,
         tenths: 0,
       },
       'gameState.shotClock': game.settings.shotClockDuration || 24,
-      'teamA.foulsThisQuarter': 0, // FIBA Rule: Team fouls reset every quarter
+      'teamA.foulsThisQuarter': 0,
       'teamB.foulsThisQuarter': 0,
     });
   }, [code, game.settings]);

@@ -255,7 +255,7 @@ const SportDivisionCard: React.FC<{
     const meta = getSportMeta(division.sport);
     const status = STATUS_CONFIG[division.status] ?? STATUS_CONFIG.setup_required;
     const bracketSize = division.bracketSize ?? 0;
-    const ctaStyle = status.useAccentCta ? { background: genderAccent, color: '#000' } : {};
+    const ctaStyle = status.useAccentCta ? { background: '#a1a1aa', color: '#000' } : {};
 
     return (
         <div

@@ -110,7 +110,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const heartbeatUnsubRef = useRef<(() => void) | null>(null);
-    const { transport, latencyMs } = useHardwareBridge();
+    const { transport } = useHardwareBridge();
 
     // ── On mount: restore if already paired this session ─────────────────────
     useEffect(() => {
@@ -355,7 +355,6 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                         }`}>
                                         <span className={`w-1.5 h-1.5 rounded-full ${transport === 'websocket' ? 'bg-green-400 animate-pulse' : transport === 'rtdb' ? 'bg-blue-400' : 'bg-zinc-600'}`} />
                                         {transport === 'websocket' ? 'LOCAL WS' : transport === 'rtdb' ? 'CLOUD RTDB' : 'DISCONNECTED'}
-                                        {latencyMs !== null && <span className="opacity-60 ml-1">{latencyMs}ms</span>}
                                     </div>
                                 </div>
 

@@ -319,9 +319,10 @@ export const subscribeToControlMode = (
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// subscribeToDeviceHeartbeat
+// subscribeToDeviceHeartbeat (FIXED)
 //
-// Returns live connection status: true if heartbeat fresh within 10s.
+// Uses local arrival timestamp for staleness — NOT snap.val() which is
+// ESP32's millis() and has no relation to Date.now().
 // ─────────────────────────────────────────────────────────────────────────────
 export const subscribeToDeviceHeartbeat = (
     code: string,
@@ -332,15 +333,22 @@ export const subscribeToDeviceHeartbeat = (
     const STALE_MS = 10_000;
 
     let staleness: ReturnType<typeof setInterval>;
+    let lastLocalArrival = 0; // When we last heard from the device (local clock)
 
     onValue(r, (snap) => {
         if (!snap.exists()) { cb(false, 0); return; }
-        const ts = snap.val() as number;
+
+        // Ignore snap.val() — it's ESP32 millis(), not a Unix timestamp.
+        // We only care that the value updated right now.
+        lastLocalArrival = Date.now();
+
         clearInterval(staleness);
-        cb(true, ts);
-        // Re-check staleness every second
+        cb(true, lastLocalArrival);
+
+        // Re-check staleness every second using local time
         staleness = setInterval(() => {
-            cb(Date.now() - ts < STALE_MS, ts);
+            const isFresh = (Date.now() - lastLocalArrival) < STALE_MS;
+            cb(isFresh, lastLocalArrival);
         }, 1_000);
     });
 
