@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useBasketballGame } from '../hooks/useBasketballGame';
-import { useRTDBTimer } from '../hooks/useRTDBTimer';
+import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { deleteGame } from '../services/gameService';
 import type { Player } from '../types';
 
@@ -77,7 +77,7 @@ export const HostConsole: React.FC = () => {
     // [FIX-3] Hot data: clock, shot clock, period — RTDB
     // isHost:true means this instance drives the clock and writes ticks to RTDB.
     // All spectators/wall/arena displays receive those ticks at <10ms.
-    const timer = useRTDBTimer({
+    const timer = useSupabaseBroadcast({
         gameCode: gameCode || '',
         isHost: true,
         periodDuration: game?.settings?.periodDuration ?? 10,

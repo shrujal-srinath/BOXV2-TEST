@@ -9,8 +9,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToGame } from '../services/gameService';
 import { getLocalGame } from '../services/localGameService';
-import { useRTDBTimer } from '../hooks/useRTDBTimer';
-import { subscribeToRTDBScore, type RTDBScoreState } from '../services/rtdbClockService';
+import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
+import { subscribeToGameBroadcast, type BroadcastScoreState } from '../services/supabaseBroadcastService';
 import { BasketballGame } from '../types';
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
@@ -905,7 +905,7 @@ export const SpectatorView: React.FC = () => {
   const isLocalGame = gameCode?.startsWith('LOCAL-');
 
   // RTDB clock — already existed
-  const rtdbTimer = useRTDBTimer({
+  const rtdbTimer = useSupabaseBroadcast({
     gameCode: gameCode || '',
     isHost: false,
     periodDuration: game?.settings?.periodDuration || 10,

@@ -2,13 +2,13 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useBasketballGame } from '../hooks/useBasketballGame';
-import { useRTDBTimer } from '../hooks/useRTDBTimer';
+import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 
 export const TournamentWallView: React.FC = () => {
     const { code } = useParams<{ code: string }>();
     const { game } = useBasketballGame(code || '', 'online');
 
-    const timer = useRTDBTimer({
+    const timer = useSupabaseBroadcast({
         gameCode: code || '',
         isHost: false,
         periodDuration: game.settings.periodDuration,

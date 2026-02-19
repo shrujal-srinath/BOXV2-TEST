@@ -9,8 +9,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { subscribeToGame } from '../services/gameService';
-import { useRTDBTimer } from '../hooks/useRTDBTimer';
-import { subscribeToRTDBScore, type RTDBScoreState } from '../services/rtdbClockService';
+import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
+import { subscribeToGameBroadcast, type BroadcastScoreState } from '../services/supabaseBroadcastService';
 import type { BasketballGame } from '../types';
 
 // ─── INDIVIDUAL COURT CARD ────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ const CourtCard = ({ gameCode }: { gameCode: string }) => {
     }, [gameCode]);
 
     // RTDB timer — already existed, unchanged
-    const timer = useRTDBTimer({
+    const timer = useSupabaseBroadcast({
         gameCode,
         isHost: false,
         periodDuration: game?.settings?.periodDuration ?? 10,

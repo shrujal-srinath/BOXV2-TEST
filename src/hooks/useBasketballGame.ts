@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { BasketballGame, TeamData, Player } from '../types';
 import { updateGameField, batchUpdateGame, subscribeToGame } from '../services/gameService';
-import { pushScoreUpdate } from '../services/rtdbClockService';
+import { broadcastScoreUpdate } from '../services/supabaseBroadcastService';
 import { useHardwareBridge } from './useHardwareBridge';
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ export const useBasketballGame = (
   // ─── Helper: Push to RTDB for <10ms Spectator Updates ─────────────────────
   const syncScoreToRTDB = useCallback((updatedGame: BasketballGame) => {
     if (gameType === 'local') return;
-    pushScoreUpdate(
+    broadcastScoreUpdate(
       code,
       updatedGame.teamA.score,
       updatedGame.teamB.score,
@@ -188,7 +188,7 @@ export const useBasketballGame = (
 
     // Manual sync because 'game' state might be stale in this closure
     if (gameType !== 'local') {
-      pushScoreUpdate(
+      broadcastScoreUpdate(
         code,
         game.teamA.score, game.teamB.score,
         game.teamA.fouls, game.teamB.fouls,
