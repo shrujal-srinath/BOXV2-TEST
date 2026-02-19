@@ -17,7 +17,7 @@ import { StatusBar } from '../features/tablet/StatusBar';
 import { DiagnosticConsole } from '../features/tablet/DiagnosticConsole';
 import { useLocalGame } from '../hooks/useLocalGame';
 import { useStandaloneTimer } from '../hooks/useStandaloneTimer';
-import { subscribeToGame } from '../services/gameService';
+import { subscribeToGame } from '../services/supabaseGameService';
 import type { BasketballGame } from '../types';
 
 interface AppSettings {

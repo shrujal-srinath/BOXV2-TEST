@@ -4,12 +4,9 @@
 //
 // REPLACES: src/services/gameService.ts (Firestore version)
 //
-// Architecture split (same as before, just different backends):
+// Architecture:
 //   - Supabase Postgres → Durable storage (settings, rosters, final results)
 //   - Supabase Broadcast → Live ephemeral data (clock, score during gameplay)
-//
-// The live clock/score signaling is in supabaseBroadcastService.ts.
-// This service handles CRUD + realtime subscriptions for persistent game data.
 
 import { supabase } from './supabase';
 import type { BasketballGame, GameSettings, TeamData, GameState, Player } from '../types';
@@ -19,17 +16,95 @@ import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/
 const gameSubChannels = new Map<string, RealtimeChannel>();
 
 // ============================================
+// GAME CREATION (replaces Firestore setDoc)
+// ============================================
+
+const generateGameCode = (): string => Math.floor(100000 + Math.random() * 900000).toString();
+
+const createDefaultPlayer = (id: string): Player => ({
+    id, name: '', number: '', position: '',
+    points: 0, assists: 0, rebounds: 0, steals: 0, blocks: 0,
+    turnovers: 0, fouls: 0, disqualified: false,
+    fieldGoalsMade: 0, fieldGoalsAttempted: 0,
+    threePointsMade: 0, threePointsAttempted: 0,
+    freeThrowsMade: 0, freeThrowsAttempted: 0,
+});
+
+const createDefaultTeam = (name: string, color: string): TeamData => ({
+    name, color, score: 0,
+    timeouts: 2, timeoutsFirstHalf: 2, timeoutsSecondHalf: 3,
+    fouls: 0, foulsThisQuarter: 0,
+    players: Array.from({ length: 12 }, (_, i) => createDefaultPlayer(`player-${i + 1}`)),
+});
+
+/**
+ * Initialize a new game — writes to Supabase Postgres instead of Firestore.
+ * 
+ * Drop-in replacement for gameService.initializeNewGame().
+ * Same signature, same return type (game code string).
+ */
+export const initializeNewGame = async (
+    settings: GameSettings,
+    teamA: Partial<TeamData> & { name: string; color: string },
+    teamB: Partial<TeamData> & { name: string; color: string },
+    isOnline: boolean,
+    sport: string,
+    hostId: string
+): Promise<string> => {
+    const gameCode = generateGameCode();
+
+    const initialGameState: GameState = {
+        period: 1,
+        gameTime: { minutes: settings.periodDuration, seconds: 0, tenths: 0 },
+        shotClock: settings.shotClockDuration,
+        gameRunning: false,
+        shotClockRunning: false,
+        possession: 'A',
+    };
+
+    const newGame: BasketballGame = {
+        code: gameCode,
+        hostId,
+        sport,
+        status: 'live',
+        gameType: isOnline ? 'online' : 'local',
+        createdAt: Date.now(),
+        lastUpdate: Date.now(),
+        settings,
+        gameState: initialGameState,
+        teamA: { ...createDefaultTeam(teamA.name, teamA.color), ...teamA },
+        teamB: { ...createDefaultTeam(teamB.name, teamB.color), ...teamB },
+    };
+
+    // Write to Supabase Postgres
+    const { error } = await supabase
+        .from('games')
+        .insert({
+            code: gameCode,
+            host_id: hostId,
+            sport,
+            status: 'live',
+            game_type: isOnline ? 'online' : 'local',
+            data: newGame,
+            created_at: Date.now(),
+            last_update: Date.now(),
+        });
+
+    if (error) {
+        console.error('[Supabase] initializeNewGame failed:', error);
+        throw new Error(`Failed to create game: ${error.message}`);
+    }
+
+    console.log(`[Supabase] Game ${gameCode} created in Postgres`);
+    return gameCode;
+};
+
+// ============================================
 // SUPABASE POSTGRES OPERATIONS (COLD DATA)
 // ============================================
 
 /**
- * Subscribe to the "Cold" game data (settings, rosters, team names, colors).
- * 
- * Uses Supabase Realtime Postgres Changes — whenever the `games` row updates
- * in Postgres, the callback fires. This replaces Firestore's onSnapshot.
- * 
- * NOTE: This is for DURABLE data only. Clock ticks and live scores go through
- * Supabase Broadcast (supabaseBroadcastService.ts) — not through Postgres.
+ * Subscribe to game data. Uses Supabase Realtime Postgres Changes.
  */
 export const subscribeToGame = (
     code: string,
@@ -40,17 +115,17 @@ export const subscribeToGame = (
         return () => { };
     }
 
-    // Initial fetch
+    // Initial fetch — game is stored in the `data` JSONB column
     supabase
         .from('games')
-        .select('*')
+        .select('data')
         .eq('code', code)
         .single()
         .then(({ data, error }) => {
             if (error || !data) {
                 callback(null);
             } else {
-                callback(data as BasketballGame);
+                callback(data.data as BasketballGame);
             }
         });
 
@@ -69,8 +144,8 @@ export const subscribeToGame = (
             (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => {
                 if (payload.eventType === 'DELETE') {
                     callback(null);
-                } else {
-                    callback(payload.new as BasketballGame);
+                } else if (payload.new && (payload.new as any).data) {
+                    callback((payload.new as any).data as BasketballGame);
                 }
             }
         )
@@ -88,32 +163,29 @@ export const subscribeToGame = (
 };
 
 /**
- * Subscribe to the global feed of live games.
- * Replaces the Firestore query with where('status', '==', 'live').
+ * Subscribe to live games feed.
  */
 export const subscribeToLiveGames = (
     callback: (games: BasketballGame[]) => void
 ): (() => void) => {
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    // Initial fetch
     const fetchLive = async () => {
         const cutoff = Date.now() - ONE_DAY_MS;
         const { data, error } = await supabase
             .from('games')
-            .select('*')
+            .select('data')
             .eq('status', 'live')
             .gt('last_update', cutoff)
             .order('last_update', { ascending: false });
 
         if (!error && data) {
-            callback(data as BasketballGame[]);
+            callback(data.map(row => row.data as BasketballGame));
         }
     };
 
     fetchLive();
 
-    // Realtime for live games table changes
     const channel = supabase
         .channel('live-games-feed')
         .on(
@@ -125,7 +197,6 @@ export const subscribeToLiveGames = (
                 filter: 'status=eq.live',
             },
             () => {
-                // Re-fetch on any change (simpler than maintaining local state)
                 fetchLive();
             }
         )
@@ -137,28 +208,44 @@ export const subscribeToLiveGames = (
 };
 
 /**
- * Update a specific field in the games table.
- * 
- * NOTE: Firestore allowed nested dot paths like 'teamA.score'.
- * Postgres uses JSONB, so we handle this with jsonb_set or by
- * storing team data as JSONB columns.
+ * Update a specific field in the game's data JSONB column.
  */
 export const updateGameField = async (
     gameId: string,
     fieldPath: string,
     value: any
 ): Promise<void> => {
-    // Parse nested paths: 'teamA.score' → update team_a JSONB at .score
-    // For the Postgres schema, we store the full game as a JSONB document
-    // in a 'data' column for migration simplicity. Can normalize later.
-    const { error } = await supabase.rpc('update_game_field', {
-        game_code: gameId,
-        field_path: fieldPath,
-        field_value: JSON.stringify(value),
-    });
+    // Fetch current data, update the field, write back
+    const { data: row, error: fetchError } = await supabase
+        .from('games')
+        .select('data')
+        .eq('code', gameId)
+        .single();
+
+    if (fetchError || !row) {
+        console.error('[Supabase] updateGameField fetch failed:', fetchError);
+        return;
+    }
+
+    const gameData = row.data as any;
+
+    // Navigate dot path and set value
+    const parts = fieldPath.split('.');
+    let obj = gameData;
+    for (let i = 0; i < parts.length - 1; i++) {
+        if (obj[parts[i]] === undefined) obj[parts[i]] = {};
+        obj = obj[parts[i]];
+    }
+    obj[parts[parts.length - 1]] = value;
+
+    // Write back
+    const { error } = await supabase
+        .from('games')
+        .update({ data: gameData, last_update: Date.now() })
+        .eq('code', gameId);
 
     if (error) {
-        console.error('[Supabase] updateGameField failed:', error);
+        console.error('[Supabase] updateGameField write failed:', error);
     }
 };
 
@@ -169,49 +256,48 @@ export const batchUpdateGame = async (
     gameId: string,
     updates: Record<string, any>
 ): Promise<void> => {
-    const { error } = await supabase.rpc('batch_update_game', {
-        game_code: gameId,
-        updates_json: JSON.stringify(updates),
-    });
+    const { data: row, error: fetchError } = await supabase
+        .from('games')
+        .select('data')
+        .eq('code', gameId)
+        .single();
 
-    if (error) {
-        console.error('[Supabase] batchUpdateGame failed:', error);
+    if (fetchError || !row) {
+        console.error('[Supabase] batchUpdateGame fetch failed:', fetchError);
+        return;
     }
-};
 
-/**
- * Create a new game.
- */
-export const createGame = async (game: BasketballGame): Promise<void> => {
+    const gameData = row.data as any;
+
+    // Apply all updates
+    for (const [fieldPath, value] of Object.entries(updates)) {
+        if (fieldPath === 'lastUpdate') continue;
+        const parts = fieldPath.split('.');
+        let obj = gameData;
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (obj[parts[i]] === undefined) obj[parts[i]] = {};
+            obj = obj[parts[i]];
+        }
+        obj[parts[parts.length - 1]] = value;
+    }
+
     const { error } = await supabase
         .from('games')
-        .insert({
-            code: game.code,
-            host_id: game.hostId,
-            sport: game.sport,
-            status: game.status,
-            game_type: game.gameType,
-            data: game, // Store full game as JSONB for now
-            created_at: game.createdAt,
-            last_update: game.lastUpdate,
-        });
+        .update({ data: gameData, last_update: Date.now() })
+        .eq('code', gameId);
 
     if (error) {
-        console.error('[Supabase] createGame failed:', error);
-        throw error;
+        console.error('[Supabase] batchUpdateGame write failed:', error);
     }
 };
 
 /**
- * Finish a game (mark as completed).
+ * Finish a game.
  */
 export const finishGame = async (gameId: string): Promise<void> => {
     const { error } = await supabase
         .from('games')
-        .update({
-            status: 'finished',
-            last_update: Date.now(),
-        })
+        .update({ status: 'finished', last_update: Date.now() })
         .eq('code', gameId);
 
     if (error) {
@@ -234,15 +320,20 @@ export const deleteGame = async (gameId: string): Promise<void> => {
 };
 
 /**
- * Get a single game by code (one-time fetch, no subscription).
+ * Get a single game by code (one-time fetch).
  */
 export const getGameByCode = async (code: string): Promise<BasketballGame | null> => {
     const { data, error } = await supabase
         .from('games')
-        .select('*')
+        .select('data')
         .eq('code', code)
         .single();
 
     if (error || !data) return null;
-    return data as BasketballGame;
+    return data.data as BasketballGame;
 };
+
+/**
+ * Alias for backward compatibility.
+ */
+export const getGame = getGameByCode;

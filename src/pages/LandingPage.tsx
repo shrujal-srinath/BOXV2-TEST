@@ -8,7 +8,7 @@ import {
   loginAnonymously,
   subscribeToAuth
 } from '../services/authService';
-import { subscribeToLiveGames } from '../services/gameService';
+import { subscribeToLiveGames } from '../services/supabaseGameService';
 import { SplashScreen } from '../components/SplashScreen';
 
 export const LandingPage: React.FC = () => {

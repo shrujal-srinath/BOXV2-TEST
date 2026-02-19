@@ -4,18 +4,8 @@
 //
 // REPLACES: src/hooks/useRTDBTimer.ts
 //
-// Drop-in replacement: same return type (minutes, seconds, tenths, shotClock,
-// period, gameRunning, shotClockRunning, startClock, stopClock, etc.)
-//
-// KEY DIFFERENCES FROM useRTDBTimer:
-//   1. Host publishes via Supabase Broadcast (ephemeral) instead of RTDB (database write)
-//   2. Spectators receive via WebSocket channel subscription instead of RTDB onValue
-//   3. Host also sends periodic snapshots (every 5s) so late joiners get current state
-//   4. No database involved in the real-time loop — pure pub/sub
-//
-// The host still runs its own setInterval for the clock. The interval
-// calculates the next second and broadcasts it. Spectators just render
-// whatever they receive. Same model as RTDB, but without the DB writes.
+// Drop-in replacement with identical return type.
+// Timer logic ported exactly from useRTDBTimer to avoid drift/speed bugs.
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
@@ -37,13 +27,11 @@ import {
 export interface UseSupabaseBroadcastOptions {
     gameCode: string;
     isHost: boolean;
-    periodDuration: number;    // minutes per period from game settings
-    shotClockDuration: number; // seconds from game settings
+    periodDuration: number;
+    shotClockDuration: number;
 }
 
-// Return type intentionally matches RTDBTimerReturn for drop-in swap
 export interface SupabaseBroadcastReturn {
-    // Display values — use these directly in JSX
     minutes: number;
     seconds: number;
     tenths: number;
@@ -52,7 +40,6 @@ export interface SupabaseBroadcastReturn {
     gameRunning: boolean;
     shotClockRunning: boolean;
 
-    // Host controls — no-ops if !isHost
     startClock: () => void;
     stopClock: () => void;
     toggleClock: () => void;
@@ -72,7 +59,6 @@ export const useSupabaseBroadcast = ({
     shotClockDuration,
 }: UseSupabaseBroadcastOptions): SupabaseBroadcastReturn => {
 
-    // Local display state
     const [clock, setClock] = useState<BroadcastClockState>({
         gameRunning: false,
         shotClockRunning: false,
@@ -85,7 +71,6 @@ export const useSupabaseBroadcast = ({
         shotClockStartedAt: null,
     });
 
-    // Stable ref for interval closure
     const clockRef = useRef<BroadcastClockState>(clock);
     useEffect(() => {
         clockRef.current = clock;
@@ -93,6 +78,7 @@ export const useSupabaseBroadcast = ({
 
     const intervalRef = useRef<number | null>(null);
     const snapshotIntervalRef = useRef<number | null>(null);
+    const subscribedRef = useRef(false);
 
     // ── Step 1: Subscribe to Broadcast (both host and spectators) ─────────────
 
@@ -172,78 +158,103 @@ export const useSupabaseBroadcast = ({
                 }));
             },
 
-            // Full snapshot — used by late joiners and as periodic heartbeat
             onGameSnapshot: (payload) => {
                 setClock(payload.clock);
             },
         });
 
+        subscribedRef.current = true;
+
         return () => {
+            subscribedRef.current = false;
             unsub();
         };
     }, [gameCode, periodDuration, shotClockDuration]);
 
-    // ── Step 2: Host only — run the interval that broadcasts ticks ────────────
+    // ── Step 2: Host only — run the 100ms interval (matches useRTDBTimer exactly) ──
 
     useEffect(() => {
-        if (!isHost || !gameCode) return;
+        if (!isHost) return;
 
-        const clearTickInterval = () => {
-            if (intervalRef.current !== null) {
+        // Clear any existing interval
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+
+        if (!clock.gameRunning) return;
+
+        intervalRef.current = window.setInterval(() => {
+            const c = clockRef.current;
+
+            if (!c.gameRunning) {
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+                return;
+            }
+
+            // ── EXACT LOGIC FROM useRTDBTimer ──
+            // Calculate total tenths: (Minutes * 600) + (Seconds * 10) + Tenths
+            let totalTenths = (c.minutes * 600) + (c.seconds * 10) + c.tenths;
+
+            if (totalTenths <= 0) {
+                // Period ended
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+                broadcastClockStop(gameCode, {
+                    ...c,
+                    gameRunning: false,
+                    shotClockRunning: false,
+                    minutes: 0,
+                    seconds: 0,
+                    tenths: 0,
+                    startedAt: null,
+                    shotClockStartedAt: null,
+                });
+                window.dispatchEvent(new CustomEvent('periodEnd', { detail: { period: c.period } }));
+                return;
+            }
+
+            // Decrement by 1 tenth
+            totalTenths -= 1;
+
+            // Convert back to minutes, seconds, tenths
+            const newMin = Math.floor(totalTenths / 600);
+            const remainder = totalTenths % 600;
+            const newSec = Math.floor(remainder / 10);
+            const newTenths = remainder % 10;
+
+            // Shot clock: decrement once per SECOND, not per tick
+            // Detect second boundary: when tenths wraps from 0 to 9
+            const secondBoundary = (newTenths === 9 && c.tenths === 0);
+            const newShot = (c.shotClockRunning && secondBoundary)
+                ? Math.max(0, c.shotClock - 1)
+                : c.shotClock;
+
+            // Update local state
+            setClock(prev => ({
+                ...prev,
+                minutes: newMin,
+                seconds: newSec,
+                tenths: newTenths,
+                shotClock: newShot,
+            }));
+
+            // Broadcast to spectators
+            broadcastClockTick(gameCode, newMin, newSec, newTenths, newShot);
+
+        }, 100); // 100ms for tenth-of-a-second precision
+
+        return () => {
+            if (intervalRef.current) {
                 clearInterval(intervalRef.current);
                 intervalRef.current = null;
             }
         };
-
-        // Watch for gameRunning changes to start/stop the interval
-        if (clock.gameRunning) {
-            clearTickInterval(); // Clear any existing
-
-            intervalRef.current = window.setInterval(() => {
-                const c = clockRef.current;
-                if (!c.gameRunning) return;
-
-                let newMinutes = c.minutes;
-                let newSeconds = c.seconds;
-                let newTenths = c.tenths;
-                let newShotClock = c.shotClock;
-
-                // Decrement game clock (counts down)
-                if (newTenths > 0) {
-                    newTenths -= 1;
-                } else if (newSeconds > 0) {
-                    newSeconds -= 1;
-                    newTenths = 9;
-                } else if (newMinutes > 0) {
-                    newMinutes -= 1;
-                    newSeconds = 59;
-                    newTenths = 9;
-                }
-                // else: clock at 0:00.0 — period over
-
-                // Decrement shot clock
-                if (c.shotClockRunning && newShotClock > 0) {
-                    newShotClock -= 1;
-                }
-
-                // Update local state
-                setClock(prev => ({
-                    ...prev,
-                    minutes: newMinutes,
-                    seconds: newSeconds,
-                    tenths: newTenths,
-                    shotClock: newShotClock,
-                }));
-
-                // Broadcast to spectators (fire-and-forget, no await in interval)
-                broadcastClockTick(gameCode, newMinutes, newSeconds, newTenths, newShotClock);
-
-            }, 100); // 100ms for tenths precision (same as RTDB version)
-        } else {
-            clearTickInterval();
-        }
-
-        return clearTickInterval;
     }, [isHost, gameCode, clock.gameRunning]);
 
     // ── Step 3: Host only — periodic snapshot for late joiners ─────────────────
@@ -251,13 +262,9 @@ export const useSupabaseBroadcast = ({
     useEffect(() => {
         if (!isHost || !gameCode) return;
 
-        // Send snapshot every 5 seconds so late joiners get current state
         snapshotIntervalRef.current = window.setInterval(() => {
             const c = clockRef.current;
             broadcastGameSnapshot(gameCode, c, {
-                // Score is managed separately by useBasketballGame,
-                // but we include a placeholder. The real score comes from
-                // the score_update events. This just ensures clock is synced.
                 teamA: 0, teamB: 0,
                 foulsA: 0, foulsB: 0,
                 timeoutsA: 0, timeoutsB: 0,
@@ -273,7 +280,7 @@ export const useSupabaseBroadcast = ({
         };
     }, [isHost, gameCode]);
 
-    // ── Step 4: Cleanup on unmount ────────────────────────────────────────────
+    // ── Cleanup on unmount ────────────────────────────────────────────────────
 
     useEffect(() => {
         return () => {
@@ -302,6 +309,11 @@ export const useSupabaseBroadcast = ({
 
     const stopClock = useCallback(() => {
         if (!isHost) return;
+
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
 
         const newState: BroadcastClockState = {
             ...clockRef.current,
@@ -342,6 +354,11 @@ export const useSupabaseBroadcast = ({
     const nextPeriod = useCallback(() => {
         if (!isHost) return;
 
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+
         const newPeriod = clockRef.current.period + 1;
         const newState: BroadcastClockState = {
             gameRunning: false,
@@ -372,7 +389,7 @@ export const useSupabaseBroadcast = ({
         broadcastClockEdit(gameCode, minutes, seconds, tenths, shotClock);
     }, [isHost, gameCode]);
 
-    // ── Return (identical shape to RTDBTimerReturn) ───────────────────────────
+    // ── Return ────────────────────────────────────────────────────────────────
 
     return {
         minutes: clock.minutes,

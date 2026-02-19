@@ -1,7 +1,7 @@
 // src/hooks/useBasketballGame.ts
 import { useState, useEffect, useCallback } from 'react';
 import type { BasketballGame, TeamData, Player } from '../types';
-import { updateGameField, batchUpdateGame, subscribeToGame } from '../services/gameService';
+import { updateGameField, batchUpdateGame, subscribeToGame } from '../services/supabaseGameService';
 import { broadcastScoreUpdate } from '../services/supabaseBroadcastService';
 import { useHardwareBridge } from './useHardwareBridge';
 

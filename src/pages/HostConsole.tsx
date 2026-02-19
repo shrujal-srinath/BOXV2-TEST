@@ -16,7 +16,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useBasketballGame } from '../hooks/useBasketballGame';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
-import { deleteGame } from '../services/gameService';
+import { deleteGame } from '../services/supabaseGameService';
 import type { Player } from '../types';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────

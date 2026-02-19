@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { subscribeToGame } from '../services/gameService';
+import { subscribeToGame } from '../services/supabaseGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { subscribeToGameBroadcast, type BroadcastScoreState } from '../services/supabaseBroadcastService';
 import type { BasketballGame } from '../types';
@@ -36,12 +36,22 @@ const CourtCard = ({ gameCode }: { gameCode: string }) => {
         shotClockDuration: game?.settings?.shotClockDuration ?? 24,
     });
 
-    // NEW: RTDB score subscription — <10ms score + fouls + possession
-    const [rtdbScore, setRtdbScore] = useState<RTDBScoreState | null>(null);
+    // Broadcast score subscription — score, fouls, timeouts, possession
+    const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
     useEffect(() => {
         if (!gameCode) return;
-        const unsub = subscribeToRTDBScore(gameCode, (score) => {
-            setRtdbScore(score);
+        const unsub = subscribeToGameBroadcast(gameCode, {
+            onScoreUpdate: (payload) => {
+                setRtdbScore({
+                    teamA: payload.teamA,
+                    teamB: payload.teamB,
+                    foulsA: payload.foulsA,
+                    foulsB: payload.foulsB,
+                    timeoutsA: payload.timeoutsA,
+                    timeoutsB: payload.timeoutsB,
+                    possession: payload.possession,
+                });
+            },
         });
         return unsub;
     }, [gameCode]);

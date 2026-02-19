@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BasketballGame, Tournament } from '../types';
 import { logoutUser, subscribeToAuth } from '../services/authService';
-import { subscribeToLiveGames, deleteGame } from '../services/gameService';
+import { subscribeToLiveGames, deleteGame } from '../services/supabaseGameService';
 import { subscribeToPublicTournaments } from '../services/tournamentService';
 import type { User } from 'firebase/auth';
 import { usePWAInstall } from '../hooks/usePWAInstall';

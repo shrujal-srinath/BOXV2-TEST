@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { subscribeToGame } from '../services/gameService';
+import { subscribeToGame } from '../services/supabaseGameService';
 import { getLocalGame } from '../services/localGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { subscribeToGameBroadcast, type BroadcastScoreState } from '../services/supabaseBroadcastService';
@@ -913,12 +913,22 @@ export const SpectatorView: React.FC = () => {
   });
 
   // NEW: RTDB score subscription
-  const [rtdbScore, setRtdbScore] = useState<RTDBScoreState | null>(null);
+  const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
 
   useEffect(() => {
     if (isLocalGame || !gameCode) return;
-    const unsub = subscribeToRTDBScore(gameCode, (score) => {
-      setRtdbScore(score);
+    const unsub = subscribeToGameBroadcast(gameCode, {
+      onScoreUpdate: (payload) => {
+        setRtdbScore({
+          teamA: payload.teamA,
+          teamB: payload.teamB,
+          foulsA: payload.foulsA,
+          foulsB: payload.foulsB,
+          timeoutsA: payload.timeoutsA,
+          timeoutsB: payload.timeoutsB,
+          possession: payload.possession,
+        });
+      },
     });
     return unsub;
   }, [gameCode, isLocalGame]);

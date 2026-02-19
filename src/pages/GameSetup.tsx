@@ -1,7 +1,7 @@
 // src/pages/GameSetup.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { initializeNewGame } from '../services/gameService';
+import { initializeNewGame } from '../services/supabaseGameService';
 import { subscribeToAuth } from '../services/authService';
 import { SplashScreen } from '../components/SplashScreen';
 import { useHardwareBridge } from '../hooks/useHardwareBridge';
