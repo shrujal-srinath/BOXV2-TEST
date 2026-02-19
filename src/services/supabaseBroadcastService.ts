@@ -4,28 +4,13 @@
 //
 // REPLACES: src/services/rtdbClockService.ts
 //
-// KEY ARCHITECTURAL DIFFERENCE FROM FIREBASE RTDB:
-//   Firebase RTDB: Host writes to a database node. Each spectator opens
-//   a persistent listener on that node. Firebase multiplies the download
-//   cost by N spectators. Every tick is a database write.
-//
-//   Supabase Broadcast: Host sends an ephemeral message to a channel.
-//   Supabase's Realtime server (Elixir/Phoenix) fans out to all subscribers
-//   via WebSocket. ZERO database writes. ZERO per-subscriber cost multiplication.
-//   This is true pub/sub — built for exactly this use case.
-//
-// CHANNEL NAMING:
-//   game:{gameCode}:clock  → Clock ticks (every 1s when running)
-//   game:{gameCode}:score  → Score/fouls/timeouts/possession updates
-//   game:{gameCode}:state  → Full game state snapshot (on connect, period changes)
-//
-// We use a SINGLE channel per game with different event types to minimize
-// WebSocket connections. This is more efficient than multiple channels.
+// FIX: Channel must be SUBSCRIBED before send() works via WebSocket.
+// Without this, send() falls back to REST API (slow, one-way, no fanout).
 
 import { supabase } from './supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-// ─── Types (matching existing RTDB types for drop-in compatibility) ───────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface BroadcastClockState {
     gameRunning: boolean;
@@ -49,7 +34,6 @@ export interface BroadcastScoreState {
     possession: 'A' | 'B';
 }
 
-// Full game state snapshot — sent on initial connection and period transitions
 export interface BroadcastGameSnapshot {
     clock: BroadcastClockState;
     score: BroadcastScoreState;
@@ -58,17 +42,64 @@ export interface BroadcastGameSnapshot {
 
 // ─── Channel Management ───────────────────────────────────────────────────────
 
-// Cache channels so we don't create duplicates per game
 const channelCache = new Map<string, RealtimeChannel>();
+const channelReady = new Map<string, Promise<RealtimeChannel>>();
 
 /**
- * Get or create a Supabase Realtime channel for a game.
- * 
- * Uses PUBLIC channels — no auth required for spectators.
- * This is the killer feature: QR code on arena screen → scan → instant live data.
- * No anonymous auth, no token refresh, no Firebase SDK download.
+ * Get or create a channel, and ensure it is SUBSCRIBED before returning.
+ * This is the critical fix — send() only works via WebSocket after subscribe.
  */
-const getGameChannel = (gameCode: string): RealtimeChannel => {
+const getSubscribedChannel = (gameCode: string): Promise<RealtimeChannel> => {
+    const topic = `game:${gameCode}`;
+
+    // If we already have a ready promise, return it
+    if (channelReady.has(topic)) {
+        return channelReady.get(topic)!;
+    }
+
+    const promise = new Promise<RealtimeChannel>((resolve, reject) => {
+        let channel: RealtimeChannel;
+
+        if (channelCache.has(topic)) {
+            channel = channelCache.get(topic)!;
+            // Check if already subscribed
+            if ((channel as any).state === 'joined') {
+                resolve(channel);
+                return;
+            }
+        } else {
+            channel = supabase.channel(topic, {
+                config: {
+                    broadcast: {
+                        self: true,
+                        ack: false,
+                    },
+                },
+            });
+            channelCache.set(topic, channel);
+        }
+
+        // Subscribe and wait for confirmation
+        channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log(`[Broadcast] Channel subscribed: ${topic}`);
+                resolve(channel);
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.error(`[Broadcast] Channel error: ${topic} — ${status}`);
+                reject(new Error(`Channel ${status}`));
+            }
+        });
+    });
+
+    channelReady.set(topic, promise);
+    return promise;
+};
+
+/**
+ * Get or create a channel WITHOUT waiting for subscription.
+ * Used by subscribeToGameBroadcast to register .on() handlers BEFORE subscribing.
+ */
+const getOrCreateChannel = (gameCode: string): RealtimeChannel => {
     const topic = `game:${gameCode}`;
 
     if (channelCache.has(topic)) {
@@ -78,10 +109,8 @@ const getGameChannel = (gameCode: string): RealtimeChannel => {
     const channel = supabase.channel(topic, {
         config: {
             broadcast: {
-                // Host receives its own broadcasts (needed for state consistency)
                 self: true,
-                // Wait for server acknowledgment before resolving
-                ack: false, // false = fire-and-forget for lowest latency
+                ack: false,
             },
         },
     });
@@ -91,7 +120,7 @@ const getGameChannel = (gameCode: string): RealtimeChannel => {
 };
 
 /**
- * Cleanup a game channel. Call on component unmount or game end.
+ * Cleanup a game channel.
  */
 export const removeGameChannel = async (gameCode: string): Promise<void> => {
     const topic = `game:${gameCode}`;
@@ -100,20 +129,13 @@ export const removeGameChannel = async (gameCode: string): Promise<void> => {
     if (channel) {
         await supabase.removeChannel(channel);
         channelCache.delete(topic);
+        channelReady.delete(topic);
     }
 };
 
 // ─── Host-Side: Broadcasting (Write) ──────────────────────────────────────────
+// All send functions now await getSubscribedChannel() to ensure WebSocket is ready.
 
-/**
- * Called every 1 second by the host's setInterval.
- * Broadcasts the current clock state to all spectators.
- * 
- * ZERO database writes. This is pure WebSocket pub/sub.
- * Compare with RTDB's pushClockTick which does:
- *   await update(ref(rtdb, `games/${gameCode}/clock`), {...})
- * That's a database write × N reads. This is just a message.
- */
 export const broadcastClockTick = async (
     gameCode: string,
     minutes: number,
@@ -121,30 +143,25 @@ export const broadcastClockTick = async (
     tenths: number,
     shotClock: number
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'clock_tick',
             payload: { minutes, seconds, tenths, shotClock, ts: Date.now() },
         });
     } catch (err) {
-        console.error('[Broadcast] clockTick failed:', err);
+        // Don't spam console for clock ticks
     }
 };
 
-/**
- * Called when host presses START.
- */
 export const broadcastClockStart = async (
     gameCode: string,
     fullState: BroadcastClockState
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'clock_start',
             payload: { ...fullState, ts: Date.now() },
@@ -154,17 +171,13 @@ export const broadcastClockStart = async (
     }
 };
 
-/**
- * Called when host presses STOP.
- */
 export const broadcastClockStop = async (
     gameCode: string,
     fullState: BroadcastClockState
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'clock_stop',
             payload: { ...fullState, ts: Date.now() },
@@ -174,18 +187,14 @@ export const broadcastClockStop = async (
     }
 };
 
-/**
- * Called when shot clock is reset (24s or 14s).
- */
 export const broadcastShotClockReset = async (
     gameCode: string,
     value: number,
     gameRunning: boolean
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'shotclock_reset',
             payload: { shotClock: value, shotClockRunning: gameRunning, ts: Date.now() },
@@ -195,18 +204,14 @@ export const broadcastShotClockReset = async (
     }
 };
 
-/**
- * Called when period changes.
- */
 export const broadcastPeriodChange = async (
     gameCode: string,
     period: number,
     fullState: BroadcastClockState
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'period_change',
             payload: { period, ...fullState, ts: Date.now() },
@@ -216,9 +221,6 @@ export const broadcastPeriodChange = async (
     }
 };
 
-/**
- * Called when host manually edits clocks via TimeEditModal.
- */
 export const broadcastClockEdit = async (
     gameCode: string,
     minutes: number,
@@ -226,10 +228,9 @@ export const broadcastClockEdit = async (
     tenths: number,
     shotClock: number
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'clock_edit',
             payload: {
@@ -244,10 +245,6 @@ export const broadcastClockEdit = async (
     }
 };
 
-/**
- * Called after every score/foul/timeout/possession change.
- * Replaces pushScoreUpdate from rtdbClockService.
- */
 export const broadcastScoreUpdate = async (
     gameCode: string,
     scoreA: number,
@@ -258,10 +255,9 @@ export const broadcastScoreUpdate = async (
     timeoutsB: number,
     possession: 'A' | 'B'
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'score_update',
             payload: {
@@ -278,32 +274,20 @@ export const broadcastScoreUpdate = async (
     }
 };
 
-/**
- * Send a full game state snapshot.
- * Used when:
- *   1. A new spectator joins (host detects via Presence, sends snapshot)
- *   2. Period transitions
- *   3. Manual "sync all" trigger from host
- * 
- * This solves the "late joiner" problem that pure Broadcast has:
- * if you connect after the last tick, you see stale data.
- * The host periodically broadcasts snapshots (every 5s) as a heartbeat.
- */
 export const broadcastGameSnapshot = async (
     gameCode: string,
     clock: BroadcastClockState,
     score: BroadcastScoreState
 ): Promise<void> => {
-    const channel = getGameChannel(gameCode);
-
     try {
-        await channel.send({
+        const channel = await getSubscribedChannel(gameCode);
+        channel.send({
             type: 'broadcast',
             event: 'game_snapshot',
             payload: { clock, score, timestamp: Date.now() },
         });
     } catch (err) {
-        console.error('[Broadcast] gameSnapshot failed:', err);
+        // Silent — snapshot is best-effort
     }
 };
 
@@ -322,25 +306,18 @@ export interface GameBroadcastCallbacks {
 
 /**
  * Subscribe to all game broadcast events.
- * Returns an unsubscribe function — call on component unmount.
  * 
- * Usage in SpectatorView:
- *   useEffect(() => {
- *     const unsub = subscribeToGameBroadcast(gameCode, {
- *       onClockTick: (p) => setClock(prev => ({ ...prev, ...p })),
- *       onScoreUpdate: (p) => setScore(p),
- *       onGameSnapshot: (p) => { setClock(p.clock); setScore(p.score); },
- *     });
- *     return unsub;
- *   }, [gameCode]);
+ * IMPORTANT: Register .on() handlers BEFORE calling .subscribe().
+ * Then mark the channel as ready so send functions use WebSocket.
  */
 export const subscribeToGameBroadcast = (
     gameCode: string,
     callbacks: GameBroadcastCallbacks
 ): (() => void) => {
-    const channel = getGameChannel(gameCode);
+    const topic = `game:${gameCode}`;
+    const channel = getOrCreateChannel(gameCode);
 
-    // Register event listeners
+    // Register event listeners BEFORE subscribing
     if (callbacks.onClockTick) {
         channel.on('broadcast', { event: 'clock_tick' }, ({ payload }) => {
             callbacks.onClockTick!(payload);
@@ -389,16 +366,19 @@ export const subscribeToGameBroadcast = (
         });
     }
 
-    // Subscribe to the channel (actually connect the WebSocket)
+    // Subscribe and mark channel as ready for send()
     channel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-            console.log(`[Broadcast] Subscribed to game:${gameCode}`);
+            console.log(`[Broadcast] Subscribed to ${topic}`);
+            // Mark as ready so getSubscribedChannel() resolves immediately
+            if (!channelReady.has(topic)) {
+                channelReady.set(topic, Promise.resolve(channel));
+            }
         } else if (status === 'CHANNEL_ERROR') {
-            console.error(`[Broadcast] Channel error for game:${gameCode}`);
+            console.error(`[Broadcast] Channel error for ${topic}`);
         }
     });
 
-    // Return cleanup function
     return () => {
         removeGameChannel(gameCode);
     };

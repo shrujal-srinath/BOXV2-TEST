@@ -4,8 +4,9 @@
 //
 // REPLACES: src/hooks/useRTDBTimer.ts
 //
-// Drop-in replacement with identical return type.
-// Timer logic ported exactly from useRTDBTimer to avoid drift/speed bugs.
+// Now also handles score updates via an optional onScoreUpdate callback,
+// eliminating the need for a separate subscribeToGameBroadcast call
+// in SpectatorView/WallView (which caused channel conflicts).
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
@@ -29,6 +30,7 @@ export interface UseSupabaseBroadcastOptions {
     isHost: boolean;
     periodDuration: number;
     shotClockDuration: number;
+    onScoreUpdate?: (score: BroadcastScoreState) => void;
 }
 
 export interface SupabaseBroadcastReturn {
@@ -50,6 +52,9 @@ export interface SupabaseBroadcastReturn {
     editClocks: (minutes: number, seconds: number, tenths: number, shotClock: number) => void;
 }
 
+// Re-export for consumers
+export type { BroadcastScoreState } from '../services/supabaseBroadcastService';
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export const useSupabaseBroadcast = ({
@@ -57,6 +62,7 @@ export const useSupabaseBroadcast = ({
     isHost,
     periodDuration,
     shotClockDuration,
+    onScoreUpdate,
 }: UseSupabaseBroadcastOptions): SupabaseBroadcastReturn => {
 
     const [clock, setClock] = useState<BroadcastClockState>({
@@ -78,9 +84,15 @@ export const useSupabaseBroadcast = ({
 
     const intervalRef = useRef<number | null>(null);
     const snapshotIntervalRef = useRef<number | null>(null);
-    const subscribedRef = useRef(false);
 
-    // ── Step 1: Subscribe to Broadcast (both host and spectators) ─────────────
+    // Stable ref for onScoreUpdate so we don't re-subscribe on every render
+    const onScoreUpdateRef = useRef(onScoreUpdate);
+    useEffect(() => {
+        onScoreUpdateRef.current = onScoreUpdate;
+    }, [onScoreUpdate]);
+
+    // ── Step 1: SINGLE subscription for ALL broadcast events ──────────────────
+    // This is the key fix: one channel, one subscription, all events handled.
 
     useEffect(() => {
         if (!gameCode) return;
@@ -160,23 +172,36 @@ export const useSupabaseBroadcast = ({
 
             onGameSnapshot: (payload) => {
                 setClock(payload.clock);
+                // Also forward score from snapshot if callback provided
+                if (onScoreUpdateRef.current && payload.score) {
+                    onScoreUpdateRef.current(payload.score);
+                }
+            },
+
+            // Forward score updates to the consumer component
+            onScoreUpdate: (payload) => {
+                if (onScoreUpdateRef.current) {
+                    onScoreUpdateRef.current({
+                        teamA: payload.teamA,
+                        teamB: payload.teamB,
+                        foulsA: payload.foulsA,
+                        foulsB: payload.foulsB,
+                        timeoutsA: payload.timeoutsA,
+                        timeoutsB: payload.timeoutsB,
+                        possession: payload.possession,
+                    });
+                }
             },
         });
 
-        subscribedRef.current = true;
-
-        return () => {
-            subscribedRef.current = false;
-            unsub();
-        };
+        return unsub;
     }, [gameCode, periodDuration, shotClockDuration]);
 
-    // ── Step 2: Host only — run the 100ms interval (matches useRTDBTimer exactly) ──
+    // ── Step 2: Host only — 100ms interval (exact logic from useRTDBTimer) ────
 
     useEffect(() => {
         if (!isHost) return;
 
-        // Clear any existing interval
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
@@ -195,12 +220,9 @@ export const useSupabaseBroadcast = ({
                 return;
             }
 
-            // ── EXACT LOGIC FROM useRTDBTimer ──
-            // Calculate total tenths: (Minutes * 600) + (Seconds * 10) + Tenths
             let totalTenths = (c.minutes * 600) + (c.seconds * 10) + c.tenths;
 
             if (totalTenths <= 0) {
-                // Period ended
                 if (intervalRef.current) {
                     clearInterval(intervalRef.current);
                     intervalRef.current = null;
@@ -219,23 +241,19 @@ export const useSupabaseBroadcast = ({
                 return;
             }
 
-            // Decrement by 1 tenth
             totalTenths -= 1;
 
-            // Convert back to minutes, seconds, tenths
             const newMin = Math.floor(totalTenths / 600);
             const remainder = totalTenths % 600;
             const newSec = Math.floor(remainder / 10);
             const newTenths = remainder % 10;
 
-            // Shot clock: decrement once per SECOND, not per tick
-            // Detect second boundary: when tenths wraps from 0 to 9
+            // Shot clock: decrement once per SECOND (on second boundary)
             const secondBoundary = (newTenths === 9 && c.tenths === 0);
             const newShot = (c.shotClockRunning && secondBoundary)
                 ? Math.max(0, c.shotClock - 1)
                 : c.shotClock;
 
-            // Update local state
             setClock(prev => ({
                 ...prev,
                 minutes: newMin,
@@ -244,10 +262,9 @@ export const useSupabaseBroadcast = ({
                 shotClock: newShot,
             }));
 
-            // Broadcast to spectators
             broadcastClockTick(gameCode, newMin, newSec, newTenths, newShot);
 
-        }, 100); // 100ms for tenth-of-a-second precision
+        }, 100);
 
         return () => {
             if (intervalRef.current) {
@@ -257,7 +274,7 @@ export const useSupabaseBroadcast = ({
         };
     }, [isHost, gameCode, clock.gameRunning]);
 
-    // ── Step 3: Host only — periodic snapshot for late joiners ─────────────────
+    // ── Step 3: Host only — periodic snapshot ─────────────────────────────────
 
     useEffect(() => {
         if (!isHost || !gameCode) return;
@@ -280,7 +297,7 @@ export const useSupabaseBroadcast = ({
         };
     }, [isHost, gameCode]);
 
-    // ── Cleanup on unmount ────────────────────────────────────────────────────
+    // ── Cleanup ───────────────────────────────────────────────────────────────
 
     useEffect(() => {
         return () => {
@@ -294,7 +311,6 @@ export const useSupabaseBroadcast = ({
 
     const startClock = useCallback(() => {
         if (!isHost) return;
-
         const newState: BroadcastClockState = {
             ...clockRef.current,
             gameRunning: true,
@@ -302,19 +318,16 @@ export const useSupabaseBroadcast = ({
             startedAt: Date.now(),
             shotClockStartedAt: Date.now(),
         };
-
         setClock(newState);
         broadcastClockStart(gameCode, newState);
     }, [isHost, gameCode]);
 
     const stopClock = useCallback(() => {
         if (!isHost) return;
-
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
-
         const newState: BroadcastClockState = {
             ...clockRef.current,
             gameRunning: false,
@@ -322,29 +335,23 @@ export const useSupabaseBroadcast = ({
             startedAt: null,
             shotClockStartedAt: null,
         };
-
         setClock(newState);
         broadcastClockStop(gameCode, newState);
     }, [isHost, gameCode]);
 
     const toggleClock = useCallback(() => {
-        if (clockRef.current.gameRunning) {
-            stopClock();
-        } else {
-            startClock();
-        }
+        if (clockRef.current.gameRunning) stopClock();
+        else startClock();
     }, [startClock, stopClock]);
 
     const resetShotClock = useCallback((value: number) => {
         if (!isHost) return;
-
         setClock(prev => ({
             ...prev,
             shotClock: value,
             shotClockRunning: prev.gameRunning,
             shotClockStartedAt: prev.gameRunning ? Date.now() : null,
         }));
-
         broadcastShotClockReset(gameCode, value, clockRef.current.gameRunning);
     }, [isHost, gameCode]);
 
@@ -353,12 +360,10 @@ export const useSupabaseBroadcast = ({
 
     const nextPeriod = useCallback(() => {
         if (!isHost) return;
-
         if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }
-
         const newPeriod = clockRef.current.period + 1;
         const newState: BroadcastClockState = {
             gameRunning: false,
@@ -371,25 +376,20 @@ export const useSupabaseBroadcast = ({
             startedAt: null,
             shotClockStartedAt: null,
         };
-
         setClock(newState);
         broadcastPeriodChange(gameCode, newPeriod, newState);
     }, [isHost, gameCode, periodDuration, shotClockDuration]);
 
     const editClocks = useCallback((minutes: number, seconds: number, tenths: number, shotClock: number) => {
         if (!isHost) return;
-
         setClock(prev => ({
             ...prev,
             minutes, seconds, tenths, shotClock,
             startedAt: null,
             shotClockStartedAt: null,
         }));
-
         broadcastClockEdit(gameCode, minutes, seconds, tenths, shotClock);
     }, [isHost, gameCode]);
-
-    // ── Return ────────────────────────────────────────────────────────────────
 
     return {
         minutes: clock.minutes,
@@ -399,7 +399,6 @@ export const useSupabaseBroadcast = ({
         period: clock.period,
         gameRunning: clock.gameRunning,
         shotClockRunning: clock.shotClockRunning,
-
         startClock,
         stopClock,
         toggleClock,

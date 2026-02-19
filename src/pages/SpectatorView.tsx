@@ -10,7 +10,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToGame } from '../services/supabaseGameService';
 import { getLocalGame } from '../services/localGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
-import { subscribeToGameBroadcast, type BroadcastScoreState } from '../services/supabaseBroadcastService';
+import { type BroadcastScoreState } from '../hooks/useSupabaseBroadcast';
 import { BasketballGame } from '../types';
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
@@ -904,34 +904,15 @@ export const SpectatorView: React.FC = () => {
 
   const isLocalGame = gameCode?.startsWith('LOCAL-');
 
-  // RTDB clock — already existed
+  const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
+
   const rtdbTimer = useSupabaseBroadcast({
     gameCode: gameCode || '',
     isHost: false,
     periodDuration: game?.settings?.periodDuration || 10,
     shotClockDuration: game?.settings?.shotClockDuration || 24,
+    onScoreUpdate: (score) => setRtdbScore(score),
   });
-
-  // NEW: RTDB score subscription
-  const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
-
-  useEffect(() => {
-    if (isLocalGame || !gameCode) return;
-    const unsub = subscribeToGameBroadcast(gameCode, {
-      onScoreUpdate: (payload) => {
-        setRtdbScore({
-          teamA: payload.teamA,
-          teamB: payload.teamB,
-          foulsA: payload.foulsA,
-          foulsB: payload.foulsB,
-          timeoutsA: payload.timeoutsA,
-          timeoutsB: payload.timeoutsB,
-          possession: payload.possession,
-        });
-      },
-    });
-    return unsub;
-  }, [gameCode, isLocalGame]);
 
   // Firestore subscription (cold data — names, colors, rosters)
   useEffect(() => {

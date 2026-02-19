@@ -10,7 +10,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { subscribeToGame } from '../services/supabaseGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
-import { subscribeToGameBroadcast, type BroadcastScoreState } from '../services/supabaseBroadcastService';
+import { type BroadcastScoreState } from '../hooks/useSupabaseBroadcast';
 import type { BasketballGame } from '../types';
 
 // ─── INDIVIDUAL COURT CARD ────────────────────────────────────────────────────
@@ -28,33 +28,15 @@ const CourtCard = ({ gameCode }: { gameCode: string }) => {
         return unsub;
     }, [gameCode]);
 
-    // RTDB timer — already existed, unchanged
+    const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
+
     const timer = useSupabaseBroadcast({
         gameCode,
         isHost: false,
         periodDuration: game?.settings?.periodDuration ?? 10,
         shotClockDuration: game?.settings?.shotClockDuration ?? 24,
+        onScoreUpdate: (score) => setRtdbScore(score),
     });
-
-    // Broadcast score subscription — score, fouls, timeouts, possession
-    const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
-    useEffect(() => {
-        if (!gameCode) return;
-        const unsub = subscribeToGameBroadcast(gameCode, {
-            onScoreUpdate: (payload) => {
-                setRtdbScore({
-                    teamA: payload.teamA,
-                    teamB: payload.teamB,
-                    foulsA: payload.foulsA,
-                    foulsB: payload.foulsB,
-                    timeoutsA: payload.timeoutsA,
-                    timeoutsB: payload.timeoutsB,
-                    possession: payload.possession,
-                });
-            },
-        });
-        return unsub;
-    }, [gameCode]);
 
     if (!game) return <div className="bg-zinc-900/50 animate-pulse rounded-lg h-64"></div>;
 
