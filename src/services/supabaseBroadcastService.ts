@@ -4,11 +4,16 @@
 //
 // REPLACES: src/services/rtdbClockService.ts
 //
-// FIX: Channel must be SUBSCRIBED before send() works via WebSocket.
-// Without this, send() falls back to REST API (slow, one-way, no fanout).
+// ARCHITECTURE:
+//   - Single channel per game: game:{gameCode}
+//   - subscribeToGameBroadcast() registers .on() handlers then .subscribe()
+//   - All send functions wait for the channel to be subscribed
+//   - No duplicate channels, no race conditions
 
 import { supabase } from './supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+
+console.log('[DEBUG] supabaseBroadcastService loaded');
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,81 +47,55 @@ export interface BroadcastGameSnapshot {
 
 // ─── Channel Management ───────────────────────────────────────────────────────
 
+// Single source of truth: one channel per game, one ready promise per game
 const channelCache = new Map<string, RealtimeChannel>();
-const channelReady = new Map<string, Promise<RealtimeChannel>>();
+const channelReadyResolvers = new Map<string, {
+    promise: Promise<RealtimeChannel>;
+    resolve: (ch: RealtimeChannel) => void;
+}>();
 
 /**
- * Get or create a channel, and ensure it is SUBSCRIBED before returning.
- * This is the critical fix — send() only works via WebSocket after subscribe.
+ * Wait for the channel to be subscribed. 
+ * If subscribeToGameBroadcast hasn't been called yet, this creates the channel
+ * and subscribes it (without .on() handlers — host-only path).
+ * If subscribeToGameBroadcast was already called, this resolves immediately.
  */
-const getSubscribedChannel = (gameCode: string): Promise<RealtimeChannel> => {
+const waitForChannel = (gameCode: string): Promise<RealtimeChannel> => {
     const topic = `game:${gameCode}`;
 
-    // If we already have a ready promise, return it
-    if (channelReady.has(topic)) {
-        return channelReady.get(topic)!;
+    // Already have a ready promise? Return it.
+    if (channelReadyResolvers.has(topic)) {
+        return channelReadyResolvers.get(topic)!.promise;
     }
 
-    const promise = new Promise<RealtimeChannel>((resolve, reject) => {
-        let channel: RealtimeChannel;
-
-        if (channelCache.has(topic)) {
-            channel = channelCache.get(topic)!;
-            // Check if already subscribed
-            if ((channel as any).state === 'joined') {
-                resolve(channel);
-                return;
-            }
-        } else {
-            channel = supabase.channel(topic, {
-                config: {
-                    broadcast: {
-                        self: true,
-                        ack: false,
-                    },
-                },
-            });
-            channelCache.set(topic, channel);
-        }
-
-        // Subscribe and wait for confirmation
-        channel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                console.log(`[Broadcast] Channel subscribed: ${topic}`);
-                resolve(channel);
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                console.error(`[Broadcast] Channel error: ${topic} — ${status}`);
-                reject(new Error(`Channel ${status}`));
-            }
-        });
+    // No one has set up this channel yet (host sending before subscribe).
+    // Create channel, subscribe, and resolve when ready.
+    let resolveReady: (ch: RealtimeChannel) => void;
+    const promise = new Promise<RealtimeChannel>((resolve) => {
+        resolveReady = resolve;
     });
+    channelReadyResolvers.set(topic, { promise, resolve: resolveReady! });
 
-    channelReady.set(topic, promise);
-    return promise;
-};
-
-/**
- * Get or create a channel WITHOUT waiting for subscription.
- * Used by subscribeToGameBroadcast to register .on() handlers BEFORE subscribing.
- */
-const getOrCreateChannel = (gameCode: string): RealtimeChannel => {
-    const topic = `game:${gameCode}`;
-
+    let channel: RealtimeChannel;
     if (channelCache.has(topic)) {
-        return channelCache.get(topic)!;
+        channel = channelCache.get(topic)!;
+    } else {
+        channel = supabase.channel(topic, {
+            config: { broadcast: { self: true, ack: false } },
+        });
+        channelCache.set(topic, channel);
     }
 
-    const channel = supabase.channel(topic, {
-        config: {
-            broadcast: {
-                self: true,
-                ack: false,
-            },
-        },
+    channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+            console.log(`[Broadcast] Channel ready (send path): ${topic}`);
+            resolveReady(channel);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.error(`[Broadcast] Channel failed: ${topic} — ${status}`);
+        }
     });
 
-    channelCache.set(topic, channel);
-    return channel;
+    return promise;
 };
 
 /**
@@ -129,12 +108,11 @@ export const removeGameChannel = async (gameCode: string): Promise<void> => {
     if (channel) {
         await supabase.removeChannel(channel);
         channelCache.delete(topic);
-        channelReady.delete(topic);
+        channelReadyResolvers.delete(topic);
     }
 };
 
 // ─── Host-Side: Broadcasting (Write) ──────────────────────────────────────────
-// All send functions now await getSubscribedChannel() to ensure WebSocket is ready.
 
 export const broadcastClockTick = async (
     gameCode: string,
@@ -144,15 +122,13 @@ export const broadcastClockTick = async (
     shotClock: number
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'clock_tick',
             payload: { minutes, seconds, tenths, shotClock, ts: Date.now() },
         });
-    } catch (err) {
-        // Don't spam console for clock ticks
-    }
+    } catch (err) { /* silent for ticks */ }
 };
 
 export const broadcastClockStart = async (
@@ -160,7 +136,7 @@ export const broadcastClockStart = async (
     fullState: BroadcastClockState
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'clock_start',
@@ -176,7 +152,7 @@ export const broadcastClockStop = async (
     fullState: BroadcastClockState
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'clock_stop',
@@ -193,7 +169,7 @@ export const broadcastShotClockReset = async (
     gameRunning: boolean
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'shotclock_reset',
@@ -210,7 +186,7 @@ export const broadcastPeriodChange = async (
     fullState: BroadcastClockState
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'period_change',
@@ -229,14 +205,13 @@ export const broadcastClockEdit = async (
     shotClock: number
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'clock_edit',
             payload: {
                 minutes, seconds, tenths, shotClock,
-                startedAt: null,
-                shotClockStartedAt: null,
+                startedAt: null, shotClockStartedAt: null,
                 ts: Date.now(),
             },
         });
@@ -256,17 +231,14 @@ export const broadcastScoreUpdate = async (
     possession: 'A' | 'B'
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'score_update',
             payload: {
-                teamA: scoreA,
-                teamB: scoreB,
-                foulsA, foulsB,
-                timeoutsA, timeoutsB,
-                possession,
-                ts: Date.now(),
+                teamA: scoreA, teamB: scoreB,
+                foulsA, foulsB, timeoutsA, timeoutsB,
+                possession, ts: Date.now(),
             },
         });
     } catch (err) {
@@ -280,15 +252,13 @@ export const broadcastGameSnapshot = async (
     score: BroadcastScoreState
 ): Promise<void> => {
     try {
-        const channel = await getSubscribedChannel(gameCode);
+        const channel = await waitForChannel(gameCode);
         channel.send({
             type: 'broadcast',
             event: 'game_snapshot',
             payload: { clock, score, timestamp: Date.now() },
         });
-    } catch (err) {
-        // Silent — snapshot is best-effort
-    }
+    } catch (err) { /* silent — best effort */ }
 };
 
 // ─── Spectator-Side: Subscribing (Read) ───────────────────────────────────────
@@ -307,75 +277,73 @@ export interface GameBroadcastCallbacks {
 /**
  * Subscribe to all game broadcast events.
  * 
- * IMPORTANT: Register .on() handlers BEFORE calling .subscribe().
- * Then mark the channel as ready so send functions use WebSocket.
+ * KEY: .on() handlers are registered BEFORE .subscribe().
+ * The ready promise is set so send functions can use the same channel.
  */
 export const subscribeToGameBroadcast = (
     gameCode: string,
     callbacks: GameBroadcastCallbacks
 ): (() => void) => {
     const topic = `game:${gameCode}`;
-    const channel = getOrCreateChannel(gameCode);
 
-    // Register event listeners BEFORE subscribing
+    // Create or reuse channel
+    let channel: RealtimeChannel;
+    if (channelCache.has(topic)) {
+        channel = channelCache.get(topic)!;
+    } else {
+        channel = supabase.channel(topic, {
+            config: { broadcast: { self: true, ack: false } },
+        });
+        channelCache.set(topic, channel);
+    }
+
+    // Register ALL event handlers BEFORE subscribing
     if (callbacks.onClockTick) {
-        channel.on('broadcast', { event: 'clock_tick' }, ({ payload }) => {
-            callbacks.onClockTick!(payload);
-        });
+        channel.on('broadcast', { event: 'clock_tick' }, ({ payload }) => callbacks.onClockTick!(payload));
     }
-
     if (callbacks.onClockStart) {
-        channel.on('broadcast', { event: 'clock_start' }, ({ payload }) => {
-            callbacks.onClockStart!(payload);
-        });
+        channel.on('broadcast', { event: 'clock_start' }, ({ payload }) => callbacks.onClockStart!(payload));
     }
-
     if (callbacks.onClockStop) {
-        channel.on('broadcast', { event: 'clock_stop' }, ({ payload }) => {
-            callbacks.onClockStop!(payload);
-        });
+        channel.on('broadcast', { event: 'clock_stop' }, ({ payload }) => callbacks.onClockStop!(payload));
     }
-
     if (callbacks.onShotClockReset) {
-        channel.on('broadcast', { event: 'shotclock_reset' }, ({ payload }) => {
-            callbacks.onShotClockReset!(payload);
-        });
+        channel.on('broadcast', { event: 'shotclock_reset' }, ({ payload }) => callbacks.onShotClockReset!(payload));
     }
-
     if (callbacks.onPeriodChange) {
-        channel.on('broadcast', { event: 'period_change' }, ({ payload }) => {
-            callbacks.onPeriodChange!(payload);
-        });
+        channel.on('broadcast', { event: 'period_change' }, ({ payload }) => callbacks.onPeriodChange!(payload));
     }
-
     if (callbacks.onClockEdit) {
-        channel.on('broadcast', { event: 'clock_edit' }, ({ payload }) => {
-            callbacks.onClockEdit!(payload);
-        });
+        channel.on('broadcast', { event: 'clock_edit' }, ({ payload }) => callbacks.onClockEdit!(payload));
     }
-
     if (callbacks.onScoreUpdate) {
-        channel.on('broadcast', { event: 'score_update' }, ({ payload }) => {
-            callbacks.onScoreUpdate!(payload);
-        });
+        channel.on('broadcast', { event: 'score_update' }, ({ payload }) => callbacks.onScoreUpdate!(payload));
     }
-
     if (callbacks.onGameSnapshot) {
-        channel.on('broadcast', { event: 'game_snapshot' }, ({ payload }) => {
-            callbacks.onGameSnapshot!(payload);
-        });
+        channel.on('broadcast', { event: 'game_snapshot' }, ({ payload }) => callbacks.onGameSnapshot!(payload));
     }
 
-    // Subscribe and mark channel as ready for send()
+    // Set up the ready resolver BEFORE subscribing
+    // This way, if waitForChannel() is called later (by send functions in the same tab),
+    // it gets the same promise that resolves when THIS subscribe completes.
+    let resolveReady: (ch: RealtimeChannel) => void;
+    if (!channelReadyResolvers.has(topic)) {
+        const promise = new Promise<RealtimeChannel>((resolve) => {
+            resolveReady = resolve;
+        });
+        channelReadyResolvers.set(topic, { promise, resolve: resolveReady! });
+    } else {
+        resolveReady = channelReadyResolvers.get(topic)!.resolve;
+    }
+
+    // NOW subscribe — handlers are already registered
+    console.log('[DEBUG] About to subscribe channel:', topic, 'handlers registered:', Object.keys(callbacks).join(', '));
     channel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
             console.log(`[Broadcast] Subscribed to ${topic}`);
-            // Mark as ready so getSubscribedChannel() resolves immediately
-            if (!channelReady.has(topic)) {
-                channelReady.set(topic, Promise.resolve(channel));
-            }
+            resolveReady(channel);
         } else if (status === 'CHANNEL_ERROR') {
-            console.error(`[Broadcast] Channel error for ${topic}`);
+            console.error(`[Broadcast] Channel error: ${topic}`);
         }
     });
 
