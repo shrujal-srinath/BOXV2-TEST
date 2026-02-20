@@ -3,6 +3,8 @@
 // HYBRID ARCHITECTURE TYPES
 // Merges Tournament System + Live Game Engine (Firestore/RTDB)
 
+import type { SupportedSport } from './sports/registry';
+
 // ══════════════════════════════════════════════
 // 1. PLAYER
 // ══════════════════════════════════════════════
@@ -106,15 +108,7 @@ export interface BasketballGame {
 // ══════════════════════════════════════════════
 // 7. SPORT TYPES & TOURNAMENT CONFIGS
 // ══════════════════════════════════════════════
-export type SportType =
-  | 'basketball'
-  | 'badminton'
-  | 'volleyball'
-  | 'kabaddi'
-  | 'football'
-  | 'cricket'
-  | 'tabletennis'
-  | 'general';
+export type SportType = SupportedSport;
 
 export type TournamentFormat = 'random' | 'knockout' | 'league';
 export type GenderCategory = 'men' | 'women' | 'mixed';
