@@ -1,6 +1,6 @@
 // src/sports/registry.ts
-import { basketballManifest } from './basketball/manifest';
-import { SportManifest } from '../core/types/Manifest';
+import { basketballManifest } from './manifest';
+import { SportManifest } from '../../core/types/Manifest';
 
 // We cast it to `any` here strictly for the Dictionary mapping, 
 // because different sports have different Action/State types.

@@ -9,9 +9,7 @@
  * ✅ Better queue management
  */
 
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "./firebase";
-import type { BasketballGame } from "../types";
+import { Game, BaseGameState } from '../core/types/Game';
 
 // ============================================
 // CONSTANTS
@@ -32,7 +30,7 @@ export interface SaveResult {
 
 interface QueueItem {
   code: string;
-  data: BasketballGame;
+  data: unknown;
   timestamp: number;
   attempts: number;
 }
@@ -43,7 +41,7 @@ interface QueueItem {
 /**
  * Save action with automatic retry and error recovery
  */
-export const saveGameAction = async (gameData: BasketballGame): Promise<SaveResult> => {
+export const saveGameAction = async <TState extends BaseGameState, TRules>(gameData: Game<TState, TRules>): Promise<SaveResult> => {
   if (!gameData.code) {
     return { success: false, error: 'No game code provided' };
   }
@@ -55,7 +53,7 @@ export const saveGameAction = async (gameData: BasketballGame): Promise<SaveResu
     console.error('[HybridService] Local save failed:', e);
     return { success: false, error: 'Local storage full or unavailable' };
   }
-  
+
   // STEP 2: Add to sync queue
   addToSyncQueue(gameData);
 
@@ -64,7 +62,7 @@ export const saveGameAction = async (gameData: BasketballGame): Promise<SaveResu
     const result = await processSyncQueueWithRetry();
     return result;
   }
-  
+
   // Offline: Local save succeeded
   return { success: true, offline: true };
 };
@@ -75,7 +73,7 @@ export const saveGameAction = async (gameData: BasketballGame): Promise<SaveResu
 /**
  * Load game from local storage
  */
-export const loadLocalGame = (): BasketballGame | null => {
+export const loadLocalGame = <TState extends BaseGameState, TRules>(): Game<TState, TRules> | null => {
   try {
     const data = localStorage.getItem(LOCAL_STORAGE_KEY);
     return data ? JSON.parse(data) : null;
@@ -91,13 +89,13 @@ export const loadLocalGame = (): BasketballGame | null => {
 /**
  * Add game to sync queue
  */
-const addToSyncQueue = (gameData: BasketballGame): boolean => {
+const addToSyncQueue = <TState extends BaseGameState, TRules>(gameData: Game<TState, TRules>): boolean => {
   try {
     const queue = getSyncQueue();
-    
+
     // Check if game already in queue
     const existingIndex = queue.findIndex(item => item.code === gameData.code);
-    
+
     if (existingIndex !== -1) {
       // Update existing item (keep same attempt count)
       queue[existingIndex] = {
@@ -115,12 +113,12 @@ const addToSyncQueue = (gameData: BasketballGame): boolean => {
         attempts: 0
       });
     }
-    
+
     // Limit queue size to prevent memory issues
     if (queue.length > 50) {
       queue.shift();
     }
-    
+
     localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
     return true;
   } catch (e) {
@@ -173,30 +171,21 @@ const processSyncQueueWithRetry = async (): Promise<SaveResult> => {
   // Try to sync with retry
   for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
     try {
-      const gameRef = doc(db, "games", latestAction.code);
-      
-      // Sanitize data (remove undefined values)
-      const cleanData = JSON.parse(JSON.stringify(latestAction.data, (key, value) => {
-        return value === undefined ? null : value;
-      }));
-      
-      await setDoc(gameRef, cleanData, { merge: true });
-      
-      console.log(`[HybridService] ✅ Sync successful (attempt ${attempt + 1})`);
-      
-      // Clear queue on success
-      localStorage.setItem(SYNC_QUEUE_KEY, "[]");
-      
-      return { success: true };
-      
+      // TODO: Replace with Supabase upsert once hybridService is fully migrated
+      // const { error } = await supabase.from('games').upsert(cleanData);
+      const cleanData = JSON.parse(JSON.stringify(latestAction.data, (key, value) =>
+        value === undefined ? null : value
+      ));
+      console.log('[HybridService] Cloud sync not yet wired to Supabase. Data:', cleanData);
+      throw new Error('Cloud sync pending Supabase migration');
     } catch (err: any) {
       console.warn(`[HybridService] Sync attempt ${attempt + 1} failed:`, err);
-      
+
       // Update attempt count
       latestAction.attempts = attempt + 1;
       queue[queue.length - 1] = latestAction;
       saveSyncQueue(queue);
-      
+
       // If not last attempt, wait before retry
       if (attempt < MAX_RETRY_ATTEMPTS - 1) {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
@@ -206,9 +195,9 @@ const processSyncQueueWithRetry = async (): Promise<SaveResult> => {
 
   // All retries failed
   console.error('[HybridService] ❌ Sync failed after all retries');
-  return { 
-    success: false, 
-    error: 'Sync failed after retries. Data saved locally and will sync when connection improves.' 
+  return {
+    success: false,
+    error: 'Sync failed after retries. Data saved locally and will sync when connection improves.'
   };
 };
 
@@ -281,12 +270,12 @@ window.addEventListener('online', async () => {
   }
 
   console.log("[HybridService] 📡 Connection restored - attempting sync...");
-  
+
   // Wait a bit for connection to stabilize
   await new Promise(resolve => setTimeout(resolve, 1000));
-  
+
   const result = await processSyncQueue();
-  
+
   if (result.success) {
     console.log('[HybridService] ✅ Auto-sync complete');
   } else {
@@ -302,10 +291,10 @@ window.addEventListener('online', async () => {
  */
 setInterval(async () => {
   if (!isAutoSyncEnabled || !navigator.onLine) return;
-  
+
   const queue = getSyncQueue();
   if (queue.length === 0) return;
-  
+
   console.log('[HybridService] 🔄 Periodic sync check...');
   await processSyncQueue();
 }, 30000); // 30 seconds

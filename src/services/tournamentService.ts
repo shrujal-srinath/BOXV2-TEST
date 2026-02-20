@@ -1,18 +1,12 @@
 // src/services/tournamentService.ts
-import {
-    doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs,
-    onSnapshot, arrayUnion, deleteField, orderBy, writeBatch, runTransaction
-} from 'firebase/firestore';
-import { db, auth } from './firebase';
-import { initializeNewGame } from './gameService';
+import { supabase } from './supabase';
+import { initializeNewGame } from './supabaseGameService';
 import type { Tournament, DivisionConfig, TournamentFixture, SportType, GenderCategory, TournamentFormat } from '../types';
 
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-
 const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString();
-
 const generateId = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -20,19 +14,24 @@ const generateId = () => {
     return result;
 };
 
+const getCurrentUserId = async (): Promise<string> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Must be logged in");
+    return user.id;
+};
+
 // ============================================
 // CORE TOURNAMENT MANAGEMENT
 // ============================================
-
 export const createTournament = async (
     name: string,
     logoUrl: string,
     details: { organizer?: string; location?: string; startDate?: string; endDate?: string },
     sportConfig: { [key in SportType]?: { courts: number } }
 ): Promise<string> => {
-    if (!auth.currentUser) throw new Error("Must be logged in");
-
+    const userId = await getCurrentUserId();
     const id = generateId();
+
     const initialDivisions: { [key: string]: DivisionConfig } = {};
     const genders: GenderCategory[] = ['men', 'women'];
     const selectedSports = Object.keys(sportConfig) as SportType[];
@@ -40,145 +39,106 @@ export const createTournament = async (
     selectedSports.forEach(sport => {
         genders.forEach(gender => {
             const divId = `${sport}_${gender}`;
-            initialDivisions[divId] = {
-                id: divId,
-                sport,
-                gender,
-                isActive: false,
-                format: 'knockout',
-                status: 'setup_required'
-            };
+            initialDivisions[divId] = { id: divId, sport, gender, isActive: false, format: 'knockout', status: 'setup_required' };
         });
     });
 
     const newTournament: Tournament = {
-        id,
-        adminId: auth.currentUser.uid,
-        name,
-        logoUrl,
-        ...details,
-        scorerPin: generatePin(),
-        status: 'active',
-        sportConfig,
-        divisions: initialDivisions,
-        approvedScorers: [auth.currentUser.uid],
-        pendingRequests: {},
+        id, adminId: userId, name, logoUrl, ...details,
+        scorerPin: generatePin(), status: 'active', sportConfig,
+        divisions: initialDivisions, approvedScorers: [userId], pendingRequests: {},
         createdAt: Date.now()
     };
 
-    await setDoc(doc(db, 'tournaments', id), newTournament);
+    const { error } = await supabase.from('tournaments').insert(newTournament);
+    if (error) throw error;
     return id;
 };
 
 export const addTournamentSport = async (tournamentId: string, sport: SportType) => {
-    const batch = writeBatch(db);
-    const tRef = doc(db, 'tournaments', tournamentId);
+    const { data: tData, error: fetchErr } = await supabase.from('tournaments').select('*').eq('id', tournamentId).single();
+    if (fetchErr || !tData) throw fetchErr;
 
+    const tournament = tData as Tournament;
     ['men', 'women'].forEach(gender => {
         const divId = `${sport}_${gender}`;
-        const newDiv: DivisionConfig = {
-            id: divId,
-            sport,
-            gender: gender as GenderCategory,
-            isActive: false,
-            format: 'knockout',
-            status: 'setup_required'
-        };
-        batch.update(tRef, { [`divisions.${divId}`]: newDiv });
+        tournament.divisions[divId] = { id: divId, sport, gender: gender as GenderCategory, isActive: false, format: 'knockout', status: 'setup_required' };
     });
 
-    batch.update(tRef, { [`sportConfig.${sport}`]: { courts: 1 } });
-    await batch.commit();
+    tournament.sportConfig[sport] = { courts: 1 };
+    const { error } = await supabase.from('tournaments').update({ divisions: tournament.divisions, sportConfig: tournament.sportConfig }).eq('id', tournamentId);
+    if (error) throw error;
 };
 
 export const removeDivision = async (tournamentId: string, divisionId: string) => {
-    const tRef = doc(db, 'tournaments', tournamentId);
-    await updateDoc(tRef, { [`divisions.${divisionId}`]: deleteField() });
+    const { data: tData } = await supabase.from('tournaments').select('divisions').eq('id', tournamentId).single();
+    if (!tData) return;
+    const divisions = tData.divisions;
+    delete divisions[divisionId];
+    await supabase.from('tournaments').update({ divisions }).eq('id', tournamentId);
 };
 
 // ============================================
 // LIFECYCLE MANAGEMENT
 // ============================================
+export const activateDivision = async (tournamentId: string, divisionId: string, config: { format: TournamentFormat; bracketSize: number }) => {
+    const { data: tData } = await supabase.from('tournaments').select('divisions').eq('id', tournamentId).single();
+    if (!tData) return;
 
-export const activateDivision = async (
-    tournamentId: string,
-    divisionId: string,
-    config: { format: TournamentFormat; bracketSize: number }
-) => {
-    const batch = writeBatch(db);
-    const tRef = doc(db, 'tournaments', tournamentId);
-
-    batch.update(tRef, {
-        [`divisions.${divisionId}.isActive`]: true,
-        [`divisions.${divisionId}.status`]: 'draft',
-        [`divisions.${divisionId}.format`]: config.format,
-        [`divisions.${divisionId}.bracketSize`]: config.bracketSize
-    });
+    const divisions = tData.divisions;
+    divisions[divisionId] = { ...divisions[divisionId], isActive: true, status: 'draft', format: config.format, bracketSize: config.bracketSize };
+    await supabase.from('tournaments').update({ divisions }).eq('id', tournamentId);
 
     if (config.format === 'knockout') {
         const [sport, gender] = divisionId.split('_');
-        generateBracketSlots(tournamentId, divisionId, sport as SportType, gender as GenderCategory, config.bracketSize, batch);
+        const fixtures = generateBracketSlotsArray(tournamentId, divisionId, sport as SportType, gender as GenderCategory, config.bracketSize);
+        if (fixtures.length > 0) {
+            const { error } = await supabase.from('tournament_fixtures').insert(fixtures);
+            if (error) throw error;
+        }
     }
-
-    await batch.commit();
 };
 
 export const publishDivision = async (tournamentId: string, divisionId: string) => {
-    const tRef = doc(db, 'tournaments', tournamentId);
-    await updateDoc(tRef, { [`divisions.${divisionId}.status`]: 'published' });
+    const { data: tData } = await supabase.from('tournaments').select('divisions').eq('id', tournamentId).single();
+    if (!tData) return;
+    tData.divisions[divisionId].status = 'published';
+    await supabase.from('tournaments').update({ divisions: tData.divisions }).eq('id', tournamentId);
 };
 
 export const unpublishDivision = async (tournamentId: string, divisionId: string) => {
-    const tRef = doc(db, 'tournaments', tournamentId);
-    await updateDoc(tRef, { [`divisions.${divisionId}.status`]: 'draft' });
+    const { data: tData } = await supabase.from('tournaments').select('divisions').eq('id', tournamentId).single();
+    if (!tData) return;
+    tData.divisions[divisionId].status = 'draft';
+    await supabase.from('tournaments').update({ divisions: tData.divisions }).eq('id', tournamentId);
 };
 
 // ============================================
-// BRACKET GENERATION (Standard Seeding)
+// BRACKET GENERATION
 // ============================================
-
 const getByeIndices = (totalMatches: number, numByes: number): Set<number> => {
     const indices = new Set<number>();
-    const priorityList = [];
-
-    // Standard Seeding Pattern: Top, Bottom, Mid-Top, Mid-Bottom
-    priorityList.push(0);
-    priorityList.push(totalMatches - 1);
-
-    if (totalMatches > 2) {
-        priorityList.push(Math.floor(totalMatches / 2) - 1);
-        priorityList.push(Math.floor(totalMatches / 2));
-    }
-
-    // Fill remaining
-    for (let i = 0; i < totalMatches; i++) {
-        if (!priorityList.includes(i)) priorityList.push(i);
-    }
-
-    for (let i = 0; i < numByes; i++) {
-        if (i < priorityList.length) indices.add(priorityList[i]);
-    }
+    const priorityList = [0, totalMatches - 1];
+    if (totalMatches > 2) { priorityList.push(Math.floor(totalMatches / 2) - 1, Math.floor(totalMatches / 2)); }
+    for (let i = 0; i < totalMatches; i++) { if (!priorityList.includes(i)) priorityList.push(i); }
+    for (let i = 0; i < numByes; i++) { if (i < priorityList.length) indices.add(priorityList[i]); }
     return indices;
 };
 
-const generateBracketSlots = (tId: string, divId: string, sport: SportType, gender: GenderCategory, teamCount: number, batch: any) => {
+const generateBracketSlotsArray = (tId: string, divId: string, sport: SportType, gender: GenderCategory, teamCount: number): TournamentFixture[] => {
+    const fixtures: TournamentFixture[] = [];
     const bracketSize = Math.pow(2, Math.ceil(Math.log2(teamCount)));
     const totalRounds = Math.log2(bracketSize);
     const numByes = bracketSize - teamCount;
     const round1Matches = bracketSize / 2;
-
     const byeIndices = getByeIndices(round1Matches, numByes);
-
     const getMatchId = (r: number, m: number) => `match_${divId}_${r}_${m}`;
 
     for (let round = 1; round <= totalRounds; round++) {
         const matchesInRound = bracketSize / Math.pow(2, round);
-
         for (let matchIdx = 0; matchIdx < matchesInRound; matchIdx++) {
             const matchId = getMatchId(round, matchIdx);
-
-            let nextMatchId = null;
-            let bracketParent = null;
+            let nextMatchId = null, bracketParent = null;
 
             if (round < totalRounds) {
                 const nextMatchIdx = Math.floor(matchIdx / 2);
@@ -187,65 +147,37 @@ const generateBracketSlots = (tId: string, divId: string, sport: SportType, gend
             }
 
             const isByeMatch = round === 1 && byeIndices.has(matchIdx);
-
             const fixture: TournamentFixture = {
-                id: matchId,
-                tournamentId: tId,
-                divisionId: divId,
-                sport,
-                gender,
-                teamA: 'TBD',
-                teamB: isByeMatch ? 'BYE' : 'TBD',
-                court: 'Unassigned',
-                time: 'Pending',
-                // Auto-complete byes so they look correct visually
-                status: isByeMatch ? 'completed' : 'scheduled',
-                round,
-                matchNumber: matchIdx,
-                nextMatchId,
-                bracketParent: bracketParent as 'A' | 'B',
-                isBye: isByeMatch
+                id: matchId, tournamentId: tId, divisionId: divId, sport, gender,
+                teamA: 'TBD', teamB: isByeMatch ? 'BYE' : 'TBD',
+                court: 'Unassigned', time: 'Pending', status: isByeMatch ? 'completed' : 'scheduled',
+                round, matchNumber: matchIdx, nextMatchId, bracketParent: bracketParent as 'A' | 'B', isBye: isByeMatch
             };
-
             if (isByeMatch) fixture.winnerSide = 'A';
-
-            batch.set(doc(db, `tournaments/${tId}/fixtures`, matchId), fixture);
+            fixtures.push(fixture);
         }
     }
+    return fixtures;
 };
 
 // ============================================
-// FIXTURE MANAGEMENT (WITH PROPAGATION FIX)
+// FIXTURE MANAGEMENT
 // ============================================
-
 export const updateFixtureData = async (tournamentId: string, fixtureId: string, data: Partial<TournamentFixture>) => {
-    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId);
-
     try {
-        const snap = await getDoc(fixtureRef);
-        if (!snap.exists()) return;
-        const currentFixture = snap.data() as TournamentFixture;
+        const { data: currentFixture, error: fetchErr } = await supabase.from('tournament_fixtures').select('*').eq('id', fixtureId).single();
+        if (fetchErr || !currentFixture) return;
 
-        // 1. Perform the update
-        await updateDoc(fixtureRef, data);
+        await supabase.from('tournament_fixtures').update(data).eq('id', fixtureId);
 
-        // 2. PROPAGATION LOGIC (CRITICAL RESTORATION)
-        // If this match is already finished (e.g. Bye), and we change a name, 
-        // we MUST update the next match.
         if (currentFixture.status === 'completed' && currentFixture.nextMatchId && currentFixture.winnerSide) {
-
             const newTeamA = data.teamA !== undefined ? data.teamA : currentFixture.teamA;
             const newTeamB = data.teamB !== undefined ? data.teamB : currentFixture.teamB;
-
             const winnerName = currentFixture.winnerSide === 'A' ? newTeamA : newTeamB;
 
-            // Only propagate if the winner name is valid (not TBD)
             if (winnerName && winnerName !== 'TBD') {
-                const nextRef = doc(db, `tournaments/${tournamentId}/fixtures`, currentFixture.nextMatchId);
                 const fieldToUpdate = currentFixture.bracketParent === 'A' ? { teamA: winnerName } : { teamB: winnerName };
-
-                await updateDoc(nextRef, fieldToUpdate);
-                console.log(`Propagated update: ${winnerName} -> Match ${currentFixture.nextMatchId}`);
+                await supabase.from('tournament_fixtures').update(fieldToUpdate).eq('id', currentFixture.nextMatchId);
             }
         }
     } catch (error) {
@@ -255,254 +187,125 @@ export const updateFixtureData = async (tournamentId: string, fixtureId: string,
 };
 
 export const checkSchedulingConflict = async (tournamentId: string, court: string, time: string, date: string, excludeFixtureId?: string): Promise<TournamentFixture | null> => {
-    const q = query(
-        collection(db, `tournaments/${tournamentId}/fixtures`),
-        where('court', '==', court),
-        where('time', '==', time)
+    let query = supabase.from('tournament_fixtures').select('*').eq('tournamentId', tournamentId).eq('court', court).eq('time', time).neq('status', 'completed').is('isBye', false);
+    if (excludeFixtureId) query = query.neq('id', excludeFixtureId);
+    const { data } = await query.limit(1);
+    return data && data.length > 0 ? (data[0] as TournamentFixture) : null;
+};
+
+// ============================================
+// GAME STARTING
+// ============================================
+export const startTournamentMatch = async (tournamentId: string, fixtureId: string, fixtureData: TournamentFixture, court: string = fixtureData.court || 'Court 1'): Promise<string> => {
+    const userId = await getCurrentUserId();
+
+    const { data: updatedFixture, error: lockErr } = await supabase
+        .from('tournament_fixtures').update({ status: 'live', court: court, scorerId: userId, actualStartTime: Date.now() })
+        .eq('id', fixtureId).neq('status', 'live').select().single();
+
+    if (lockErr || !updatedFixture) throw new Error('This match has already been started by another scorer or could not be found.');
+
+    const newGameCode = await initializeNewGame(
+        { gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`, periodDuration: 10, shotClockDuration: 24, periodType: 'quarter', courtNumber: court, tournamentId: tournamentId, sport: fixtureData.sport },
+        { name: fixtureData.teamA, color: '#DC2626', players: [], score: 0, timeouts: 2, timeoutsFirstHalf: 2, timeoutsSecondHalf: 3, fouls: 0, foulsThisQuarter: 0 },
+        { name: fixtureData.teamB, color: '#2563EB', players: [], score: 0, timeouts: 2, timeoutsFirstHalf: 2, timeoutsSecondHalf: 3, fouls: 0, foulsThisQuarter: 0 },
+        false, fixtureData.sport, userId
     );
 
-    const snapshot = await getDocs(q);
-    const conflicts = snapshot.docs
-        .map(d => d.data() as TournamentFixture)
-        .filter(f => f.id !== excludeFixtureId && f.status !== 'completed' && !f.isBye);
-
-    return conflicts.length > 0 ? conflicts[0] : null;
+    await supabase.from('tournament_fixtures').update({ gameCode: newGameCode }).eq('id', fixtureId);
+    return newGameCode;
 };
 
-// ============================================
-// GAME STARTING (YOUR NEW LOGIC)
-// ============================================
-
-export const startTournamentMatch = async (
-    tournamentId: string,
-    fixtureId: string,
-    fixtureData: TournamentFixture,
-    court: string = fixtureData.court || 'Court 1'
-): Promise<string> => {
-    if (!auth.currentUser) throw new Error("Authentication required");
-
-    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixtureId);
-
-    try {
-        // Use Firestore transaction for optimistic locking
-        await runTransaction(db, async (transaction) => {
-            const fixtureSnap = await transaction.get(fixtureRef);
-            if (!fixtureSnap.exists()) throw new Error('Fixture not found');
-
-            const currentFixture = fixtureSnap.data() as TournamentFixture;
-            if (currentFixture.status === 'live') {
-                throw new Error('This match has already been started by another scorer');
-            }
-
-            transaction.update(fixtureRef, {
-                status: 'live',
-                court: court,
-                scorerId: auth.currentUser!.uid,
-                actualStartTime: Date.now()
-            });
-        });
-
-        // Create the game
-        const newGameCode = await initializeNewGame(
-            {
-                gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`,
-                periodDuration: 10,
-                shotClockDuration: 24,
-                periodType: 'quarter',
-                courtNumber: court,
-                tournamentId: tournamentId,
-                sport: fixtureData.sport
-            },
-            {
-                name: fixtureData.teamA,
-                color: '#DC2626',
-                players: [],
-                score: 0,
-                timeouts: 2,
-                timeoutsFirstHalf: 2,
-                timeoutsSecondHalf: 3,
-                fouls: 0,
-                foulsThisQuarter: 0
-            },
-            {
-                name: fixtureData.teamB,
-                color: '#2563EB',
-                players: [],
-                score: 0,
-                timeouts: 2,
-                timeoutsFirstHalf: 2,
-                timeoutsSecondHalf: 3,
-                fouls: 0,
-                foulsThisQuarter: 0
-            },
-            false,
-            fixtureData.sport,
-            auth.currentUser!.uid
-        );
-
-        await updateDoc(fixtureRef, { gameCode: newGameCode });
-        return newGameCode;
-
-    } catch (error: any) {
-        console.error('❌ Failed to start match:', error);
-        throw error;
-    }
-};
-
-// ============================================
-// BRACKET ADVANCEMENT
-// ============================================
-
-export const advanceBracketWinner = async (
-    tournamentId: string,
-    fixture: TournamentFixture,
-    winnerSide: 'A' | 'B',
-    finalScore?: { teamA: number; teamB: number }
-) => {
-    // 1. Safety Check for Next Match
-    if (fixture.nextMatchId) {
-        const nextRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.nextMatchId);
-        const nextSnap = await getDoc(nextRef);
-        if (!nextSnap.exists()) {
-            console.error("Next match not found via advancement.");
-            // We still complete the current match, but warn logic is broken
-        }
-    }
-
-    const fixtureRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.id);
-
-    // 2. Update current fixture
-    await updateDoc(fixtureRef, {
-        status: 'completed',
-        winnerSide: winnerSide,
-        finalScore: finalScore || { teamA: 0, teamB: 0 },
-        actualEndTime: Date.now()
-    });
-
-    // 3. Advance to next round
+export const advanceBracketWinner = async (tournamentId: string, fixture: TournamentFixture, winnerSide: 'A' | 'B', finalScore?: { teamA: number; teamB: number }) => {
+    await supabase.from('tournament_fixtures').update({ status: 'completed', winnerSide: winnerSide, finalScore: finalScore || { teamA: 0, teamB: 0 }, actualEndTime: Date.now() }).eq('id', fixture.id);
     if (fixture.nextMatchId) {
         const winnerName = winnerSide === 'A' ? fixture.teamA : fixture.teamB;
-        const nextMatchRef = doc(db, `tournaments/${tournamentId}/fixtures`, fixture.nextMatchId);
-
-        const updateField = fixture.bracketParent === 'A'
-            ? { teamA: winnerName }
-            : { teamB: winnerName };
-
-        await updateDoc(nextMatchRef, updateField);
+        const updateField = fixture.bracketParent === 'A' ? { teamA: winnerName } : { teamB: winnerName };
+        await supabase.from('tournament_fixtures').update(updateField).eq('id', fixture.nextMatchId);
     }
 };
 
 // ============================================
-// SUBSCRIPTIONS & OTHERS
+// SUBSCRIPTIONS
 // ============================================
-
 export const subscribeToTournament = (id: string, callback: (data: Tournament | null) => void) => {
-    return onSnapshot(doc(db, 'tournaments', id), (doc) => {
-        callback(doc.exists() ? (doc.data() as Tournament) : null);
-    });
+    const fetchIt = async () => { const { data } = await supabase.from('tournaments').select('*').eq('id', id).single(); callback(data ? (data as Tournament) : null); };
+    fetchIt();
+    const channel = supabase.channel(`tournaments_${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments', filter: `id=eq.${id}` }, fetchIt).subscribe();
+    return () => { supabase.removeChannel(channel); };
 };
 
 export const subscribeToFixtures = (tournamentId: string, divisionId: string | null, callback: (data: TournamentFixture[]) => void) => {
-    let q;
-    if (divisionId) {
-        q = query(
-            collection(db, `tournaments/${tournamentId}/fixtures`),
-            where('divisionId', '==', divisionId),
-            orderBy('id', 'asc')
-        );
-    } else {
-        q = query(
-            collection(db, `tournaments/${tournamentId}/fixtures`),
-            orderBy('time', 'asc')
-        );
-    }
-    return onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(d => d.data() as TournamentFixture));
-    });
+    const fetchIt = async () => {
+        let q = supabase.from('tournament_fixtures').select('*').eq('tournamentId', tournamentId);
+        if (divisionId) q = q.eq('divisionId', divisionId).order('id', { ascending: true });
+        else q = q.order('time', { ascending: true });
+        const { data } = await q;
+        if (data) callback(data as TournamentFixture[]);
+    };
+    fetchIt();
+    const channel = supabase.channel(`fixtures_${tournamentId}_${divisionId || 'all'}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tournament_fixtures', filter: `tournamentId=eq.${tournamentId}` }, fetchIt).subscribe();
+    return () => { supabase.removeChannel(channel); };
 };
 
 export const checkCourtAvailability = async (tournamentId: string, court: string): Promise<boolean> => {
     try {
-        const gamesQuery = query(collection(db, 'games'), where('settings.tournamentId', '==', tournamentId), where('settings.courtNumber', '==', court), where('status', '==', 'live'));
-        const snapshot = await getDocs(gamesQuery);
-        return snapshot.empty;
-    } catch (error) {
-        return false;
-    }
+        const { count } = await supabase.from('games').select('*', { count: 'exact', head: true }).eq('status', 'live').contains('settings', { tournamentId: tournamentId, courtNumber: court });
+        return count === 0;
+    } catch (error) { return false; }
 };
 
 export const subscribeToMyTournaments = (userId: string, callback: (data: Tournament[]) => void) => {
-    const q = query(collection(db, 'tournaments'), where('adminId', '==', userId));
-    return onSnapshot(q, (snapshot) => callback(snapshot.docs.map(d => d.data() as Tournament)));
+    const fetchIt = async () => { const { data } = await supabase.from('tournaments').select('*').eq('adminId', userId); if (data) callback(data as Tournament[]); };
+    fetchIt();
+    const channel = supabase.channel(`my_tournaments_${userId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments', filter: `adminId=eq.${userId}` }, fetchIt).subscribe();
+    return () => { supabase.removeChannel(channel); };
 };
 
 export const subscribeToJoinedTournaments = (userId: string, callback: (data: Tournament[]) => void) => {
-    const q = query(collection(db, 'tournaments'), where('approvedScorers', 'array-contains', userId));
-    return onSnapshot(q, (snapshot) => {
-        // 1. Get all tournaments where I am a scorer
-        const allTournaments = snapshot.docs.map(d => d.data() as Tournament);
-
-        // 2. Filter out tournaments where I am ALSO the admin (to avoid duplicates in UI)
-        const filtered = allTournaments.filter(t => t.adminId !== userId);
-
-        // 3. Update state
-        callback(filtered);
-    });
+    const fetchIt = async () => {
+        const { data } = await supabase.from('tournaments').select('*').contains('approvedScorers', [userId]).neq('adminId', userId);
+        if (data) callback(data as Tournament[]);
+    };
+    fetchIt();
+    const channel = supabase.channel(`joined_tournaments_${userId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, fetchIt).subscribe();
+    return () => { supabase.removeChannel(channel); };
 };
 
-/**
- * SUBSCRIBE TO PUBLIC TOURNAMENTS (NEW)
- */
 export const subscribeToPublicTournaments = (callback: (data: Tournament[]) => void) => {
-    const q = query(collection(db, 'tournaments'), where('status', '==', 'active'));
-    return onSnapshot(q, (snapshot) => callback(snapshot.docs.map(d => d.data() as Tournament)));
+    const fetchIt = async () => { const { data } = await supabase.from('tournaments').select('*').eq('status', 'active'); if (data) callback(data as Tournament[]); };
+    fetchIt();
+    const channel = supabase.channel(`public_tournaments`).on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments', filter: `status=eq.active` }, fetchIt).subscribe();
+    return () => { supabase.removeChannel(channel); };
 };
 
-// ============================================
-// VOLUNTEER ACCESS FLOW (UPDATED)
-// ============================================
-
-/**
- * 1. Verify code and get basic info (Name, Sports) to populate the Modal
- */
 export const getTournamentPublicInfo = async (tournamentId: string): Promise<Tournament | null> => {
-    try {
-        const tRef = doc(db, 'tournaments', tournamentId);
-        const snap = await getDoc(tRef);
-        if (snap.exists()) {
-            return snap.data() as Tournament;
-        }
-        return null;
-    } catch (error) {
-        console.error("Error fetching tournament info:", error);
-        return null;
-    }
+    const { data } = await supabase.from('tournaments').select('*').eq('id', tournamentId).single();
+    return data ? (data as Tournament) : null;
 };
 
-/**
- * 2. Submit the detailed request
- */
 export const joinTournament = async (tournamentId: string): Promise<void> => {
-    if (!auth.currentUser) throw new Error("Must be logged in");
-    const tRef = doc(db, 'tournaments', tournamentId);
-    const snap = await getDoc(tRef);
-    if (!snap.exists()) throw new Error("Invalid Tournament Code");
-    const user = auth.currentUser;
-    await updateDoc(tRef, {
-        [`pendingRequests.${user.uid}`]: {
-            displayName: user.displayName || 'Volunteer',
-            email: user.email,
-            timestamp: Date.now(),
-            status: 'pending'
-        }
-    });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Must be logged in");
+
+    const { data: tData, error: fetchErr } = await supabase.from('tournaments').select('pendingRequests').eq('id', tournamentId).single();
+    if (fetchErr || !tData) throw new Error("Invalid Tournament Code");
+
+    const pendingRequests = tData.pendingRequests || {};
+    pendingRequests[user.id] = { displayName: user.user_metadata?.full_name || 'Volunteer', email: user.email, timestamp: Date.now(), status: 'pending' };
+    await supabase.from('tournaments').update({ pendingRequests }).eq('id', tournamentId);
 };
 
 export const handleRequest = async (tournamentId: string, userId: string, action: 'approve' | 'reject') => {
-    const tRef = doc(db, 'tournaments', tournamentId);
+    const { data: tData } = await supabase.from('tournaments').select('pendingRequests, approvedScorers').eq('id', tournamentId).single();
+    if (!tData) return;
+    const pendingRequests = tData.pendingRequests;
+    let approvedScorers = tData.approvedScorers || [];
+
     if (action === 'approve') {
-        await updateDoc(tRef, { approvedScorers: arrayUnion(userId), [`pendingRequests.${userId}.status`]: 'approved' });
-    } else {
-        await updateDoc(tRef, { [`pendingRequests.${userId}`]: deleteField() });
-    }
+        if (!approvedScorers.includes(userId)) approvedScorers.push(userId);
+        if (pendingRequests[userId]) pendingRequests[userId].status = 'approved';
+    } else { delete pendingRequests[userId]; }
+
+    await supabase.from('tournaments').update({ pendingRequests, approvedScorers }).eq('id', tournamentId);
 };
