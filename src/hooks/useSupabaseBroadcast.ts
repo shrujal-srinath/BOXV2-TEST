@@ -1,6 +1,7 @@
 // src/hooks/useSupabaseBroadcast.ts
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useClockSync } from './useClockSync';
 import {
     subscribeToGameBroadcast,
     broadcastClockTick,
@@ -64,6 +65,8 @@ export const useSupabaseBroadcast = ({
 
     const clockRef = useRef<BroadcastClockState>(clock);
     useEffect(() => { clockRef.current = clock; }, [clock]);
+
+    const { getSyncedNow } = useClockSync();
 
     // Use refs for settings to avoid re-triggering the subscription effect
     const periodDurationRef = useRef(periodDuration);
@@ -144,7 +147,15 @@ export const useSupabaseBroadcast = ({
                 return;
             }
 
-            let totalTenths = (c.minutes * 600) + (c.seconds * 10) + c.tenths;
+            // Use synced time to calculate exact elapsed tenths since clock started.
+            // This corrects for slow hardware that may fire setInterval late.
+            const now = getSyncedNow();
+            const elapsedMs = c.startedAt ? now - c.startedAt : 0;
+            const elapsedTenths = Math.floor(elapsedMs / 100);
+
+            // Reference total at clock-start, minus elapsed
+            const startTotalTenths = (c.minutes * 600) + (c.seconds * 10) + c.tenths;
+            let totalTenths = Math.max(0, startTotalTenths - elapsedTenths);
 
             if (totalTenths <= 0) {
                 if (intervalRef.current) clearInterval(intervalRef.current);
@@ -153,7 +164,6 @@ export const useSupabaseBroadcast = ({
                 return;
             }
 
-            totalTenths -= 1;
             const newMin = Math.floor(totalTenths / 600);
             const remainder = totalTenths % 600;
             const newSec = Math.floor(remainder / 10);
@@ -170,7 +180,7 @@ export const useSupabaseBroadcast = ({
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
-    }, [isHost, gameCode, clock.gameRunning]);
+    }, [isHost, gameCode, clock.gameRunning, getSyncedNow]);
 
     // ── Step 3: Host Snapshot ─────────────────────────────────────────────────
 
@@ -188,10 +198,11 @@ export const useSupabaseBroadcast = ({
 
     const startClock = useCallback(() => {
         if (!isHost) return;
-        const newState: BroadcastClockState = { ...clockRef.current, gameRunning: true, shotClockRunning: true, startedAt: Date.now(), shotClockStartedAt: Date.now() };
+        const now = getSyncedNow(); // Server-corrected timestamp
+        const newState: BroadcastClockState = { ...clockRef.current, gameRunning: true, shotClockRunning: true, startedAt: now, shotClockStartedAt: now };
         setClock(newState);
         broadcastClockStart(gameCode, newState);
-    }, [isHost, gameCode]);
+    }, [isHost, gameCode, getSyncedNow]);
 
     const stopClock = useCallback(() => {
         if (!isHost) return;

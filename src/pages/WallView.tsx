@@ -1,118 +1,71 @@
 // src/pages/WallView.tsx
-//
-// CHANGES (data layer only, zero UI changes):
-//  1. CourtCard: replaced one-time getGameByCode() Firestore fetch with
-//     subscribeToGame() so team names/colors stay live (already existed in gameService)
-//  2. CourtCard: added subscribeToRTDBScore() so score, fouls, and possession
-//     update at <10ms instead of waiting for Firestore snapshot
-
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { subscribeToGame } from '../services/supabaseGameService';
-import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
-import { type BroadcastScoreState } from '../hooks/useSupabaseBroadcast';
-import type { BasketballGame } from '../types';
+import { SPORT_REGISTRY, isSportSupported } from '../sports/registry';
+import { Game } from '../core/types/Game';
 
-// ─── INDIVIDUAL COURT CARD ────────────────────────────────────────────────────
+// ─── DYNAMIC COURT CARD ──────────────────────────────────────────────────────
 
-const CourtCard = ({ gameCode }: { gameCode: string }) => {
-    const [game, setGame] = useState<BasketballGame | null>(null);
+const DynamicCourtCard = ({ gameCode }: { gameCode: string }) => {
+    const [game, setGame] = useState<Game<any, any> | null>(null);
 
-    // CHANGED: subscribeToGame (live) instead of getGameByCode (one-time fetch)
-    // Keeps team names and colors fresh if host updates them mid-game
+    // 1. Live subscription to the database row
     useEffect(() => {
         if (!gameCode) return;
         const unsub = subscribeToGame(gameCode, (data) => {
-            if (data) setGame(data);
+            // Mapping incoming database row to our generic Game type
+            if (data) setGame(data as unknown as Game<any, any>);
         });
         return unsub;
     }, [gameCode]);
 
-    const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
-
-    const timer = useSupabaseBroadcast({
-        gameCode,
-        isHost: false,
-        periodDuration: game?.settings?.periodDuration ?? 10,
-        shotClockDuration: game?.settings?.shotClockDuration ?? 24,
-        onScoreUpdate: (score) => setRtdbScore(score),
-    });
-
     if (!game) return <div className="bg-zinc-900/50 animate-pulse rounded-lg h-64"></div>;
 
-    // Derive display values: prefer RTDB score when available, fall back to Firestore
-    const scoreA = rtdbScore != null ? rtdbScore.teamA : game.teamA.score;
-    const scoreB = rtdbScore != null ? rtdbScore.teamB : game.teamB.score;
-    const foulsA = rtdbScore != null ? rtdbScore.foulsA : game.teamA.fouls;
-    const foulsB = rtdbScore != null ? rtdbScore.foulsB : game.teamB.fouls;
+    // 2. Identify the sport and find its manifest
+    if (!isSportSupported(game.sportId)) {
+        return (
+            <div className="bg-zinc-900 border border-red-900/50 p-4 rounded-lg h-64 flex items-center justify-center text-red-500 text-xs text-center">
+                UNSUPPORTED SPORT: {game.sportId}
+            </div>
+        );
+    }
 
-    // Tenths logic: show if under 1 minute
-    const showTenths = timer.minutes === 0 && timer.tenths !== undefined;
-    const timeString = showTenths
-        ? `${timer.seconds}.${timer.tenths}`
-        : `${timer.minutes}:${timer.seconds.toString().padStart(2, '0')}`;
+    const manifest = SPORT_REGISTRY[game.sportId];
+    const WallCard = manifest.components.WallCard;
 
+    // 3. Render the Sport-Specific Wall Display
     return (
         <div className="bg-black border border-zinc-800 rounded-lg overflow-hidden flex flex-col shadow-2xl relative group">
-            {/* HEADER: Period & Time */}
-            <div className="bg-zinc-900/80 p-4 flex justify-between items-center border-b border-zinc-800">
-                <div className="flex items-center gap-2">
-                    <span className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Period</span>
-                    <span className="text-yellow-500 font-mono font-bold text-xl">{timer.period}</span>
-                </div>
-                <div className={`font-mono font-black text-3xl tracking-tight ${timer.minutes === 0 ? 'text-red-500' : 'text-white'}`}>
-                    {timeString}
-                </div>
-                {/* Active Indicator */}
-                <div className={`w-3 h-3 rounded-full ${timer.gameRunning ? 'bg-green-500 animate-pulse' : 'bg-red-900'}`}></div>
+            {/* Wrapper to maintain consistent card styling around diverse sport UIs */}
+            <div className="p-1">
+                <WallCard state={game.state} />
             </div>
 
-            {/* TEAMS */}
-            <div className="flex-1 flex items-center justify-between p-6">
-                {/* TEAM A */}
-                <div className="text-center w-1/3">
-                    <h3 className="text-white font-black italic text-2xl uppercase leading-none mb-2">{game.teamA.name}</h3>
-                    <div className="text-6xl font-black text-white" style={{ textShadow: `0 0 30px ${game.teamA.color}` }}>
-                        {scoreA}
-                    </div>
-                </div>
-
-                <div className="text-zinc-700 font-black text-xl">VS</div>
-
-                {/* TEAM B */}
-                <div className="text-center w-1/3">
-                    <h3 className="text-white font-black italic text-2xl uppercase leading-none mb-2">{game.teamB.name}</h3>
-                    <div className="text-6xl font-black text-white" style={{ textShadow: `0 0 30px ${game.teamB.color}` }}>
-                        {scoreB}
-                    </div>
-                </div>
-            </div>
-
-            {/* FOOTER: Shot Clock & Fouls */}
-            <div className="bg-zinc-950 p-3 flex justify-between items-center text-xs font-mono text-zinc-500 border-t border-zinc-900">
-                <div>Fouls: <span className="text-white">{foulsA}</span> - <span className="text-white">{foulsB}</span></div>
-                <div className="flex items-center gap-2">
-                    <span>SC:</span>
-                    <span className={`text-xl font-bold ${timer.shotClock < 5 ? 'text-red-500' : 'text-yellow-500'}`}>
-                        {timer.shotClock}
-                    </span>
+            {/* Universal Overlay: Team Names (Reliable metadata) */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                    <span>{game.teamA.name}</span>
+                    <span>VS</span>
+                    <span>{game.teamB.name}</span>
                 </div>
             </div>
         </div>
     );
 };
 
-// ─── WALL VIEW ────────────────────────────────────────────────────────────────
+// ─── MULTI-SPORT WALL VIEW ───────────────────────────────────────────────────
 
 export const WallView: React.FC = () => {
     const [searchParams] = useSearchParams();
-    // e.g., ?games=CODE1,CODE2,CODE3
     const gameCodes = searchParams.get('games')?.split(',').filter(Boolean) || [];
 
     if (gameCodes.length === 0) {
         return (
-            <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-mono text-sm">
-                NO GAMES CONFIGURED. ADD ?games=CODE1,CODE2 TO URL.
+            <div className="min-h-screen bg-black flex flex-col items-center justify-center text-zinc-500 font-mono text-sm gap-4">
+                <div className="text-zinc-700 text-4xl font-black italic uppercase">Box Arena</div>
+                <div className="animate-pulse">WAITING FOR COURT CONFIGURATION...</div>
+                <div className="text-xs text-zinc-600 mt-4">Add ?games=CODE1,CODE2 to the URL</div>
             </div>
         );
     }
@@ -123,14 +76,16 @@ export const WallView: React.FC = () => {
                 <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">
                     Arena <span className="text-red-600">Wall</span>
                 </h1>
-                <div className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
-                    Live Feeds: {gameCodes.length}
+                <div className="flex flex-col items-end">
+                    <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Live Streams</div>
+                    <div className="text-white font-mono text-xl leading-none">{gameCodes.length}</div>
                 </div>
             </header>
 
+            {/* Masonry-style Grid for mixed sport cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {gameCodes.map(code => (
-                    <CourtCard key={code} gameCode={code} />
+                    <DynamicCourtCard key={code} gameCode={code} />
                 ))}
             </div>
         </div>
