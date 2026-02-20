@@ -11,12 +11,14 @@
 //   [FIX-5] handleResetShot uses timer.resetShotClock24() / timer.resetShotClock14()
 //   [FIX-6] FIBA: foul + timeout now call timer.stopClock() when clock is running
 //   [FIX-7] Loading guard: game.hostId === 'loading' instead of !game
+//   [HARDWARE] Added useHardwareSignaling to allow ESP32 to drive the engine
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useBasketballGame } from '../hooks/useBasketballGame';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { deleteGame } from '../services/supabaseGameService';
+import { useHardwareSignaling } from '../hooks/useHardwareSignaling'; // <-- NEW
 import type { Player } from '../types';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -50,7 +52,6 @@ const getPeriodName = (p: number) => p <= 4 ? `Q${p}` : `OT${p - 4}`;
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const HostConsole: React.FC = () => {
-    // [FIX-1] Route is /host/:gameCode — param name must match exactly
     const { gameCode } = useParams<{ gameCode: string }>();
     const navigate = useNavigate();
 
@@ -65,7 +66,6 @@ export const HostConsole: React.FC = () => {
         value: number;
     } | null>(null);
 
-    // [FIX-2] Cold data: scores, fouls, possession, rosters — Firestore
     const {
         game,
         updateScore,
@@ -74,14 +74,40 @@ export const HostConsole: React.FC = () => {
         togglePossession,
     } = useBasketballGame(gameCode || '', 'online');
 
-    // [FIX-3] Hot data: clock, shot clock, period — RTDB
-    // isHost:true means this instance drives the clock and writes ticks to RTDB.
-    // All spectators/wall/arena displays receive those ticks at <10ms.
     const timer = useSupabaseBroadcast({
         gameCode: gameCode || '',
         isHost: true,
         periodDuration: game?.settings?.periodDuration ?? 10,
         shotClockDuration: game?.settings?.shotClockDuration ?? 24,
+    });
+
+    // ── ESP32 HARDWARE LISTENER ──────────────────────────────────────────────
+    useHardwareSignaling(gameCode || '', (signal) => {
+        switch (signal.action) {
+            case 'ADD_SCORE_A':
+                updateScore('A', 1);
+                recordAction({ type: 'score', team: 'A', value: 1, timestamp: Date.now() });
+                break;
+            case 'ADD_SCORE_B':
+                updateScore('B', 1);
+                recordAction({ type: 'score', team: 'B', value: 1, timestamp: Date.now() });
+                break;
+            case 'SUB_SCORE_A':
+                updateScore('A', -1);
+                break;
+            case 'SUB_SCORE_B':
+                updateScore('B', -1);
+                break;
+            case 'TOGGLE_CLOCK':
+                timer.toggleClock();
+                break;
+            case 'RESET_CLOCK':
+                timer.resetShotClock24();
+                break;
+            case 'NEXT_PERIOD':
+                timer.nextPeriod();
+                break;
+        }
     });
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -126,7 +152,6 @@ export const HostConsole: React.FC = () => {
         if (type === 'points') updateScore(team, value);
         else if (type === 'foul') {
             updateFouls(team, 1);
-            // FIBA: clock stops on foul
             if (timer.gameRunning) timer.stopClock();
         }
 
@@ -150,7 +175,6 @@ export const HostConsole: React.FC = () => {
         setPendingAction(null);
     };
 
-    // [FIX-6] FIBA: timeout stops clock
     const handleTimeout = (e: React.MouseEvent | null, team: 'A' | 'B') => {
         e?.stopPropagation();
         recordAction({ type: 'timeout', team, value: -1, timestamp: Date.now() });
@@ -158,7 +182,6 @@ export const HostConsole: React.FC = () => {
         if (timer.gameRunning) timer.stopClock();
     };
 
-    // [FIX-5] Shot clock via RTDB
     const handleResetShot = (e: React.MouseEvent | null, val: number) => {
         e?.stopPropagation();
         if (val === 14) timer.resetShotClock14();
@@ -237,7 +260,6 @@ export const HostConsole: React.FC = () => {
         }
     };
 
-    // [FIX-7] Loading guard — hostId:'loading' is the initial default state
     if (!game || game.hostId === 'loading') {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
@@ -364,7 +386,6 @@ export const HostConsole: React.FC = () => {
                         <div className="col-span-4 flex flex-col gap-4 relative z-20">
                             <div className="flex-1 bg-black border-2 border-zinc-800 rounded-2xl flex flex-col items-center justify-center relative shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
                                 <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.4em] mb-2 z-10">Game Time</div>
-                                {/* [FIX-3] timer.minutes / timer.seconds replace game.gameState.gameTime.* */}
                                 <div className={`relative z-10 flex items-baseline gap-1 transition-colors duration-300 ${timer.gameRunning ? 'text-white' : 'text-zinc-400'}`}>
                                     <span className="text-[6rem] lg:text-[8.5rem] font-mono font-bold leading-none tracking-tight tabular-nums drop-shadow-xl">
                                         {formatTime(timer.minutes)}:{formatTime(timer.seconds)}
@@ -375,12 +396,10 @@ export const HostConsole: React.FC = () => {
                             <div className="h-40 grid grid-cols-2 gap-4">
                                 <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl flex flex-col items-center justify-center backdrop-blur-sm">
                                     <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Period</span>
-                                    {/* [FIX-3] timer.period replaces game.gameState.period */}
                                     <span className="text-6xl font-black italic text-white">{getPeriodName(timer.period)}</span>
                                 </div>
                                 <div className="bg-black border-2 border-zinc-800 rounded-xl flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
                                     <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1 relative z-10">Shot Clock</span>
-                                    {/* [FIX-3] timer.shotClock replaces game.gameState.shotClock */}
                                     <span className={`text-7xl font-mono font-bold leading-none relative z-10 tabular-nums ${timer.shotClock <= 5 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
                                         {timer.shotClock}
                                     </span>
@@ -458,8 +477,8 @@ export const HostConsole: React.FC = () => {
                                 <button
                                     onClick={handleTimerToggle}
                                     className={`flex-1 rounded border-2 transition-all flex flex-col items-center justify-center active:scale-95 shadow-lg ${timer.gameRunning
-                                            ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
-                                            : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
+                                        ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
+                                        : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
                                         }`}
                                 >
                                     <span className="text-2xl font-black uppercase italic tracking-wider">

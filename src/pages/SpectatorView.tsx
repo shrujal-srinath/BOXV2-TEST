@@ -12,6 +12,7 @@ import { getLocalGame } from '../services/localGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { type BroadcastScoreState } from '../hooks/useSupabaseBroadcast';
 import { BasketballGame } from '../types';
+import { SPORT_REGISTRY, isSportSupported } from '../sports/registry';
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
 
@@ -987,6 +988,19 @@ export const SpectatorView: React.FC = () => {
 
   if (loading) return (<><GlobalStyles /><LoadingScreen /></>);
   if (error || !activeGame) return (<><GlobalStyles /><ErrorScreen message={error || 'Game unavailable'} /></>);
+
+  // --- BEGIN MULTI-SPORT INTERCEPTOR ---
+  const currentSport = (activeGame as any).sportId || (activeGame as any).sport || 'basketball';
+
+  if (currentSport !== 'basketball' && isSportSupported(currentSport)) {
+    const DynamicSportView = SPORT_REGISTRY[currentSport].components.SpectatorView;
+    return (
+      <div style={{ width: '100vw', height: '100vh', background: '#000000', overflow: 'hidden' }}>
+        <DynamicSportView state={(activeGame as any).state || (activeGame as any).gameState} />
+      </div>
+    );
+  }
+  // --- END MULTI-SPORT INTERCEPTOR ---
 
   return (
     <>

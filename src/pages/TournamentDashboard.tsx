@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logoutUser, subscribeToAuth } from '../services/authService';
 import { subscribeToMyTournaments, subscribeToJoinedTournaments, joinTournament } from '../services/tournamentService';
-import type { User } from 'firebase/auth';
+import type { User } from '@supabase/supabase-js';
 import type { Tournament } from '../types';
 
 // ─── Sport Icons ──────────────────────────────────────────────
@@ -297,11 +297,11 @@ export const TournamentDashboard: React.FC = () => {
         const unsubAuth = subscribeToAuth((u) => {
             setUser(u);
             if (u) {
-                unsubMy = subscribeToMyTournaments(u.uid, (data) => {
+                unsubMy = subscribeToMyTournaments(u.id, (data) => {
                     setMyTournaments(data);
                     setLoading(false);
                 });
-                unsubJoined = subscribeToJoinedTournaments(u.uid, (data) => {
+                unsubJoined = subscribeToJoinedTournaments(u.id, (data) => {
                     setJoinedTournaments(data);
                 });
             } else {
@@ -418,15 +418,15 @@ export const TournamentDashboard: React.FC = () => {
                     <div className="hidden md:flex items-center gap-3 absolute left-1/2 -translate-x-1/2">
                         <div className="relative">
                             <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 overflow-hidden flex items-center justify-center text-xs font-bold">
-                                {user?.photoURL
-                                    ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                                    : <span>{user?.displayName?.[0]?.toUpperCase() || 'U'}</span>}
+                                {user?.user_metadata?.avatar_url
+                                    ? <img src={user.user_metadata.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                                    : <span>{user?.user_metadata?.full_name?.[0]?.toUpperCase() || 'U'}</span>}
                             </div>
                             <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-black rounded-full" />
                         </div>
                         <div>
                             <div className="text-[9px] font-bold text-yellow-500 uppercase tracking-widest">Tournament Mode</div>
-                            <div className="text-white font-bold text-xs">{user?.displayName || 'Operator'}</div>
+                            <div className="text-white font-bold text-xs">{user?.user_metadata?.full_name || 'Operator'}</div>
                         </div>
                     </div>
 
@@ -653,12 +653,12 @@ export const TournamentDashboard: React.FC = () => {
                         {user && (
                             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-zinc-900 mb-2">
                                 <div className="w-8 h-8 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center text-xs font-bold border border-zinc-700">
-                                    {user.photoURL
-                                        ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                                        : user.displayName?.[0]?.toUpperCase() || 'U'}
+                                    {user.user_metadata?.avatar_url
+                                        ? <img src={user.user_metadata.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                                        : user.user_metadata?.full_name?.[0]?.toUpperCase() || 'U'}
                                 </div>
                                 <div>
-                                    <div className="text-white font-bold text-xs">{user.displayName}</div>
+                                    <div className="text-white font-bold text-xs">{user.user_metadata?.full_name}</div>
                                     <div className="text-[9px] text-zinc-500 truncate max-w-[160px]">{user.email}</div>
                                 </div>
                             </div>
