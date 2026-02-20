@@ -19,5 +19,13 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      "no-restricted-imports": ["error", {
+        "patterns": [{
+          "group": ["../sports/*", "./sports/*"],
+          "message": "Do not import sports directly! Import from src/sports/registry.ts only."
+        }]
+      }]
+    },
   },
 ])
