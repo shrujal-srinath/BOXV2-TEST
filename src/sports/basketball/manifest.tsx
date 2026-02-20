@@ -98,19 +98,20 @@ const normalizeResult = (state: BasketballState, rules: BasketballRules): Normal
 // 4. PLACEHOLDER COMPONENTS (To be replaced with your real UI)
 // ══════════════════════════════════════════════
 const TabletController: React.FC<SportComponentProps<BasketballState, BasketballAction>> = ({ state, dispatch }) => (
-    <div className= "p-4 bg-gray-900 text-white" >
-    <h2>Basketball Controller</h2>
-        < div className = "flex gap-4" >
-            <button onClick={ () => dispatch({ type: 'ADD_POINTS', team: 'A', amount: 1 }) }> Team A + 1 </button>
-                < button onClick = {() => dispatch({ type: 'ADD_POINTS', team: 'B', amount: 1 })}> Team B + 1 </button>
-                    </div>
-                    < p > Score: { state.scoreA } - { state.scoreB } </p>
-                        </div>
+    <div className="p-4 bg-gray-900 text-white">
+        <h2>Basketball Controller</h2>
+        <div className="flex gap-4">
+            <button onClick={() => dispatch({ type: 'ADD_POINTS', team: 'A', amount: 1 })}>Team A +1</button>
+            <button onClick={() => dispatch({ type: 'ADD_POINTS', team: 'B', amount: 1 })}>Team B +1</button>
+        </div>
+        <p>Score: {state.scoreA} - {state.scoreB}</p>
+    </div>
 );
 
+
 const WallCard: React.FC<WallCardProps<BasketballState>> = ({ state }) => (
-    <div className= "p-8 text-6xl font-bold text-center" >
-    { state.scoreA } - { state.scoreB }
+    <div className="p-8 text-6xl font-bold text-center">
+        {state.scoreA} - {state.scoreB}
     </div>
 );
 

@@ -1,7 +1,7 @@
 // src/pages/EngineDemo.tsx
 import React, { useState } from 'react';
 import { useGameEngine } from '../core/engine/useGameEngine';
-import { SPORT_REGISTRY } from '../sports/basketball/registry';
+import { SPORT_REGISTRY } from '../sports/registry';
 import { Game } from '../core/types/Game';
 
 export default function EngineDemo() {
