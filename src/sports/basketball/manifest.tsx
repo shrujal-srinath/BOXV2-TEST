@@ -110,8 +110,33 @@ const TabletController: React.FC<SportComponentProps<BasketballState, Basketball
 
 
 const WallCard: React.FC<WallCardProps<BasketballState>> = ({ state }) => (
-    <div className="p-8 text-6xl font-bold text-center">
-        {state.scoreA} - {state.scoreB}
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-8 font-sans">
+        <div className="w-full max-w-5xl grid grid-cols-[1fr_auto_1fr] gap-12 items-center px-8">
+            {/* Team A */}
+            <div className="flex flex-col items-center">
+                <div className="text-3xl font-black uppercase tracking-tight text-red-500 mb-4">HOME</div>
+                <div className="text-[14rem] font-bold leading-none font-mono text-white drop-shadow-[0_0_25px_rgba(220,38,38,0.4)]">
+                    {state.scoreA}
+                </div>
+            </div>
+            {/* Center */}
+            <div className="flex flex-col items-center gap-6">
+                <div className="bg-zinc-900 px-6 py-2 rounded-full border border-zinc-700 text-zinc-400 font-bold tracking-widest text-xl">
+                    {state.period <= 4 ? `Q${state.period}` : `OT${state.period - 4}`}
+                </div>
+                <div className={`text-8xl font-mono font-bold tabular-nums ${state.shotClock <= 5 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
+                    {state.shotClock}
+                </div>
+                <div className="text-xs text-zinc-600 uppercase tracking-widest">Shot Clock</div>
+            </div>
+            {/* Team B */}
+            <div className="flex flex-col items-center">
+                <div className="text-3xl font-black uppercase tracking-tight text-blue-500 mb-4">AWAY</div>
+                <div className="text-[14rem] font-bold leading-none font-mono text-white drop-shadow-[0_0_25px_rgba(37,99,235,0.4)]">
+                    {state.scoreB}
+                </div>
+            </div>
+        </div>
     </div>
 );
 

@@ -10,6 +10,7 @@
  */
 
 import { Game, BaseGameState } from '../core/types/Game';
+import { supabase } from './supabase';
 
 // ============================================
 // CONSTANTS
@@ -171,13 +172,31 @@ const processSyncQueueWithRetry = async (): Promise<SaveResult> => {
   // Try to sync with retry
   for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
     try {
-      // TODO: Replace with Supabase upsert once hybridService is fully migrated
-      // const { error } = await supabase.from('games').upsert(cleanData);
       const cleanData = JSON.parse(JSON.stringify(latestAction.data, (key, value) =>
         value === undefined ? null : value
       ));
-      console.log('[HybridService] Cloud sync not yet wired to Supabase. Data:', cleanData);
-      throw new Error('Cloud sync pending Supabase migration');
+
+      const { error } = await supabase.from('games').upsert({
+        id: cleanData.id,
+        code: cleanData.code,
+        hostId: cleanData.hostId,
+        sportId: cleanData.sportId || 'basketball',
+        status: cleanData.status,
+        gameType: cleanData.gameType || 'online',
+        rules: cleanData.rules,
+        state: cleanData.state,
+        teamA: cleanData.teamA,
+        teamB: cleanData.teamB,
+        lastUpdate: Date.now()
+      }, { onConflict: 'code' });
+
+      if (error) throw error;
+      console.log('[HybridService] Cloud sync successful for:', cleanData.code);
+
+      // Clear this item from queue on success
+      queue.splice(queue.length - 1, 1);
+      saveSyncQueue(queue);
+      return { success: true };
     } catch (err: any) {
       console.warn(`[HybridService] Sync attempt ${attempt + 1} failed:`, err);
 
