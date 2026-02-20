@@ -5,7 +5,7 @@ import type { BasketballGame, Tournament } from '../types';
 import { logoutUser, subscribeToAuth } from '../services/authService';
 import { subscribeToLiveGames, deleteGame } from '../services/supabaseGameService';
 import { subscribeToPublicTournaments } from '../services/tournamentService';
-import type { User } from 'firebase/auth';
+import type { User } from '@supabase/supabase-js';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { ConnectControllerModal } from '../components/ConnectControllerModal';
@@ -41,7 +41,7 @@ export const Dashboard: React.FC = () => {
   const { isInstalled, prompt, triggerInstall } = usePWAInstall();
 
   // --- DERIVED STATE ---
-  const myGames = user ? allGames.filter(g => g.hostId === user.uid) : [];
+  const myGames = user ? allGames.filter(g => g.hostId === user.id) : [];
   const liveFeed = allGames;
 
   // --- RESET EXPANSION ON TAB CHANGE ---
@@ -259,8 +259,8 @@ export const Dashboard: React.FC = () => {
               <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">Organizer: <span className="text-zinc-500">{t.organizer || 'Unknown'}</span></div>
 
               <div className="flex gap-2 mt-auto">
-                <button onClick={() => navigate(t.adminId === user?.uid ? `/tournament/${t.id}/manage` : `/tournament`)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors border border-zinc-700">
-                  {t.adminId === user?.uid ? 'Manage' : 'View Details'}
+                <button onClick={() => navigate(t.adminId === user?.id ? `/tournament/${t.id}/manage` : `/tournament`)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors border border-zinc-700">
+                  {t.adminId === user?.id ? 'Manage' : 'View Details'}
                 </button>
               </div>
             </div>
@@ -296,12 +296,12 @@ export const Dashboard: React.FC = () => {
         <button onClick={() => setActiveModal('profile')} className="flex items-center gap-4 group hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all">
           <div className="relative">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black italic text-sm shadow-lg overflow-hidden border-2 ${user ? 'border-red-600 bg-zinc-800' : 'border-zinc-600 bg-zinc-800'}`}>
-              {user?.photoURL ? <img src={user.photoURL} alt="User" className="w-full h-full object-cover" /> : <span className="text-zinc-400">{user ? user.displayName?.[0] || 'U' : 'G'}</span>}
+              {user?.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} alt="User" className="w-full h-full object-cover" /> : <span className="text-zinc-400">{user ? (user.user_metadata?.full_name?.[0] || 'U') : 'G'}</span>}
             </div>
             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-black rounded-full animate-pulse"></div>
           </div>
           <div className="text-left text-white font-bold text-sm">
-            {user ? (user.displayName || 'Operator') : 'Guest User'}
+            {user ? (user.user_metadata?.full_name || 'Operator') : 'Guest User'}
           </div>
         </button>
 
@@ -463,7 +463,7 @@ export const Dashboard: React.FC = () => {
       {/* Modals */}
       {activeModal === 'connect_controller' && user && (
         <ConnectControllerModal
-          userId={user.uid}
+          userId={user.id}
           onClose={() => setActiveModal(null)}
           onSuccess={(code) => {
             setControllerLinked(true);

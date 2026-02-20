@@ -13,7 +13,7 @@ import {
     publishDivision,
     unpublishDivision
 } from '../services/tournamentService';
-import { auth } from '../services/authService';
+import { supabase } from '../services/supabase';
 import { BracketEditor } from '../components/BracketEditor';
 import type { Tournament, TournamentFixture, GenderCategory, SportType, DivisionConfig } from '../types';
 
@@ -508,6 +508,10 @@ export const TournamentManager: React.FC = () => {
     const [customTeamCount, setCustomTeamCount] = useState<number>(8);
     const [showAddSportModal, setShowAddSportModal] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
+    }, []);
 
     useEffect(() => {
         if (!id) return;
@@ -560,7 +564,7 @@ export const TournamentManager: React.FC = () => {
         }
     };
 
-    const isAdmin = auth.currentUser?.uid === tournament?.adminId;
+    const isAdmin = currentUserId === tournament?.adminId;
     const divisionsList = tournament?.divisions ? Object.values(tournament.divisions) : [];
     const filteredDivisions = divisionsList.filter(d => d.gender === activeGender);
     const currentDivision = selectedDivisionId && tournament?.divisions ? tournament.divisions[selectedDivisionId] : null;

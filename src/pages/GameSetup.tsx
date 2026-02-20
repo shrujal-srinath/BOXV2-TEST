@@ -7,7 +7,7 @@ import { SplashScreen } from '../components/SplashScreen';
 import { useHardwareBridge } from '../hooks/useHardwareBridge';
 import { activateGameOnDevice, HW_SESSION_KEY } from '../services/handheldService';
 import type { Player } from '../types';
-import type { User } from 'firebase/auth';
+import type { User } from '@supabase/supabase-js';
 
 const TEAM_COLORS = [
   '#DC2626', '#2563EB', '#16A34A', '#F59E0B', '#FFFFFF', '#9333EA', '#EA580C', '#000000',
@@ -181,7 +181,7 @@ export const GameSetup: React.FC = () => {
         { name: teamBName || "TEAM B", color: teamBColor, players: trackStats ? rosterB : [] },
         trackStats,
         sportType,
-        currentUser.uid
+        currentUser.id
       );
 
       setLaunchedGameCode(gameCode);
