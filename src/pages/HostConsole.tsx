@@ -15,9 +15,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useBasketballGame } from '../hooks/useBasketballGame';
+import { useGameEngine } from '../core/engine/useGameEngine';
+import { SPORT_REGISTRY } from '../sports/registry';
+import { deleteGame, subscribeToGame } from '../services/supabaseGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
-import { deleteGame } from '../services/supabaseGameService';
+
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling'; // <-- NEW
 import type { Player } from '../types';
 
@@ -66,13 +68,34 @@ export const HostConsole: React.FC = () => {
         value: number;
     } | null>(null);
 
-    const {
-        game,
-        updateScore,
-        updateFouls,
-        updateTimeouts,
-        togglePossession,
-    } = useBasketballGame(gameCode || '', 'online');
+    // --- 1. LIVE DB FETCH ---
+    const [dbGame, setDbGame] = useState<any>(null);
+    useEffect(() => {
+        if (!gameCode) return;
+        return subscribeToGame(gameCode, (data) => { if (data) setDbGame(data); });
+    }, [gameCode]);
+
+    // --- 2. ENGINE SWAP ---
+    const manifest = SPORT_REGISTRY['basketball'];
+    const { state, dispatch } = useGameEngine(
+        gameCode || '',
+        dbGame || { rules: manifest.rules, state: manifest.createInitialState(manifest.rules) },
+        manifest,
+        true
+    );
+
+    // --- 3. THE UI FACADE (Protects all HTML below) ---
+    const game = dbGame ? {
+        ...dbGame,
+        teamA: { ...dbGame.teamA, score: state.scoreA, fouls: state.foulsA, timeouts: state.timeoutsA },
+        teamB: { ...dbGame.teamB, score: state.scoreB, fouls: state.foulsB, timeouts: state.timeoutsB },
+        gameState: { possession: state.possession }
+    } : null;
+
+    const updateScore = (team: 'A' | 'B', value: number) => dispatch({ type: 'ADD_POINTS', team, amount: value });
+    const updateFouls = (team: 'A' | 'B', _value: number) => dispatch({ type: 'ADD_FOUL', team });
+    const updateTimeouts = (team: 'A' | 'B', _value: number) => dispatch({ type: 'USE_TIMEOUT', team });
+    const togglePossession = () => { };
 
     const timer = useSupabaseBroadcast({
         gameCode: gameCode || '',
