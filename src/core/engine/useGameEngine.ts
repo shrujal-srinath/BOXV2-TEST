@@ -1,13 +1,15 @@
 // src/core/engine/useGameEngine.ts
 import { useReducer, useCallback, useEffect, useState } from 'react';
 import { SportManifest } from '../types/Manifest';
-import { Game } from '../types/Game';
+// ✅ IMPORT BaseGameState here
+import { Game, BaseGameState } from '../types/Game';
 
 // We will connect these to your actual services in the next phase
 // import { saveGameAction } from '../../services/hybridService'; 
 // import { useSupabaseBroadcast } from '../../hooks/useSupabaseBroadcast';
 
-export function useGameEngine<TState, TAction, TRules>(
+// ✅ ADD 'extends BaseGameState' to TState
+export function useGameEngine<TState extends BaseGameState, TAction, TRules>(
     gameId: string,
     initialGame: Game<TState, TRules>,
     manifest: SportManifest<TState, TAction, TRules>,
