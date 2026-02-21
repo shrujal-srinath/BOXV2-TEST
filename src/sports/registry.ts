@@ -1,5 +1,6 @@
 // src/sports/registry.ts
 import { basketballManifest } from './basketball/manifest';
+import { badmintonManifest } from './badminton/manifest';
 import { SportManifest } from '../core/types/Manifest';
 
 // We cast it to `any` here strictly for the Dictionary mapping, 
@@ -7,7 +8,7 @@ import { SportManifest } from '../core/types/Manifest';
 // The `useGameEngine` hook safely infers the types back out.
 export const SPORT_REGISTRY: Record<string, SportManifest<any, any, any>> = {
     basketball: basketballManifest,
-    // badminton: badmintonManifest, // (Coming soon!)
+    badminton: badmintonManifest,
 };
 
 // Strongly typed list of supported sport IDs
