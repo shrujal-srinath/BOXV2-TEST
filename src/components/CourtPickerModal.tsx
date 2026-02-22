@@ -3,8 +3,7 @@
 // Zero risk - Isolated new component
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { supabase } from '../services/supabase';
 import type { BasketballGame } from '../types';
 
 interface Props {
@@ -27,23 +26,16 @@ export const CourtPickerModal: React.FC<Props> = ({ tournamentId, onSelect, onCa
 
     const checkOccupiedCourts = async () => {
         try {
-            // Query all live games in this tournament
-            const gamesQuery = query(
-                collection(db, 'games'),
-                where('settings.tournamentId', '==', tournamentId),
-                where('status', '==', 'live')
-            );
+            const { data, error } = await supabase.from('games').select('data').eq('status', 'live');
+            if (error) throw error;
 
-            const snapshot = await getDocs(gamesQuery);
             const occupied = new Set<string>();
-
-            snapshot.forEach(doc => {
-                const game = doc.data() as BasketballGame;
-                if (game.settings.courtNumber) {
+            data?.forEach(row => {
+                const game = row.data as BasketballGame;
+                if (game?.settings?.tournamentId === tournamentId && game?.settings?.courtNumber) {
                     occupied.add(game.settings.courtNumber);
                 }
             });
-
             setOccupiedCourts(occupied);
             setLoading(false);
         } catch (error) {
@@ -120,16 +112,16 @@ export const CourtPickerModal: React.FC<Props> = ({ tournamentId, onSelect, onCa
 
                                         {/* Court Name */}
                                         <div className={`font-black text-lg uppercase tracking-wide mb-1 ${isOccupied ? 'text-zinc-600' :
-                                                isSelected ? 'text-yellow-400' :
-                                                    'text-white'
+                                            isSelected ? 'text-yellow-400' :
+                                                'text-white'
                                             }`}>
                                             {court}
                                         </div>
 
                                         {/* Status */}
                                         <div className={`text-xs font-bold uppercase tracking-widest ${isOccupied ? 'text-red-500' :
-                                                isSelected ? 'text-yellow-500' :
-                                                    'text-green-500'
+                                            isSelected ? 'text-yellow-500' :
+                                                'text-green-500'
                                             }`}>
                                             {isOccupied ? 'In Use' : isSelected ? 'Selected' : 'Available'}
                                         </div>
