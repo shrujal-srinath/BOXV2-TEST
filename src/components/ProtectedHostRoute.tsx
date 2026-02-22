@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { subscribeToAuth } from '../services/authService';
-import { getGame } from '../services/gameService';
+import { getGameByCode } from '../services/supabaseGameService';
 
 interface ProtectedHostRouteProps {
     children: React.ReactElement;
@@ -11,18 +11,21 @@ const ProtectedHostRoute: React.FC<ProtectedHostRouteProps> = ({ children }) => 
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isOwner, setIsOwner] = useState(false);
-
-    // Check if we are on a route that requires game ownership (e.g., /host/:gameCode)
     const { gameCode } = useParams<{ gameCode: string }>();
 
     useEffect(() => {
-        const unsubscribe = subscribeToAuth((currentUser) => {
+        const unsubscribe = subscribeToAuth(async (currentUser) => {
             setUser(currentUser);
-            setIsOwner(true); // Auth is enough — Firestore rules enforce ownership
+            if (currentUser && gameCode) {
+                const game = await getGameByCode(gameCode);
+                setIsOwner(game?.hostId === currentUser.id);
+            } else {
+                setIsOwner(true);
+            }
             setLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [gameCode]);
 
     if (loading) {
         return (
@@ -32,20 +35,20 @@ const ProtectedHostRoute: React.FC<ProtectedHostRouteProps> = ({ children }) => 
         );
     }
 
-    // 1. Must be logged in (Anon or Pro)
-    if (!user) {
-        return <Navigate to="/" replace />;
-    }
+    if (!user) return <Navigate to="/" replace />;
 
-    // 2. If a gameCode is present, must be the owner
     if (gameCode && !isOwner) {
         return (
             <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white">
                 <h1 className="text-red-500 font-bold text-2xl">ACCESS DENIED</h1>
                 <p className="text-zinc-500 mt-2">You do not have permission to host this game.</p>
                 <div className="mt-8 flex gap-4">
-                    <button onClick={() => window.location.href = '/dashboard'} className="px-4 py-2 bg-zinc-800 rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-700">Dashboard</button>
-                    <button onClick={() => window.location.href = '/'} className="px-4 py-2 border border-zinc-700 rounded text-xs font-bold uppercase tracking-widest hover:text-white text-zinc-400">Home</button>
+                    <button
+                        onClick={() => window.location.href = '/dashboard'}
+                        className="px-4 py-2 bg-zinc-800 rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-700"
+                    >
+                        Dashboard
+                    </button>
                 </div>
             </div>
         );
