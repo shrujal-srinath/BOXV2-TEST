@@ -15,15 +15,17 @@ import { BootSequence } from '../features/tablet/BootSequence';
 import { getLocalGameLibrary, getStorageStats, type LocalGameMetadata } from '../services/localGameService';
 import { getSyncStatus, triggerManualSync } from '../services/syncService';
 import { getLastActiveGame } from '../hooks/useLocalGame';
-import { auth } from '../services/firebase';
+import { supabase } from '../services/supabase';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import '../styles/hardware.css';
 
 export const StandaloneTablet: React.FC = () => {
   const navigate = useNavigate();
-  
+
   const { prompt, triggerInstall, isInstalled } = usePWAInstall();
-  
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user)); }, []);
+
   const [isBooting, setIsBooting] = useState(true);
   const [localGames, setLocalGames] = useState<LocalGameMetadata[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -40,12 +42,12 @@ export const StandaloneTablet: React.FC = () => {
 
   useEffect(() => {
     refreshGames();
-    
+
     // ADDED: Check for last active game
     const last = getLastActiveGame();
     if (last) {
       setLastGame(last);
-      
+
       // Show resume prompt if game was active recently (within 24 hours)
       const hoursSinceActive = (Date.now() - last.timestamp) / (1000 * 60 * 60);
       if (hoursSinceActive < 24) {
@@ -148,7 +150,7 @@ export const StandaloneTablet: React.FC = () => {
       {/* Main Content */}
       <div className="flex-1 p-8 overflow-y-auto bg-black/20">
         <div className="max-w-4xl mx-auto space-y-6">
-          
+
           {/* Quick Actions */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Create New Game */}
@@ -170,12 +172,12 @@ export const StandaloneTablet: React.FC = () => {
               onClick={prompt ? triggerInstall : undefined}
               disabled={!prompt}
               className={`metal-panel p-8 flex flex-col items-center justify-center gap-4 transition-all group relative
-                ${prompt 
-                  ? 'border-dashed border-blue-500/50 hover:border-blue-400 cursor-pointer animate-pulse' 
+                ${prompt
+                  ? 'border-dashed border-blue-500/50 hover:border-blue-400 cursor-pointer animate-pulse'
                   : 'opacity-30 grayscale cursor-not-allowed border-transparent bg-zinc-900/10'
                 }`}
             >
-               {!prompt && (
+              {!prompt && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center">
                   <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest bg-black/80 px-2 py-1 rounded border border-zinc-800">
                     {isInstalled ? "Already Installed" : "Browser Restriction"}
@@ -206,7 +208,7 @@ export const StandaloneTablet: React.FC = () => {
               <div className="text-center">
                 <div className="text-lg font-black text-white uppercase">Sync to Cloud</div>
                 <div className="text-xs text-zinc-500 mt-1">
-                  {auth.currentUser ? 'Backup Games' : 'Sign In Required'}
+                  {isLoggedIn ? 'Backup Games' : 'Sign In Required'}
                 </div>
               </div>
             </button>
@@ -437,7 +439,12 @@ interface SyncModalProps {
 const SyncModal: React.FC<SyncModalProps> = ({ onClose }) => {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const syncStatus = getSyncStatus();
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
+  }, []);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -453,7 +460,7 @@ const SyncModal: React.FC<SyncModalProps> = ({ onClose }) => {
           Cloud Sync
         </h2>
 
-        {!auth.currentUser ? (
+        {!isLoggedIn ? (
           <div className="text-center py-8">
             <Cloud size={64} className="text-zinc-700 mx-auto mb-4" />
             <p className="text-zinc-500 text-sm mb-4">

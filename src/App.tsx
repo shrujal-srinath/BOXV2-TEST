@@ -18,7 +18,7 @@
 //  - The root "/" detects standalone mode and redirects if needed
 // ─────────────────────────────────────────────────────────────
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // ── Website pages ──────────────────────────────────────────
@@ -38,7 +38,6 @@ import { TabletController } from './pages/TabletController';
 
 // ── Shared components ──────────────────────────────────────
 import ProtectedHostRoute from './components/ProtectedHostRoute';
-import { startAutoSync } from './services/syncService';
 
 // ─────────────────────────────────────────────────────────────
 // isPWA — true when the app was launched from the iOS/Android
@@ -64,12 +63,6 @@ const RootRedirect: React.FC = () =>
 
 // ─────────────────────────────────────────────────────────────
 function App() {
-  useEffect(() => {
-    // Auto-sync runs in the background for website users only.
-    // Tablet users use localGameService exclusively.
-    if (!isPWA) startAutoSync();
-  }, []);
-
   return (
     <Router>
       <div className="min-h-screen bg-black text-white font-sans">

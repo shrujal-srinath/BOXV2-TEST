@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from 'react';
 import type { BasketballGame, TeamData, Player } from '../types';
 import { updateGameField, batchUpdateGame, subscribeToGame } from '../services/supabaseGameService';
 import { broadcastScoreUpdate } from '../services/supabaseBroadcastService';
-import { useHardwareBridge } from './useHardwareBridge';
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -65,56 +64,7 @@ export const useBasketballGame = (
     return unsubscribe;
   }, [code]);
 
-  // ─── HARDWARE INTEGRATION ──────────────────────────────────────────────────
-  const { pushGameState, remoteState, controlMode } = useHardwareBridge();
 
-  // 1. PUSH: Sync Web State -> ESP32 (Hardware Bridge)
-  // Whenever the game state changes on the web, we push it to the hardware bridge.
-  useEffect(() => {
-    if (gameType === 'local') return;
-
-    pushGameState({
-      scoreA: game.teamA.score,
-      scoreB: game.teamB.score,
-      quarter: game.gameState.period,
-      shotClock: game.gameState.shotClock,
-    });
-  }, [
-    game.teamA.score,
-    game.teamB.score,
-    game.gameState.period,
-    game.gameState.shotClock,
-    pushGameState,
-    gameType
-  ]);
-
-  // 2. PULL: Sync ESP32 -> Web State (Authority Aware)
-  useEffect(() => {
-    // Only accept scores from ESP32 if it is the Parent or in Shared mode
-    if (!remoteState || controlMode === 'web') return;
-
-    const updates: Record<string, any> = {};
-    let hasUpdates = false;
-
-    // Check Score A
-    if (remoteState.scoreA !== game.teamA.score) {
-      updates['teamA.score'] = remoteState.scoreA;
-      hasUpdates = true;
-    }
-    // Check Score B
-    if (remoteState.scoreB !== game.teamB.score) {
-      updates['teamB.score'] = remoteState.scoreB;
-      hasUpdates = true;
-    }
-
-    if (hasUpdates) {
-      // This updates Firestore only when the ESP32 actually changes the number
-      batchUpdateGame(code, updates);
-    }
-  }, [remoteState, controlMode, game.teamA.score, game.teamB.score, code]);
-
-
-  // ─── Helper: Push to RTDB for <10ms Spectator Updates ─────────────────────
   const syncScoreToRTDB = useCallback((updatedGame: BasketballGame) => {
     if (gameType === 'local') return;
     broadcastScoreUpdate(
