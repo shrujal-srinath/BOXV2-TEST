@@ -11,7 +11,7 @@ export const subscribeToDeviceHeartbeat = (_code: string, _cb: any) => () => { }
 export const requestHandheldPairing = async () => null;
 export const listenToHandheldStatus = () => () => { };
 
-// Additional exports required by UI components
-export const setControlMode = async (_code: string, _mode: ControlMode) => { };
+// Variadic stubs — accept any number of args so callers with extra params compile cleanly
+export const setControlMode = async (..._args: any[]) => { };
 export const subscribeToControlMode = (_code: string, _cb: any) => () => { };
-export const activateGameOnDevice = async (_code: string, _gameId: string) => { };
+export const activateGameOnDevice = async (..._args: any[]) => { };
