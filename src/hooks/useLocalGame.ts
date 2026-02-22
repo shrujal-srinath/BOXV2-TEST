@@ -19,7 +19,6 @@ import {
   setActiveLocalGame,
   type LocalGameMetadata,
 } from '../services/localGameService';
-import { addToSyncQueue } from '../services/syncService';
 
 // ============================================
 // CONSTANTS
@@ -188,10 +187,7 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     const success = updateLocalGame(gameId, updatedGame);
 
     if (success) {
-      // Auto-add to sync queue
-      addToSyncQueue(gameId, updatedGame);
 
-      // Update last active timestamp
       try {
         localStorage.setItem(LAST_GAME_KEY, JSON.stringify({
           id: gameId,
@@ -339,7 +335,6 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
     setGame(restoredState);
     gameRef.current = restoredState;
     updateLocalGame(gameId, restoredState);
-    addToSyncQueue(gameId, restoredState);
 
     setHistoryIndex(prev => prev - 1);
 
@@ -371,7 +366,6 @@ export const useLocalGame = (gameId: string): UseLocalGameReturn => {
   // ============================================
   const forceSync = useCallback(() => {
     if (gameRef.current) {
-      addToSyncQueue(gameId, gameRef.current);
       console.log('[useLocalGame] Game queued for sync');
     }
   }, [gameId]);

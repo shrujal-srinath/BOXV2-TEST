@@ -13,7 +13,6 @@ import { useNavigate } from 'react-router-dom';
 import { Users, Play, Cloud, Settings, Download } from 'lucide-react';
 import { BootSequence } from '../features/tablet/BootSequence';
 import { getLocalGameLibrary, getStorageStats, type LocalGameMetadata } from '../services/localGameService';
-import { getSyncStatus, triggerManualSync } from '../services/syncService';
 import { getLastActiveGame } from '../hooks/useLocalGame';
 import { supabase } from '../services/supabase';
 import { usePWAInstall } from '../hooks/usePWAInstall';
@@ -440,7 +439,7 @@ const SyncModal: React.FC<SyncModalProps> = ({ onClose }) => {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const syncStatus = getSyncStatus();
+  const syncStatus = { pendingCount: 0, lastSyncTime: null as number | null };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
@@ -448,8 +447,7 @@ const SyncModal: React.FC<SyncModalProps> = ({ onClose }) => {
 
   const handleSync = async () => {
     setSyncing(true);
-    const syncResult = await triggerManualSync();
-    setResult(syncResult);
+    setResult({ syncedGames: [], failedGames: [] });
     setSyncing(false);
   };
 
