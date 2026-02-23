@@ -1,5 +1,19 @@
 // src/hooks/useHardwareBridge.ts
-import { useState, useEffect, useRef } from 'react';
+//
+// THE BOX — Hardware Bridge Hook
+// BMSCE Sports Tech Division
+//
+// Central hook for tracking ESP32 controller connection state.
+// Used by: Dashboard, HostConsole, GameSetup, ConnectControllerModal
+//
+// Returns:
+//   isConnected   → true if ESP32 heartbeat is live
+//   controlMode   → 'web' | 'hardware' | 'shared'
+//   transport     → 'supabase' | 'none'
+//   setAuthority  → function to switch control mode
+//   pushGameState → no-op (ESP32 pulls state, we don't push)
+
+import { useState, useEffect } from 'react';
 import {
     subscribeToDeviceHeartbeat,
     subscribeToControlMode,
@@ -8,65 +22,63 @@ import {
     type ControlMode,
 } from '../services/handheldService';
 
-// Explicitly defining the return type prevents TypeScript from throwing "No Overlap" errors in the UI
-export interface HardwareBridgeReturn {
+interface HardwareBridgeReturn {
     isConnected: boolean;
-    transport: 'none' | 'websocket' | 'rtdb' | 'supabase';
-    remoteState: any;
+    transport: 'supabase' | 'none';
+    remoteState: null;
     controlMode: ControlMode;
-    pushGameState: () => void;
+    pushGameState: (..._args: any[]) => void;
     setAuthority: (mode: ControlMode) => Promise<void>;
 }
 
 export const useHardwareBridge = (): HardwareBridgeReturn => {
     const [isConnected, setIsConnected] = useState(false);
-    const [controlMode, setControlModeState] = useState<ControlMode>('web');
+    const [controlMode, setControlModeState] = useState<ControlMode>('hardware');
+
+    // Read device ID from session storage (set during pairing)
+    // We read this once — it doesn't change during a session
     const deviceId = sessionStorage.getItem(HW_SESSION_KEY);
-    const isConnectedRef = useRef(false);
 
     useEffect(() => {
-        if (!deviceId) return;
-        let fallbackTimer: NodeJS.Timeout;
+        if (!deviceId) {
+            // No device paired — stay disconnected
+            setIsConnected(false);
+            return;
+        }
 
-        const unsubHB = subscribeToDeviceHeartbeat(deviceId, (online) => {
+        // Subscribe to heartbeat — updates whenever ESP32 pings Supabase
+        const unsubHeartbeat = subscribeToDeviceHeartbeat(deviceId, (online) => {
             setIsConnected(online);
-            isConnectedRef.current = online;
-
-            // Auto-Fallback: If device dies while in hardware mode, reclaim control to web after 15s
-            if (!online) {
-                fallbackTimer = setTimeout(() => {
-                    if (!isConnectedRef.current) {
-                        console.warn("[Hardware] Device lost. Auto-reclaiming Web control.");
-                        setControlMode(deviceId, 'web');
-                    }
-                }, 15000);
-            } else {
-                clearTimeout(fallbackTimer);
-            }
         });
 
-        const unsubCM = subscribeToControlMode(deviceId, (mode) => {
+        // Subscribe to control mode changes — updates when operator switches modes
+        const unsubControlMode = subscribeToControlMode(deviceId, (mode) => {
             setControlModeState(mode);
         });
 
         return () => {
-            unsubHB();
-            unsubCM();
-            clearTimeout(fallbackTimer);
+            unsubHeartbeat();
+            unsubControlMode();
         };
     }, [deviceId]);
 
-    const setAuthority = async (mode: ControlMode) => {
+    /**
+     * Switch control authority between hardware, web, and shared modes.
+     * Writes to Supabase → ESP32 polls and obeys on its next cycle (~2s).
+     */
+    const setAuthority = async (mode: ControlMode): Promise<void> => {
         if (!deviceId) return;
         await setControlMode(deviceId, mode);
     };
 
     return {
         isConnected,
+        // 'supabase' when connected so components know what transport is active
         transport: isConnected ? 'supabase' : 'none',
         remoteState: null,
         controlMode,
-        pushGameState: () => { }, // ESP32 pulls state, no push needed
+        // ESP32 pulls game state from Supabase itself — no push needed from web
+        pushGameState: () => { },
         setAuthority,
     };
 };

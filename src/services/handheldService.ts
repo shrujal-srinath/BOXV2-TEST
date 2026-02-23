@@ -1,18 +1,53 @@
 // src/services/handheldService.ts
 //
-// Real implementation replacing all stubs.
-// Uses Supabase Postgres for pairing state + Realtime for live subscriptions.
+// THE BOX — Hardware Controller Service
+// BMSCE Sports Tech Division
+//
+// Handles all communication between the website and the ESP32 physical controller.
+// Uses Supabase Postgres for persistent pairing state + Realtime for live subscriptions.
+//
+// Flow:
+//   1. ESP32 boots → registers itself in hardware_terminals with its 4-char pairing code
+//   2. Operator enters code on website → pairHandheldDevice() runs the handshake
+//   3. Game launches → activateGameOnDevice() tells ESP32 which game to control
+//   4. During game → ESP32 sends Broadcast signals → useHardwareSignaling picks them up
+//   5. Control mode can be switched anytime: hardware | web | shared
 
 import { supabase } from './supabase';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 export const HW_SESSION_KEY = 'BOX_HW_SESSION';
 export type ControlMode = 'web' | 'hardware' | 'shared';
 
+// How long without a heartbeat before we consider the device offline
+const ONLINE_THRESHOLD_MS = 15000;
+
+// ─── Legacy path helpers (kept for TS compat with existing imports) ────────────
+export const hwPath = {
+    root: (_c: string) => '',
+    controlMode: (_c: string) => '',
+};
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 // ─── Pairing ──────────────────────────────────────────────────────────────────
 
 /**
- * Called by ConnectControllerModal when user submits a 4-char code.
- * Drives the handshake phases: searching → found → handshaking → confirmed
+ * Called by ConnectControllerModal when user submits a 4-char pairing code.
+ *
+ * Drives the UI through phases:
+ *   searching → found → handshaking → confirmed
+ *
+ * The "handshake" is lightweight: we check the DB row exists and is reachable.
+ * The ESP32 proves it's alive by having registered (upserted) its row on boot.
+ * We don't wait for a live heartbeat tick — we just verify the row is in
+ * 'paired' status, which we set ourselves during the handshake step.
+ *
+ * NOTE: last_heartbeat from ESP32 firmware uses millis() (ms since boot),
+ * NOT Unix epoch. So we never compare it to Date.now(). We use status field instead.
  */
 export const pairHandheldDevice = async (
     code: string,
@@ -20,24 +55,30 @@ export const pairHandheldDevice = async (
     onPhase: (phase: string) => void
 ): Promise<{ success: boolean; message: string }> => {
 
-    // Phase 1: Search for the device in the DB
-    onPhase('searching');
-    await delay(600);
+    const upperCode = code.toUpperCase();
 
-    const { data, error } = await supabase
+    // ── Phase 1: Search ───────────────────────────────────────────────────────
+    onPhase('searching');
+    await delay(700);
+
+    const { data: device, error: fetchError } = await supabase
         .from('hardware_terminals')
         .select('id, status')
-        .eq('id', code.toUpperCase())
+        .eq('id', upperCode)
         .single();
 
-    if (error || !data) {
-        return { success: false, message: `No device found with code "${code}". Make sure the ESP32 is on and connected to WiFi.` };
+    if (fetchError || !device) {
+        return {
+            success: false,
+            message: `No device found with code "${upperCode}". Make sure the ESP32 is powered on and connected to WiFi.`,
+        };
     }
 
-    // Phase 2: Device found — update it to paired status
+    // ── Phase 2: Found ────────────────────────────────────────────────────────
     onPhase('found');
     await delay(500);
 
+    // ── Phase 3: Handshaking — update DB to paired ────────────────────────────
     onPhase('handshaking');
 
     const { error: updateError } = await supabase
@@ -46,60 +87,76 @@ export const pairHandheldDevice = async (
             status: 'paired',
             host_id: userId,
         })
-        .eq('id', code.toUpperCase());
+        .eq('id', upperCode);
 
     if (updateError) {
-        return { success: false, message: 'Could not complete pairing. Try again.' };
+        return {
+            success: false,
+            message: 'Could not complete pairing. Database error — try again.',
+        };
     }
 
-    // Phase 3: Wait for ESP32 to confirm (it polls and updates last_heartbeat)
-    // We wait up to 8 seconds for a fresh heartbeat
-    const confirmed = await waitForHeartbeat(code.toUpperCase(), 8000);
+    // ── Phase 4: Confirm — verify the row is now in paired state ──────────────
+    // We poll a few times to confirm our write landed and the row is stable.
+    // This also gives the ESP32 time to detect the status change on its next poll.
+    const confirmed = await waitForPairedStatus(upperCode, 10000);
 
     if (!confirmed) {
         // Rollback
         await supabase
             .from('hardware_terminals')
             .update({ status: 'waiting', host_id: null })
-            .eq('id', code.toUpperCase());
-        return { success: false, message: 'ESP32 did not respond. Check the device display and try again.' };
+            .eq('id', upperCode);
+
+        return {
+            success: false,
+            message: 'Pairing confirmation failed. The ESP32 may have disconnected. Check the device and try again.',
+        };
     }
 
-    // Save to session
-    sessionStorage.setItem(HW_SESSION_KEY, code.toUpperCase());
+    // ── Success ───────────────────────────────────────────────────────────────
+    sessionStorage.setItem(HW_SESSION_KEY, upperCode);
     onPhase('confirmed');
 
     return { success: true, message: 'Paired!' };
 };
 
 /**
- * Waits up to `timeoutMs` for the ESP32 to send a fresh heartbeat.
- * Polls every 500ms. Returns true if heartbeat received.
+ * Polls Supabase until the terminal row has status='paired' (our own write confirmed)
+ * OR until timeout. Returns true on success.
+ *
+ * We check status, NOT last_heartbeat, because:
+ *   - ESP32 heartbeat uses millis() (uptime), not Unix epoch
+ *   - Comparing millis() to Date.now() always fails
+ *   - Status field is fully controlled by us and is reliable
  */
-const waitForHeartbeat = async (code: string, timeoutMs: number): Promise<boolean> => {
+const waitForPairedStatus = async (code: string, timeoutMs: number): Promise<boolean> => {
     const start = Date.now();
-    const threshold = Date.now() - 3000; // heartbeat must be within last 3s
 
     while (Date.now() - start < timeoutMs) {
-        await delay(500);
+        await delay(800);
+
         const { data } = await supabase
             .from('hardware_terminals')
-            .select('last_heartbeat')
+            .select('id, status')
             .eq('id', code)
             .single();
 
-        if (data && data.last_heartbeat > threshold) {
+        // Row exists and is in paired or active state → success
+        if (data && (data.status === 'paired' || data.status === 'active')) {
             return true;
         }
     }
+
     return false;
 };
 
 /**
- * Unpairs the device — clears session and resets DB row.
+ * Unpairs the device — clears session storage and resets DB row to waiting.
  */
 export const unpairHandheldDevice = async (code: string, _userId: string): Promise<void> => {
     sessionStorage.removeItem(HW_SESSION_KEY);
+
     await supabase
         .from('hardware_terminals')
         .update({
@@ -115,47 +172,79 @@ export const unpairHandheldDevice = async (code: string, _userId: string): Promi
 
 /**
  * Subscribes to live heartbeat changes via Supabase Realtime Postgres Changes.
- * Calls callback with (isOnline: boolean, lastSeen: timestamp).
- * Device is considered online if heartbeat was < 12 seconds ago.
+ * Calls callback with (isOnline: boolean, lastSeen: number).
+ *
+ * IMPORTANT: ESP32 sends last_heartbeat as millis() (uptime in ms, NOT Unix epoch).
+ * We cannot compare it to Date.now(). Instead, we track when WE last received
+ * an update from Supabase — if an update arrived within ONLINE_THRESHOLD_MS, it's online.
  */
 export const subscribeToDeviceHeartbeat = (
     code: string,
     callback: (isOnline: boolean, lastSeen: number) => void
 ): (() => void) => {
-    const ONLINE_THRESHOLD_MS = 12000;
 
-    // Initial fetch
+    // Track when we last received any update from the device
+    let lastReceivedAt = 0;
+
+    // Initial fetch — just check the row exists
     supabase
         .from('hardware_terminals')
-        .select('last_heartbeat')
+        .select('id, status, last_heartbeat')
         .eq('id', code)
         .single()
         .then(({ data }) => {
             if (data) {
-                const ts = data.last_heartbeat;
-                callback(Date.now() - ts < ONLINE_THRESHOLD_MS, ts);
+                // If the row exists and is paired/active, assume online initially
+                const isOnline = data.status === 'paired' || data.status === 'active';
+                lastReceivedAt = Date.now();
+                callback(isOnline, lastReceivedAt);
+            } else {
+                callback(false, 0);
             }
         });
 
+    // Real-time subscription — every heartbeat update from ESP32 triggers this
     const channel = supabase
         .channel(`heartbeat:${code}`)
         .on(
             'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'hardware_terminals', filter: `id=eq.${code}` },
-            (payload) => {
-                const ts = (payload.new as any).last_heartbeat;
-                callback(Date.now() - ts < ONLINE_THRESHOLD_MS, ts);
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'hardware_terminals',
+                filter: `id=eq.${code}`,
+            },
+            (_payload) => {
+                // We received an update → device is alive
+                lastReceivedAt = Date.now();
+                callback(true, lastReceivedAt);
             }
         )
         .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Watchdog: check every 8s if we haven't received anything recently
+    const watchdog = setInterval(() => {
+        if (lastReceivedAt > 0 && Date.now() - lastReceivedAt > ONLINE_THRESHOLD_MS) {
+            callback(false, lastReceivedAt);
+        }
+    }, 8000);
+
+    return () => {
+        clearInterval(watchdog);
+        supabase.removeChannel(channel);
+    };
 };
 
 // ─── Control Mode ─────────────────────────────────────────────────────────────
 
 /**
- * Sets the control mode in DB. ESP32 polls this and obeys.
+ * Sets the control mode in the database.
+ * ESP32 polls hardware_terminals on its next cycle and obeys this.
+ *
+ * Modes:
+ *   'hardware' → Only ESP32 buttons score. Website console is locked (read-only).
+ *   'web'      → Only website scores. ESP32 buttons are ignored.
+ *   'shared'   → Both score simultaneously. Last write wins.
  */
 export const setControlMode = async (
     code: string,
@@ -163,23 +252,25 @@ export const setControlMode = async (
     teamAName?: string,
     teamBName?: string
 ): Promise<void> => {
+    const update: Record<string, any> = { control_mode: mode };
+    if (teamAName) update.team_a_name = teamAName;
+    if (teamBName) update.team_b_name = teamBName;
+
     await supabase
         .from('hardware_terminals')
-        .update({
-            control_mode: mode,
-            team_a_name: teamAName,
-            team_b_name: teamBName,
-        })
+        .update(update)
         .eq('id', code.toUpperCase());
 };
 
 /**
  * Subscribes to control mode changes in real time.
+ * Used by HostConsole to lock/unlock the scoring buttons.
  */
 export const subscribeToControlMode = (
     code: string,
     callback: (mode: ControlMode) => void
 ): (() => void) => {
+
     // Initial fetch
     supabase
         .from('hardware_terminals')
@@ -194,9 +285,15 @@ export const subscribeToControlMode = (
         .channel(`controlmode:${code}`)
         .on(
             'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'hardware_terminals', filter: `id=eq.${code}` },
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'hardware_terminals',
+                filter: `id=eq.${code}`,
+            },
             (payload) => {
-                callback((payload.new as any).control_mode as ControlMode);
+                const newMode = (payload.new as any).control_mode as ControlMode;
+                if (newMode) callback(newMode);
             }
         )
         .subscribe();
@@ -207,8 +304,11 @@ export const subscribeToControlMode = (
 // ─── Game Activation ──────────────────────────────────────────────────────────
 
 /**
- * Called by GameSetup after game is created.
- * Tells the ESP32 which game it's now controlling.
+ * Called by GameSetup.tsx after a game is successfully created.
+ *
+ * Transitions the hardware terminal from 'paired' → 'active' and tells it
+ * which game code to control. The ESP32 polls hardware_terminals every 2s
+ * and will switch to game mode once it sees status='active'.
  */
 export const activateGameOnDevice = async (
     code: string,
@@ -229,10 +329,6 @@ export const activateGameOnDevice = async (
         .eq('id', code.toUpperCase());
 };
 
-// ─── Legacy stubs (kept for TS compatibility) ─────────────────────────────────
+// ─── Legacy stubs (kept for callers that import these) ────────────────────────
 export const requestHandheldPairing = async () => null;
 export const listenToHandheldStatus = () => () => { };
-export const hwPath = { root: (_c: string) => '', controlMode: (_c: string) => '' };
-
-// ─── Util ─────────────────────────────────────────────────────────────────────
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

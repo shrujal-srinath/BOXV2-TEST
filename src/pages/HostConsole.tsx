@@ -13,7 +13,7 @@
 //   [FIX-7] Loading guard: game.hostId === 'loading' instead of !game
 //   [HARDWARE] Added useHardwareSignaling to allow ESP32 to drive the engine
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGameEngine } from '../core/engine/useGameEngine';
 import { SPORT_REGISTRY } from '../sports/registry';
@@ -106,58 +106,129 @@ export const HostConsole: React.FC = () => {
         shotClockDuration: game?.settings?.shotClockDuration ?? 24,
     });
 
-    // ── HARDWARE CONTROL STATE ───────────────────────────────────────────────
-    const [hwControlMode, setHwControlMode] = useState<ControlMode>('web');
+    // ── Hardware Control Mode ─────────────────────────────────────────────────────
+    // Tracks whether ESP32, web, or shared has control
+    // This drives: (1) locking web buttons, (2) filtering incoming ESP32 signals
+    const [hwControlMode, setHwControlMode] = useState<ControlMode>('hardware');
     const hwDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
 
-    // Subscribe to control mode so the overlay knows when to lock
     useEffect(() => {
         if (!hwDeviceId) return;
-        return subscribeToControlMode(hwDeviceId, setHwControlMode);
+        // Subscribe to control mode changes in real time
+        const unsub = subscribeToControlMode(hwDeviceId, (mode) => {
+            setHwControlMode(mode);
+            console.log('[HostConsole] Control mode changed to:', mode);
+        });
+        return unsub;
     }, [hwDeviceId]);
 
-    // ── ESP32 HARDWARE LISTENER ──────────────────────────────────────────────
-    useHardwareSignaling(gameCode || '', (signal) => {
-        // Ignore signals if web has control (hardware mode is locked out)
-        if (hwControlMode === 'web') return;
+    // Whether the web scoring buttons should be disabled
+    // Locked = hardware mode AND a device is paired
+    const isWebLocked = hwControlMode === 'hardware' && !!hwDeviceId;
 
-        // FIXED TYPESCRIPT OVERLAP ERROR BY CASTING TO STRING
-        const actionStr = signal.action as string;
+    // Refs to avoid hoisting issues within the useCallback hook
+    const handleUndoRef = useRef<() => void>(() => { });
+    const recordActionRef = useRef<(action: GameAction) => void>(() => { });
 
-        const actionMap: Record<string, any> = {
-            ADD_SCORE_A: { type: 'ADD_POINTS', team: 'A', amount: 1 },
-            ADD_SCORE_B: { type: 'ADD_POINTS', team: 'B', amount: 1 },
-            SUB_SCORE_A: { type: 'ADD_POINTS', team: 'A', amount: -1 },
-            SUB_SCORE_B: { type: 'ADD_POINTS', team: 'B', amount: -1 },
-            ADD_FOUL_A: { type: 'ADD_FOUL', team: 'A' },
-            ADD_FOUL_B: { type: 'ADD_FOUL', team: 'B' },
-            USE_TIMEOUT_A: { type: 'USE_TIMEOUT', team: 'A' },
-            USE_TIMEOUT_B: { type: 'USE_TIMEOUT', team: 'B' },
-            TOGGLE_CLOCK: { type: 'TOGGLE_CLOCK' },
-            RESET_SHOT_CLOCK_24: { type: 'RESET_SHOT_CLOCK', value: 24 },
-            RESET_SHOT_CLOCK_14: { type: 'RESET_SHOT_CLOCK', value: 14 },
-            NEXT_PERIOD: { type: 'NEXT_PERIOD' },
-            TOGGLE_POSSESSION: { type: 'TOGGLE_POSSESSION' },
-            UNDO: { type: 'UNDO' },
-        };
+    // ── Hardware Signal Handler ───────────────────────────────────────────────────
+    // Receives button press signals from ESP32 and dispatches to GameEngine
+    // Uses useCallback so the ref inside useHardwareSignaling always gets latest state
+    const handleHardwareSignal = useCallback((signal: any) => {
+        // In 'web' mode, ignore all ESP32 signals
+        if (hwControlMode === 'web') {
+            console.log('[HW] Signal ignored — web has control');
+            return;
+        }
 
-        const action = actionMap[actionStr];
-        if (action) dispatch(action);
+        console.log('[HW] Processing signal:', signal.action);
 
-        // Keep local timer and history actions in sync
-        if (actionStr === 'TOGGLE_CLOCK') timer.toggleClock();
-        if (actionStr === 'RESET_SHOT_CLOCK_24' || actionStr === 'RESET_CLOCK') timer.resetShotClock24();
-        if (actionStr === 'RESET_SHOT_CLOCK_14') timer.resetShotClock14();
-        if (actionStr === 'NEXT_PERIOD') timer.nextPeriod();
-        if (actionStr === 'ADD_SCORE_A') recordAction({ type: 'score', team: 'A', value: 1, timestamp: Date.now() });
-        if (actionStr === 'ADD_SCORE_B') recordAction({ type: 'score', team: 'B', value: 1, timestamp: Date.now() });
-    });
+        switch (signal.action) {
+            case 'ADD_SCORE_A':
+                updateScore('A', 1);
+                recordActionRef.current({ type: 'score', team: 'A', value: 1, timestamp: Date.now() });
+                break;
+            case 'ADD_SCORE_B':
+                updateScore('B', 1);
+                recordActionRef.current({ type: 'score', team: 'B', value: 1, timestamp: Date.now() });
+                break;
+            case 'SUB_SCORE_A':
+                updateScore('A', -1);
+                recordActionRef.current({ type: 'score', team: 'A', value: -1, timestamp: Date.now() });
+                break;
+            case 'SUB_SCORE_B':
+                updateScore('B', -1);
+                recordActionRef.current({ type: 'score', team: 'B', value: -1, timestamp: Date.now() });
+                break;
+            case 'ADD_FOUL_A':
+                updateFouls('A', 1);
+                break;
+            case 'ADD_FOUL_B':
+                updateFouls('B', 1);
+                break;
+            case 'USE_TIMEOUT_A':
+                updateTimeouts('A', -1);
+                break;
+            case 'USE_TIMEOUT_B':
+                updateTimeouts('B', -1);
+                break;
+            case 'TOGGLE_CLOCK':
+                timer.toggleClock();
+                break;
+            case 'RESET_CLOCK':
+            case 'RESET_SHOT_CLOCK_24':
+                timer.resetShotClock24();
+                break;
+            case 'RESET_SHOT_CLOCK_14':
+                timer.resetShotClock14();
+                break;
+            case 'NEXT_PERIOD':
+                timer.nextPeriod();
+                break;
+            case 'TOGGLE_POSSESSION':
+                togglePossession();
+                break;
+            case 'UNDO':
+                handleUndoRef.current();
+                break;
+            default:
+                console.log('[HW] Unknown action:', signal.action);
+        }
+    }, [hwControlMode, updateScore, updateFouls, updateTimeouts, timer, togglePossession]);
+
+    // Subscribe to hardware signals
+    const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHardwareSignal);
+
+    // ── Send web scores back to ESP32 in shared mode ──────────────────────────────
+    // When the operator scores from the web console in shared mode,
+    // the ESP32 display needs to know so it stays in sync.
+    // We wrap the score update to also broadcast a feedback event.
+    const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {
+        updateScore(team, points);
+        recordActionRef.current({ type: 'score', team, value: points, playerId, timestamp: Date.now() });
+
+        // In shared mode, notify ESP32 of the new score so its display updates
+        if (hwControlMode === 'shared' && game) {
+            const newScoreA = team === 'A'
+                ? (game.teamA.score + points)
+                : game.teamA.score;
+            const newScoreB = team === 'B'
+                ? (game.teamB.score + points)
+                : game.teamB.score;
+
+            sendToHardware('SCORE_UPDATE', {
+                scoreA: Math.max(0, newScoreA),
+                scoreB: Math.max(0, newScoreB),
+                source: 'web',
+            });
+        }
+    }, [updateScore, hwControlMode, game, sendToHardware]);
+
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
     useEffect(() => {
         const handleKeyPress = (e: KeyboardEvent) => {
             if ((e.target as HTMLElement).tagName === 'INPUT') return;
-            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndo(); }
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndoRef.current(); }
             else if (e.key === ' ') { e.preventDefault(); handleTimerToggle(null); }
             else if (e.key.toLowerCase() === 'r') { handleResetShot(null, 24); }
             else if (e.key.toLowerCase() === 't') { handleResetShot(null, 14); }
@@ -172,6 +243,7 @@ export const HostConsole: React.FC = () => {
     const recordAction = (action: GameAction) => {
         setActionHistory(prev => [...prev.slice(-9), action]);
     };
+    recordActionRef.current = recordAction; // Sync ref so useCallback uses latest state
 
     // ── Score / Foul with player selection ────────────────────────────────────
     const handleScoreWithPlayer = (e: React.MouseEvent | null, team: 'A' | 'B', points: number) => {
@@ -190,10 +262,10 @@ export const HostConsole: React.FC = () => {
         if (!pendingAction) return;
         const { team, type, value } = pendingAction;
 
-        recordAction({ type: type === 'points' ? 'score' : 'foul', team, value, playerId: player.id, timestamp: Date.now() });
-
-        if (type === 'points') updateScore(team, value);
-        else if (type === 'foul') {
+        if (type === 'points') {
+            handleWebScore(team, value, player.id);
+        } else if (type === 'foul') {
+            recordAction({ type: 'foul', team, value, playerId: player.id, timestamp: Date.now() });
             updateFouls(team, 1);
             if (timer.gameRunning) timer.stopClock();
         }
@@ -206,10 +278,10 @@ export const HostConsole: React.FC = () => {
         if (!pendingAction) return;
         const { team, type, value } = pendingAction;
 
-        recordAction({ type: type === 'points' ? 'score' : 'foul', team, value, timestamp: Date.now() });
-
-        if (type === 'points') updateScore(team, value);
-        else if (type === 'foul') {
+        if (type === 'points') {
+            handleWebScore(team, value);
+        } else if (type === 'foul') {
+            recordAction({ type: 'foul', team, value, timestamp: Date.now() });
             updateFouls(team, 1);
             if (timer.gameRunning) timer.stopClock();
         }
@@ -249,6 +321,7 @@ export const HostConsole: React.FC = () => {
         else if (last.type === 'timeout') updateTimeouts(last.team, 1);
         setActionHistory(prev => prev.slice(0, -1));
     };
+    handleUndoRef.current = handleUndo; // Sync ref for Hardware handler
 
     // ── Header actions ────────────────────────────────────────────────────────
     const copyGameCode = () => {
@@ -493,7 +566,13 @@ export const HostConsole: React.FC = () => {
 
             {/* ── PRO CONTROL DECK ──────────────────────────────────────────── */}
             <div className="relative">
-                <HardwareControlOverlay controlMode={hwControlMode} isLocked={hwControlMode === 'hardware' && !!hwDeviceId} deviceId={hwDeviceId || ''} />
+                <HardwareControlOverlay
+                    controlMode={hwControlMode}
+                    isLocked={isWebLocked}
+                    deviceId={hwDeviceId || ''}
+                    teamAName={game.teamA.name}
+                    teamBName={game.teamB.name}
+                />
                 <div className="bg-zinc-950 border-t-4 border-zinc-900 p-4 shrink-0 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
                     <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 h-full pt-2">
 
@@ -505,13 +584,13 @@ export const HostConsole: React.FC = () => {
                                 </span>
                             </div>
                             <div className="grid grid-cols-3 gap-1 h-16">
-                                <TactileBtn label="+1" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 1)} />
-                                <TactileBtn label="+2" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 2)} />
-                                <TactileBtn label="+3" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 3)} />
+                                <TactileBtn label="+1" color={game.teamA.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 1); }} />
+                                <TactileBtn label="+2" color={game.teamA.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 2); }} />
+                                <TactileBtn label="+3" color={game.teamA.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 3); }} />
                             </div>
                             <div className="grid grid-cols-2 gap-1">
-                                <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" onClick={(e: React.MouseEvent) => handleFoulWithPlayer(e, 'A')} />
-                                <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" onClick={(e: React.MouseEvent) => handleTimeout(e, 'A')} />
+                                <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'A'); }} />
+                                <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'A'); }} />
                             </div>
                         </div>
 
@@ -520,7 +599,7 @@ export const HostConsole: React.FC = () => {
                             <div className="flex-1 grid grid-cols-12 gap-2">
                                 <div className="col-span-5 flex flex-col gap-1">
                                     <button
-                                        onClick={handleTimerToggle}
+                                        onClick={(e) => { if (!isWebLocked) handleTimerToggle(e); }}
                                         className={`flex-1 rounded border-2 transition-all flex flex-col items-center justify-center active:scale-95 shadow-lg ${timer.gameRunning
                                             ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
                                             : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
@@ -531,7 +610,7 @@ export const HostConsole: React.FC = () => {
                                         </span>
                                     </button>
                                     <button
-                                        onClick={handleUndo}
+                                        onClick={() => { if (!isWebLocked) handleUndo(); }}
                                         disabled={actionHistory.length === 0}
                                         className="h-8 bg-black border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 disabled:opacity-30 disabled:cursor-not-allowed rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1"
                                     >
@@ -541,13 +620,13 @@ export const HostConsole: React.FC = () => {
                                 </div>
                                 <div className="col-span-3 flex flex-col gap-1 border-x border-zinc-800 px-2">
                                     <button
-                                        onClick={(e) => handleResetShot(e, 24)}
+                                        onClick={(e) => { if (!isWebLocked) handleResetShot(e, 24); }}
                                         className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
                                     >
                                         24
                                     </button>
                                     <button
-                                        onClick={(e) => handleResetShot(e, 14)}
+                                        onClick={(e) => { if (!isWebLocked) handleResetShot(e, 14); }}
                                         className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
                                     >
                                         14
@@ -555,7 +634,7 @@ export const HostConsole: React.FC = () => {
                                 </div>
                                 <div className="col-span-4 flex flex-col gap-1">
                                     <button
-                                        onClick={handleTogglePossession}
+                                        onClick={(e) => { if (!isWebLocked) handleTogglePossession(e); }}
                                         className="flex-1 bg-black border border-zinc-700 rounded flex items-center justify-center gap-2 hover:border-white transition-all group active:scale-95"
                                     >
                                         <span className={`text-xl ${game.gameState.possession === 'A' ? 'text-white' : 'text-zinc-800'}`}>◀</span>
@@ -580,13 +659,13 @@ export const HostConsole: React.FC = () => {
                                 </span>
                             </div>
                             <div className="grid grid-cols-3 gap-1 h-16">
-                                <TactileBtn label="+3" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 3)} />
-                                <TactileBtn label="+2" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 2)} />
-                                <TactileBtn label="+1" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 1)} />
+                                <TactileBtn label="+3" color={game.teamB.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 3); }} />
+                                <TactileBtn label="+2" color={game.teamB.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 2); }} />
+                                <TactileBtn label="+1" color={game.teamB.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 1); }} />
                             </div>
                             <div className="grid grid-cols-2 gap-1">
-                                <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" onClick={(e: React.MouseEvent) => handleTimeout(e, 'B')} />
-                                <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" onClick={(e: React.MouseEvent) => handleFoulWithPlayer(e, 'B')} />
+                                <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'B'); }} />
+                                <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'B'); }} />
                             </div>
                         </div>
 

@@ -143,7 +143,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {visibleGames.map((g, index) => (
-            <div key={`${g.code}-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
+            <div key={g.code || `game-${index}`} className={`bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
               {/* Status Color Bar */}
               <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${isMyGames ? 'bg-red-600' : 'bg-blue-600'}`}></div>
 
@@ -160,21 +160,21 @@ export const Dashboard: React.FC = () => {
 
               {/* Header */}
               <div className="flex justify-between items-start mb-4 pl-2">
-                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sport || 'BASKETBALL'}</div>
+                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sportId || g.sport || 'BASKETBALL'}</div>
                 <div className={`w-2 h-2 rounded-full animate-pulse ${isMyGames ? 'bg-red-500' : 'bg-blue-500'}`}></div>
               </div>
 
               {/* Title & Code */}
               <h3 className={`font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 truncate ${isMyGames ? 'group-hover:text-red-400' : 'group-hover:text-blue-400'}`}>
-                {g.settings.gameName}
+                {g.settings?.gameName || 'UNTITLED GAME'}
               </h3>
-              <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">ID: <span className="text-zinc-500">{g.code}</span></div>
+              <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">ID: <span className="text-zinc-500">{g.code || '----'}</span></div>
 
               {/* Score */}
               <div className="flex items-center justify-between bg-black p-3 rounded border border-zinc-800 mb-3 mt-auto">
-                <div className="font-bold text-white text-lg" style={{ color: g.teamA.color }}>{g.teamA.score}</div>
+                <div className="font-bold text-white text-lg" style={{ color: g.teamA?.color || '#DC2626' }}>{g.teamA?.score ?? 0}</div>
                 <div className="text-[9px] text-zinc-600 uppercase tracking-widest">VS</div>
-                <div className="font-bold text-white text-lg" style={{ color: g.teamB.color }}>{g.teamB.score}</div>
+                <div className="font-bold text-white text-lg" style={{ color: g.teamB?.color || '#2563EB' }}>{g.teamB?.score ?? 0}</div>
               </div>
 
               {/* Actions */}
@@ -244,8 +244,8 @@ export const Dashboard: React.FC = () => {
     return (
       <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
-          {visibleTournaments.map((t) => (
-            <div key={t.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden hover:border-yellow-600 flex flex-col">
+          {visibleTournaments.map((t, index) => (
+            <div key={t.id || `tourney-${index}`} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-sm transition-all group relative overflow-hidden hover:border-yellow-600 flex flex-col">
               <div className="absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 bg-yellow-600"></div>
 
               <div className="flex justify-between items-start mb-4 pl-2">
@@ -254,7 +254,7 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <h3 className="font-black italic text-xl text-white mb-1 transition-colors uppercase tracking-tight pl-2 group-hover:text-yellow-400 truncate">
-                {t.name}
+                {t.name || 'UNTITLED'}
               </h3>
               <div className="text-xs font-mono text-zinc-400 mb-4 pl-2">Organizer: <span className="text-zinc-500">{t.organizer || 'Unknown'}</span></div>
 

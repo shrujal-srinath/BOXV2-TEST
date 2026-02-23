@@ -1,3 +1,4 @@
+// src/pages/LandingPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BasketballGame } from '../types';
@@ -272,11 +273,11 @@ export const LandingPage: React.FC = () => {
             {liveGames.length === 0 ? (
               <span className="text-zinc-700 text-xs font-mono tracking-widest uppercase">Waiting for active signals from server...</span>
             ) : (
-              liveGames.map(g => (
-                <button key={g.code} onClick={() => setSelectedLiveGame(g)} className="flex items-center gap-3 hover:bg-zinc-900 px-4 py-1.5 rounded-sm transition-colors border border-transparent hover:border-zinc-800">
+              liveGames.map((g, idx) => (
+                <button key={g.code || `live-${idx}`} onClick={() => setSelectedLiveGame(g)} className="flex items-center gap-3 hover:bg-zinc-900 px-4 py-1.5 rounded-sm transition-colors border border-transparent hover:border-zinc-800">
                   <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span></span>
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{g.gameState.period <= 4 ? `Q${g.gameState.period}` : 'OT'}</span>
-                  <span className="text-sm font-bold font-mono text-white">{g.teamA.name} <span className="text-red-500 mx-1 text-lg">{g.teamA.score}</span> - <span className="text-red-500 mx-1 text-lg">{g.teamB.score}</span> {g.teamB.name}</span>
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">{g.gameState?.period <= 4 ? `Q${g.gameState?.period}` : 'OT'}</span>
+                  <span className="text-sm font-bold font-mono text-white">{g.teamA?.name || 'Home'} <span className="text-red-500 mx-1 text-lg">{g.teamA?.score ?? 0}</span> - <span className="text-red-500 mx-1 text-lg">{g.teamB?.score ?? 0}</span> {g.teamB?.name || 'Away'}</span>
                 </button>
               ))
             )}
@@ -325,17 +326,17 @@ export const LandingPage: React.FC = () => {
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
           <div className="bg-zinc-900 border border-red-900/50 max-w-md w-full p-8 shadow-2xl relative">
             <h3 className="text-red-600 text-xs font-bold uppercase tracking-widest mb-2">Incoming Feed</h3>
-            <h2 className="text-2xl font-black text-white italic uppercase mb-1">{selectedLiveGame.settings.gameName}</h2>
+            <h2 className="text-2xl font-black text-white italic uppercase mb-1">{selectedLiveGame.settings?.gameName || 'UNTITLED GAME'}</h2>
             <div className="bg-black border border-zinc-800 p-6 mb-8 mt-6">
               <div className="flex justify-between items-center text-sm font-bold font-mono mb-2">
-                <span style={{ color: selectedLiveGame.teamA.color }}>{selectedLiveGame.teamA.name}</span>
+                <span style={{ color: selectedLiveGame.teamA?.color || '#ffffff' }}>{selectedLiveGame.teamA?.name || 'Home'}</span>
                 <span className="text-zinc-600 text-xs">VS</span>
-                <span style={{ color: selectedLiveGame.teamB.color }}>{selectedLiveGame.teamB.name}</span>
+                <span style={{ color: selectedLiveGame.teamB?.color || '#ffffff' }}>{selectedLiveGame.teamB?.name || 'Away'}</span>
               </div>
               <div className="flex justify-between items-center text-3xl text-white font-mono font-bold">
-                <span>{selectedLiveGame.teamA.score}</span>
+                <span>{selectedLiveGame.teamA?.score ?? 0}</span>
                 <span className="text-zinc-700 text-lg">-</span>
-                <span>{selectedLiveGame.teamB.score}</span>
+                <span>{selectedLiveGame.teamB?.score ?? 0}</span>
               </div>
             </div>
             <div className="flex gap-4">
