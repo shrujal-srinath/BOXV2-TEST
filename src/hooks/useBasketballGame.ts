@@ -48,6 +48,7 @@ export const useBasketballGame = (
       periodType: 'quarter',
       periods: 4,
     },
+    sportId: 'basketball', // <-- Added to fix TS Error
     sport: 'basketball',
     status: 'live',
     createdAt: Date.now(),

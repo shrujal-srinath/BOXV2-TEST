@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createTournament } from '../services/tournamentService';
 import { ImageCropperModal } from '../components/ImageCropperModal';
-import type { SportType } from '../types';
+import type { SchedulableSport } from '../types';
 
 export const TournamentSetup: React.FC = () => {
     const navigate = useNavigate();
@@ -19,8 +19,8 @@ export const TournamentSetup: React.FC = () => {
     const [endDate, setEndDate] = useState("");
 
     // Config
-    const [selectedSports, setSelectedSports] = useState<SportType[]>(['basketball']);
-    const [sportConfig, setSportConfig] = useState<{ [key in SportType]?: { courts: number } }>({
+    const [selectedSports, setSelectedSports] = useState<SchedulableSport[]>(['basketball']);
+    const [sportConfig, setSportConfig] = useState<{ [key: string]: { courts: number } }>({
         basketball: { courts: 1 }
     });
 
@@ -28,10 +28,10 @@ export const TournamentSetup: React.FC = () => {
     const [tempImageSrc, setTempImageSrc] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const availableSports: SportType[] = ['basketball', 'badminton', 'volleyball', 'kabaddi', 'football', 'cricket'];
+    const availableSports: SchedulableSport[] = ['basketball', 'badminton', 'volleyball', 'kabaddi', 'football', 'cricket'];
 
     // HANDLERS
-    const toggleSport = (sport: SportType) => {
+    const toggleSport = (sport: SchedulableSport) => {
         if (selectedSports.includes(sport)) {
             setSelectedSports(prev => prev.filter(s => s !== sport));
             const newConfig = { ...sportConfig };
@@ -43,7 +43,7 @@ export const TournamentSetup: React.FC = () => {
         }
     };
 
-    const updateCourts = (sport: SportType, delta: number) => {
+    const updateCourts = (sport: SchedulableSport, delta: number) => {
         setSportConfig(prev => ({
             ...prev,
             [sport]: { courts: Math.max(1, Math.min(20, (prev[sport]?.courts || 1) + delta)) }
@@ -71,7 +71,7 @@ export const TournamentSetup: React.FC = () => {
                 name,
                 logoUrl,
                 { organizer, location, startDate, endDate },
-                sportConfig
+                sportConfig as any
             );
             navigate(`/tournament/${id}/manage`);
         } catch (error) {

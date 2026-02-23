@@ -15,7 +15,7 @@ import {
 } from '../services/tournamentService';
 import { supabase } from '../services/supabase';
 import { BracketEditor } from '../components/BracketEditor';
-import type { Tournament, TournamentFixture, GenderCategory, SportType, DivisionConfig } from '../types';
+import type { Tournament, TournamentFixture, GenderCategory, SportType, DivisionConfig, SchedulableSport } from '../types';
 
 // ─────────────────────────────────────────────────────────────────
 // GENDER THEMES — drives the dramatic page-wide transition
@@ -449,7 +449,7 @@ const SetupModal: React.FC<{
 // ADD SPORT MODAL
 // ─────────────────────────────────────────────────────────────────
 const AddSportModal: React.FC<{
-    addableSports: SportType[]; onAddSport: (sport: SportType) => void; onClose: () => void;
+    addableSports: SchedulableSport[]; onAddSport: (sport: SchedulableSport) => void; onClose: () => void;
 }> = ({ addableSports, onAddSport, onClose }) => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
         <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onClose} />
@@ -551,9 +551,9 @@ export const TournamentManager: React.FC = () => {
         }
     };
 
-    const handleAddSport = async (sport: SportType) => {
+    const handleAddSport = async (sport: SchedulableSport) => {
         if (!id) return;
-        await addTournamentSport(id, sport);
+        await addTournamentSport(id, sport as any);
         setShowAddSportModal(false);
     };
 
@@ -569,9 +569,9 @@ export const TournamentManager: React.FC = () => {
     const filteredDivisions = divisionsList.filter(d => d.gender === activeGender);
     const currentDivision = selectedDivisionId && tournament?.divisions ? tournament.divisions[selectedDivisionId] : null;
 
-    const availableSports: SportType[] = ['basketball', 'badminton', 'volleyball', 'kabaddi', 'football', 'cricket', 'tabletennis', 'general'];
+    const availableSports: SchedulableSport[] = ['basketball', 'badminton', 'volleyball', 'kabaddi', 'football', 'cricket', 'tabletennis', 'general'];
     const existingSports = new Set(divisionsList.map(d => d.sport));
-    const addableSports = availableSports.filter(s => !existingSports.has(s));
+    const addableSports = availableSports.filter(s => !existingSports.has(s as any));
 
     const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(2, customTeamCount))));
     const byes = bracketSize - customTeamCount;
