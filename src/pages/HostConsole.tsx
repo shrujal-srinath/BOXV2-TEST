@@ -20,7 +20,9 @@ import { SPORT_REGISTRY } from '../sports/registry';
 import { deleteGame, subscribeToGame } from '../services/supabaseGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 
-import { useHardwareSignaling } from '../hooks/useHardwareSignaling'; // <-- NEW
+import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
+import { subscribeToControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
+import { HardwareControlOverlay } from '../components/HardwareControlOverlay';
 import type { Player } from '../types';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -104,33 +106,51 @@ export const HostConsole: React.FC = () => {
         shotClockDuration: game?.settings?.shotClockDuration ?? 24,
     });
 
+    // ── HARDWARE CONTROL STATE ───────────────────────────────────────────────
+    const [hwControlMode, setHwControlMode] = useState<ControlMode>('web');
+    const hwDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
+
+    // Subscribe to control mode so the overlay knows when to lock
+    useEffect(() => {
+        if (!hwDeviceId) return;
+        return subscribeToControlMode(hwDeviceId, setHwControlMode);
+    }, [hwDeviceId]);
+
     // ── ESP32 HARDWARE LISTENER ──────────────────────────────────────────────
     useHardwareSignaling(gameCode || '', (signal) => {
-        switch (signal.action) {
-            case 'ADD_SCORE_A':
-                updateScore('A', 1);
-                recordAction({ type: 'score', team: 'A', value: 1, timestamp: Date.now() });
-                break;
-            case 'ADD_SCORE_B':
-                updateScore('B', 1);
-                recordAction({ type: 'score', team: 'B', value: 1, timestamp: Date.now() });
-                break;
-            case 'SUB_SCORE_A':
-                updateScore('A', -1);
-                break;
-            case 'SUB_SCORE_B':
-                updateScore('B', -1);
-                break;
-            case 'TOGGLE_CLOCK':
-                timer.toggleClock();
-                break;
-            case 'RESET_CLOCK':
-                timer.resetShotClock24();
-                break;
-            case 'NEXT_PERIOD':
-                timer.nextPeriod();
-                break;
-        }
+        // Ignore signals if web has control (hardware mode is locked out)
+        if (hwControlMode === 'web') return;
+
+        // FIXED TYPESCRIPT OVERLAP ERROR BY CASTING TO STRING
+        const actionStr = signal.action as string;
+
+        const actionMap: Record<string, any> = {
+            ADD_SCORE_A: { type: 'ADD_POINTS', team: 'A', amount: 1 },
+            ADD_SCORE_B: { type: 'ADD_POINTS', team: 'B', amount: 1 },
+            SUB_SCORE_A: { type: 'ADD_POINTS', team: 'A', amount: -1 },
+            SUB_SCORE_B: { type: 'ADD_POINTS', team: 'B', amount: -1 },
+            ADD_FOUL_A: { type: 'ADD_FOUL', team: 'A' },
+            ADD_FOUL_B: { type: 'ADD_FOUL', team: 'B' },
+            USE_TIMEOUT_A: { type: 'USE_TIMEOUT', team: 'A' },
+            USE_TIMEOUT_B: { type: 'USE_TIMEOUT', team: 'B' },
+            TOGGLE_CLOCK: { type: 'TOGGLE_CLOCK' },
+            RESET_SHOT_CLOCK_24: { type: 'RESET_SHOT_CLOCK', value: 24 },
+            RESET_SHOT_CLOCK_14: { type: 'RESET_SHOT_CLOCK', value: 14 },
+            NEXT_PERIOD: { type: 'NEXT_PERIOD' },
+            TOGGLE_POSSESSION: { type: 'TOGGLE_POSSESSION' },
+            UNDO: { type: 'UNDO' },
+        };
+
+        const action = actionMap[actionStr];
+        if (action) dispatch(action);
+
+        // Keep local timer and history actions in sync
+        if (actionStr === 'TOGGLE_CLOCK') timer.toggleClock();
+        if (actionStr === 'RESET_SHOT_CLOCK_24' || actionStr === 'RESET_CLOCK') timer.resetShotClock24();
+        if (actionStr === 'RESET_SHOT_CLOCK_14') timer.resetShotClock14();
+        if (actionStr === 'NEXT_PERIOD') timer.nextPeriod();
+        if (actionStr === 'ADD_SCORE_A') recordAction({ type: 'score', team: 'A', value: 1, timestamp: Date.now() });
+        if (actionStr === 'ADD_SCORE_B') recordAction({ type: 'score', team: 'B', value: 1, timestamp: Date.now() });
     });
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -472,102 +492,105 @@ export const HostConsole: React.FC = () => {
             </div>
 
             {/* ── PRO CONTROL DECK ──────────────────────────────────────────── */}
-            <div className="bg-zinc-950 border-t-4 border-zinc-900 p-4 shrink-0 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
-                <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 h-full pt-2">
+            <div className="relative">
+                <HardwareControlOverlay controlMode={hwControlMode} isLocked={hwControlMode === 'hardware' && !!hwDeviceId} deviceId={hwDeviceId || ''} />
+                <div className="bg-zinc-950 border-t-4 border-zinc-900 p-4 shrink-0 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
+                    <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 h-full pt-2">
 
-                    {/* TEAM A CONTROLS */}
-                    <div className="col-span-3 flex flex-col gap-2">
-                        <div className="flex justify-between items-center pb-1 border-b border-zinc-800">
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate pl-2">
-                                {game.teamA.name}
-                            </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1 h-16">
-                            <TactileBtn label="+1" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 1)} />
-                            <TactileBtn label="+2" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 2)} />
-                            <TactileBtn label="+3" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 3)} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-1">
-                            <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" onClick={(e: React.MouseEvent) => handleFoulWithPlayer(e, 'A')} />
-                            <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" onClick={(e: React.MouseEvent) => handleTimeout(e, 'A')} />
-                        </div>
-                    </div>
-
-                    {/* CENTER CONSOLE */}
-                    <div className="col-span-6 bg-zinc-900/50 rounded-xl border border-zinc-800 p-2 flex flex-col gap-2">
-                        <div className="flex-1 grid grid-cols-12 gap-2">
-                            <div className="col-span-5 flex flex-col gap-1">
-                                <button
-                                    onClick={handleTimerToggle}
-                                    className={`flex-1 rounded border-2 transition-all flex flex-col items-center justify-center active:scale-95 shadow-lg ${timer.gameRunning
-                                        ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
-                                        : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
-                                        }`}
-                                >
-                                    <span className="text-2xl font-black uppercase italic tracking-wider">
-                                        {timer.gameRunning ? 'STOP' : 'START'}
-                                    </span>
-                                </button>
-                                <button
-                                    onClick={handleUndo}
-                                    disabled={actionHistory.length === 0}
-                                    className="h-8 bg-black border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 disabled:opacity-30 disabled:cursor-not-allowed rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1"
-                                >
-                                    <Icons.Undo />
-                                    UNDO {actionHistory.length > 0 && `(${actionHistory.length})`}
-                                </button>
+                        {/* TEAM A CONTROLS */}
+                        <div className="col-span-3 flex flex-col gap-2">
+                            <div className="flex justify-between items-center pb-1 border-b border-zinc-800">
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate pl-2">
+                                    {game.teamA.name}
+                                </span>
                             </div>
-                            <div className="col-span-3 flex flex-col gap-1 border-x border-zinc-800 px-2">
-                                <button
-                                    onClick={(e) => handleResetShot(e, 24)}
-                                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
-                                >
-                                    24
-                                </button>
-                                <button
-                                    onClick={(e) => handleResetShot(e, 14)}
-                                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
-                                >
-                                    14
-                                </button>
+                            <div className="grid grid-cols-3 gap-1 h-16">
+                                <TactileBtn label="+1" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 1)} />
+                                <TactileBtn label="+2" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 2)} />
+                                <TactileBtn label="+3" color={game.teamA.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'A', 3)} />
                             </div>
-                            <div className="col-span-4 flex flex-col gap-1">
-                                <button
-                                    onClick={handleTogglePossession}
-                                    className="flex-1 bg-black border border-zinc-700 rounded flex items-center justify-center gap-2 hover:border-white transition-all group active:scale-95"
-                                >
-                                    <span className={`text-xl ${game.gameState.possession === 'A' ? 'text-white' : 'text-zinc-800'}`}>◀</span>
-                                    <span className="text-[10px] font-bold text-zinc-500 group-hover:text-white">POSS</span>
-                                    <span className={`text-xl ${game.gameState.possession === 'B' ? 'text-white' : 'text-zinc-800'}`}>▶</span>
-                                </button>
-                                <button
-                                    onClick={() => playSound('horn')}
-                                    className="h-8 bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400 rounded text-[9px] font-black uppercase tracking-widest active:scale-95 flex items-center justify-center gap-2"
-                                >
-                                    SIREN 🔊
-                                </button>
+                            <div className="grid grid-cols-2 gap-1">
+                                <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" onClick={(e: React.MouseEvent) => handleFoulWithPlayer(e, 'A')} />
+                                <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" onClick={(e: React.MouseEvent) => handleTimeout(e, 'A')} />
                             </div>
                         </div>
-                    </div>
 
-                    {/* TEAM B CONTROLS */}
-                    <div className="col-span-3 flex flex-col gap-2">
-                        <div className="flex justify-between items-center pb-1 border-b border-zinc-800 flex-row-reverse">
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate">
-                                {game.teamB.name}
-                            </span>
+                        {/* CENTER CONSOLE */}
+                        <div className="col-span-6 bg-zinc-900/50 rounded-xl border border-zinc-800 p-2 flex flex-col gap-2">
+                            <div className="flex-1 grid grid-cols-12 gap-2">
+                                <div className="col-span-5 flex flex-col gap-1">
+                                    <button
+                                        onClick={handleTimerToggle}
+                                        className={`flex-1 rounded border-2 transition-all flex flex-col items-center justify-center active:scale-95 shadow-lg ${timer.gameRunning
+                                            ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
+                                            : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
+                                            }`}
+                                    >
+                                        <span className="text-2xl font-black uppercase italic tracking-wider">
+                                            {timer.gameRunning ? 'STOP' : 'START'}
+                                        </span>
+                                    </button>
+                                    <button
+                                        onClick={handleUndo}
+                                        disabled={actionHistory.length === 0}
+                                        className="h-8 bg-black border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 disabled:opacity-30 disabled:cursor-not-allowed rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1"
+                                    >
+                                        <Icons.Undo />
+                                        UNDO {actionHistory.length > 0 && `(${actionHistory.length})`}
+                                    </button>
+                                </div>
+                                <div className="col-span-3 flex flex-col gap-1 border-x border-zinc-800 px-2">
+                                    <button
+                                        onClick={(e) => handleResetShot(e, 24)}
+                                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
+                                    >
+                                        24
+                                    </button>
+                                    <button
+                                        onClick={(e) => handleResetShot(e, 14)}
+                                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
+                                    >
+                                        14
+                                    </button>
+                                </div>
+                                <div className="col-span-4 flex flex-col gap-1">
+                                    <button
+                                        onClick={handleTogglePossession}
+                                        className="flex-1 bg-black border border-zinc-700 rounded flex items-center justify-center gap-2 hover:border-white transition-all group active:scale-95"
+                                    >
+                                        <span className={`text-xl ${game.gameState.possession === 'A' ? 'text-white' : 'text-zinc-800'}`}>◀</span>
+                                        <span className="text-[10px] font-bold text-zinc-500 group-hover:text-white">POSS</span>
+                                        <span className={`text-xl ${game.gameState.possession === 'B' ? 'text-white' : 'text-zinc-800'}`}>▶</span>
+                                    </button>
+                                    <button
+                                        onClick={() => playSound('horn')}
+                                        className="h-8 bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400 rounded text-[9px] font-black uppercase tracking-widest active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        SIREN 🔊
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-1 h-16">
-                            <TactileBtn label="+3" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 3)} />
-                            <TactileBtn label="+2" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 2)} />
-                            <TactileBtn label="+1" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 1)} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-1">
-                            <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" onClick={(e: React.MouseEvent) => handleTimeout(e, 'B')} />
-                            <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" onClick={(e: React.MouseEvent) => handleFoulWithPlayer(e, 'B')} />
-                        </div>
-                    </div>
 
+                        {/* TEAM B CONTROLS */}
+                        <div className="col-span-3 flex flex-col gap-2">
+                            <div className="flex justify-between items-center pb-1 border-b border-zinc-800 flex-row-reverse">
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate">
+                                    {game.teamB.name}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 h-16">
+                                <TactileBtn label="+3" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 3)} />
+                                <TactileBtn label="+2" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 2)} />
+                                <TactileBtn label="+1" color={game.teamB.color} onClick={(e: React.MouseEvent) => handleScoreWithPlayer(e, 'B', 1)} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">
+                                <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" onClick={(e: React.MouseEvent) => handleTimeout(e, 'B')} />
+                                <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" onClick={(e: React.MouseEvent) => handleFoulWithPlayer(e, 'B')} />
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
             </div>
 

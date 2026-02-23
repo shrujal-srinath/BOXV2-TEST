@@ -74,11 +74,19 @@ export const useSupabaseBroadcast = ({
     useEffect(() => { periodDurationRef.current = periodDuration; }, [periodDuration]);
     useEffect(() => { shotClockDurationRef.current = shotClockDuration; }, [shotClockDuration]);
 
-    const intervalRef = useRef<number | null>(null);
     const snapshotIntervalRef = useRef<number | null>(null);
 
     const onScoreUpdateRef = useRef(onScoreUpdate);
     useEffect(() => { onScoreUpdateRef.current = onScoreUpdate; }, [onScoreUpdate]);
+
+    // ── Web Worker Initialization ─────────────────────────────────────────────
+    const workerRef = useRef<Worker | null>(null);
+    useEffect(() => {
+        const code = `let id=null;self.onmessage=e=>{if(e.data==='start'){if(id)return;id=setInterval(()=>self.postMessage('tick'),100);}else if(e.data==='stop'){if(id){clearInterval(id);id=null;}}};`;
+        const blob = new Blob([code], { type: 'application/javascript' });
+        workerRef.current = new Worker(URL.createObjectURL(blob));
+        return () => workerRef.current?.terminate();
+    }, []);
 
     // ── Step 1: Subscribe ─────────────────────────────────────────────────────
 
@@ -128,22 +136,20 @@ export const useSupabaseBroadcast = ({
         return unsub;
     }, [gameCode]);
 
-    // ── Step 2: Host Interval ─────────────────────────────────────────────────
+    // ── Step 2: Host Interval (Web Worker based) ──────────────────────────────
 
     useEffect(() => {
-        if (!isHost) return;
+        if (!isHost || !workerRef.current) return;
 
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
+        if (!clock.gameRunning) {
+            workerRef.current.postMessage('stop');
+            return;
         }
 
-        if (!clock.gameRunning) return;
-
-        intervalRef.current = window.setInterval(() => {
+        workerRef.current.onmessage = () => {
             const c = clockRef.current;
             if (!c.gameRunning) {
-                if (intervalRef.current) clearInterval(intervalRef.current);
+                workerRef.current?.postMessage('stop');
                 return;
             }
 
@@ -158,7 +164,7 @@ export const useSupabaseBroadcast = ({
             let totalTenths = Math.max(0, startTotalTenths - elapsedTenths);
 
             if (totalTenths <= 0) {
-                if (intervalRef.current) clearInterval(intervalRef.current);
+                workerRef.current?.postMessage('stop');
                 broadcastClockStop(gameCode, { ...c, gameRunning: false, shotClockRunning: false, minutes: 0, seconds: 0, tenths: 0, startedAt: null, shotClockStartedAt: null });
                 window.dispatchEvent(new CustomEvent('periodEnd', { detail: { period: c.period } }));
                 return;
@@ -174,13 +180,30 @@ export const useSupabaseBroadcast = ({
 
             setClock(prev => ({ ...prev, minutes: newMin, seconds: newSec, tenths: newTenths, shotClock: newShot }));
             broadcastClockTick(gameCode, newMin, newSec, newTenths, newShot);
+        };
 
-        }, 100);
+        workerRef.current.postMessage('start');
 
         return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
+            workerRef.current?.postMessage('stop');
         };
     }, [isHost, gameCode, clock.gameRunning, getSyncedNow]);
+
+    // ── Visibility Change Recovery ────────────────────────────────────────────
+
+    useEffect(() => {
+        if (!isHost) return;
+        const onVisible = () => {
+            if (document.visibilityState === 'visible' && clockRef.current.gameRunning) {
+                // Re-anchor startedAt to now, adjusting for already-elapsed time
+                // The worker will correct on next tick naturally since it uses epoch math
+                console.log('[Clock] Tab refocused — epoch math self-corrects');
+            }
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, [isHost]);
+
 
     // ── Step 3: Host Snapshot ─────────────────────────────────────────────────
 
@@ -206,7 +229,7 @@ export const useSupabaseBroadcast = ({
 
     const stopClock = useCallback(() => {
         if (!isHost) return;
-        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+        workerRef.current?.postMessage('stop');
         const newState: BroadcastClockState = { ...clockRef.current, gameRunning: false, shotClockRunning: false, startedAt: null, shotClockStartedAt: null };
         setClock(newState);
         broadcastClockStop(gameCode, newState);
@@ -228,7 +251,7 @@ export const useSupabaseBroadcast = ({
 
     const nextPeriod = useCallback(() => {
         if (!isHost) return;
-        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+        workerRef.current?.postMessage('stop');
         const newPeriod = clockRef.current.period + 1;
         const newState: BroadcastClockState = { gameRunning: false, shotClockRunning: false, minutes: periodDurationRef.current, seconds: 0, tenths: 0, shotClock: shotClockDurationRef.current, period: newPeriod, startedAt: null, shotClockStartedAt: null };
         setClock(newState);
