@@ -23,6 +23,7 @@ import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
 import { subscribeToControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
 import { HardwareControlOverlay } from '../components/HardwareControlOverlay';
+import { CastModal } from '../components/CastModal';
 import type { Player } from '../types';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ export const HostConsole: React.FC = () => {
 
     const [copied, setCopied] = useState(false);
     const [shareMenuOpen, setShareMenuOpen] = useState(false);
+    const [showCastModal, setShowCastModal] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
     const [actionHistory, setActionHistory] = useState<GameAction[]>([]);
     const [showPlayerPopup, setShowPlayerPopup] = useState(false);
@@ -107,42 +109,40 @@ export const HostConsole: React.FC = () => {
     });
 
     // ── Hardware Control Mode ─────────────────────────────────────────────────────
-    // Tracks whether ESP32, web, or shared has control
-    // This drives: (1) locking web buttons, (2) filtering incoming ESP32 signals
-    const [hwControlMode, setHwControlMode] = useState<ControlMode>('hardware');
+    const [hwMode, setHwMode] = useState<'web' | 'hardware' | 'shared'>('hardware');
     const hwDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
 
+    // Subscribe to control mode changes in real time
     useEffect(() => {
         if (!hwDeviceId) return;
-        // Subscribe to control mode changes in real time
         const unsub = subscribeToControlMode(hwDeviceId, (mode) => {
-            setHwControlMode(mode);
-            console.log('[HostConsole] Control mode changed to:', mode);
+            setHwMode(mode);
+            console.log('[HW Mode]', mode);
         });
         return unsub;
     }, [hwDeviceId]);
 
-    // Whether the web scoring buttons should be disabled
-    // Locked = hardware mode AND a device is paired
-    const isWebLocked = hwControlMode === 'hardware' && !!hwDeviceId;
+    // Web buttons locked when ESP32 has exclusive control
+    const isWebLocked = hwMode === 'hardware' && !!hwDeviceId;
 
     // Refs to avoid hoisting issues within the useCallback hook
     const handleUndoRef = useRef<() => void>(() => { });
     const recordActionRef = useRef<(action: GameAction) => void>(() => { });
 
-    // ── Hardware Signal Handler ───────────────────────────────────────────────────
-    // Receives button press signals from ESP32 and dispatches to GameEngine
-    // Uses useCallback so the ref inside useHardwareSignaling always gets latest state
-    const handleHardwareSignal = useCallback((signal: any) => {
-        // In 'web' mode, ignore all ESP32 signals
-        if (hwControlMode === 'web') {
-            console.log('[HW] Signal ignored — web has control');
+    // ── REPLACE the existing useHardwareSignaling call with this ──────────────────
+    // The useCallback here means cbRef inside useHardwareSignaling always gets
+    // the latest hwMode without re-subscribing to the Supabase channel.
+    const handleHwSignal = useCallback((signal: any) => {
+        // In web-only mode, ignore all ESP32 signals
+        if (hwMode === 'web') {
+            console.log('[HW] Ignored — web has control');
             return;
         }
 
-        console.log('[HW] Processing signal:', signal.action);
+        console.log('[HW] Handling:', signal.action);
 
         switch (signal.action) {
+            // ── Scoring: short press ──────────────────────────────────────────────
             case 'ADD_SCORE_A':
                 updateScore('A', 1);
                 recordActionRef.current({ type: 'score', team: 'A', value: 1, timestamp: Date.now() });
@@ -159,69 +159,82 @@ export const HostConsole: React.FC = () => {
                 updateScore('B', -1);
                 recordActionRef.current({ type: 'score', team: 'B', value: -1, timestamp: Date.now() });
                 break;
+
+            // ── Scoring: hold press ───────────────────────────────────────────────
+            case 'ADD_SCORE_A_2':
+                updateScore('A', 2);
+                recordActionRef.current({ type: 'score', team: 'A', value: 2, timestamp: Date.now() });
+                break;
+            case 'ADD_SCORE_B_2':
+                updateScore('B', 2);
+                recordActionRef.current({ type: 'score', team: 'B', value: 2, timestamp: Date.now() });
+                break;
+
+            // ── Fouls ─────────────────────────────────────────────────────────────
             case 'ADD_FOUL_A':
                 updateFouls('A', 1);
+                recordActionRef.current({ type: 'foul', team: 'A', value: 1, timestamp: Date.now() });
                 break;
             case 'ADD_FOUL_B':
                 updateFouls('B', 1);
+                recordActionRef.current({ type: 'foul', team: 'B', value: 1, timestamp: Date.now() });
                 break;
-            case 'USE_TIMEOUT_A':
-                updateTimeouts('A', -1);
-                break;
-            case 'USE_TIMEOUT_B':
-                updateTimeouts('B', -1);
-                break;
+
+            // ── Clock ─────────────────────────────────────────────────────────────
             case 'TOGGLE_CLOCK':
                 timer.toggleClock();
                 break;
-            case 'RESET_CLOCK':
             case 'RESET_SHOT_CLOCK_24':
+            case 'RESET_CLOCK':
                 timer.resetShotClock24();
                 break;
             case 'RESET_SHOT_CLOCK_14':
                 timer.resetShotClock14();
                 break;
+
+            // ── Game flow ─────────────────────────────────────────────────────────
             case 'NEXT_PERIOD':
                 timer.nextPeriod();
                 break;
             case 'TOGGLE_POSSESSION':
                 togglePossession();
                 break;
+
+            // ── Undo ──────────────────────────────────────────────────────────────
             case 'UNDO':
                 handleUndoRef.current();
                 break;
+
+            // ── Full state sync (sent after undo chain) ───────────────────────────
+            // When firmware sends SCORE_STATE it includes current scoreA/scoreB.
+            // We trust it and set directly (avoids double-counting).
+            case 'SCORE_STATE':
+                if (signal.scoreA !== undefined) updateScore('A', signal.scoreA - (game?.teamA?.score ?? 0));
+                if (signal.scoreB !== undefined) updateScore('B', signal.scoreB - (game?.teamB?.score ?? 0));
+                break;
+
             default:
                 console.log('[HW] Unknown action:', signal.action);
         }
-    }, [hwControlMode, updateScore, updateFouls, updateTimeouts, timer, togglePossession]);
+    }, [hwMode, updateScore, updateFouls, timer, togglePossession, game]);
 
-    // Subscribe to hardware signals
-    const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHardwareSignal);
+    // Subscribe — stable channel, latest handler via ref inside the hook
+    const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHwSignal);
 
-    // ── Send web scores back to ESP32 in shared mode ──────────────────────────────
-    // When the operator scores from the web console in shared mode,
-    // the ESP32 display needs to know so it stays in sync.
-    // We wrap the score update to also broadcast a feedback event.
+    // ── WRAP web score buttons to notify ESP32 in shared mode ─────────────────────
+    // When web scores in shared mode, ESP32 display needs to update too.
+    // Call this instead of handleScoreWithPlayer for web-initiated scores.
     const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {
         updateScore(team, points);
         recordActionRef.current({ type: 'score', team, value: points, playerId, timestamp: Date.now() });
 
-        // In shared mode, notify ESP32 of the new score so its display updates
-        if (hwControlMode === 'shared' && game) {
-            const newScoreA = team === 'A'
-                ? (game.teamA.score + points)
-                : game.teamA.score;
-            const newScoreB = team === 'B'
-                ? (game.teamB.score + points)
-                : game.teamB.score;
-
+        if (hwMode === 'shared' && game) {
             sendToHardware('SCORE_UPDATE', {
-                scoreA: Math.max(0, newScoreA),
-                scoreB: Math.max(0, newScoreB),
-                source: 'web',
+                scoreA: team === 'A' ? (game.teamA.score + points) : game.teamA.score,
+                scoreB: team === 'B' ? (game.teamB.score + points) : game.teamB.score,
             });
         }
-    }, [updateScore, hwControlMode, game, sendToHardware]);
+    }, [updateScore, hwMode, game, sendToHardware]);
 
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -437,6 +450,14 @@ export const HostConsole: React.FC = () => {
                             </>
                         )}
                     </div>
+
+                    <button
+                        onClick={() => setShowCastModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
+                    >
+                        <span className="text-sm">📺</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">Cast</span>
+                    </button>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -567,7 +588,7 @@ export const HostConsole: React.FC = () => {
             {/* ── PRO CONTROL DECK ──────────────────────────────────────────── */}
             <div className="relative">
                 <HardwareControlOverlay
-                    controlMode={hwControlMode}
+                    controlMode={hwMode}
                     isLocked={isWebLocked}
                     deviceId={hwDeviceId || ''}
                     teamAName={game.teamA.name}
@@ -754,6 +775,13 @@ export const HostConsole: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showCastModal && (
+                <CastModal
+                    gameCode={gameCode!}
+                    onClose={() => setShowCastModal(false)}
+                />
             )}
 
         </div>

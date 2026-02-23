@@ -318,7 +318,7 @@ export const Dashboard: React.FC = () => {
         >
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`} />
           <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">
-            {isConnected ? (transport === 'websocket' ? 'H/W: LAN' : 'H/W: CLOUD') : 'H/W: OFF'}
+            {isConnected ? (transport === 'supabase' ? 'H/W: CLOUD' : 'H/W: LAN') : 'H/W: OFF'}
           </span>
           {isConnected && <span className="text-lg leading-none">🎮</span>}
         </button>

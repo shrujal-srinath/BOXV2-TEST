@@ -1,268 +1,158 @@
 // src/hooks/useSupabaseBroadcast.ts
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { supabase } from '../services/supabase';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { useClockSync } from './useClockSync';
-import {
-    subscribeToGameBroadcast,
-    broadcastClockTick,
-    broadcastClockStart,
-    broadcastClockStop,
-    broadcastShotClockReset,
-    broadcastPeriodChange,
-    broadcastClockEdit,
-    broadcastGameSnapshot,
-    type BroadcastClockState,
-    type BroadcastScoreState,
-} from '../services/supabaseBroadcastService';
-
-export interface UseSupabaseBroadcastOptions {
+interface UseSupabaseBroadcastProps {
     gameCode: string;
     isHost: boolean;
     periodDuration: number;
     shotClockDuration: number;
-    onScoreUpdate?: (score: BroadcastScoreState) => void;
 }
-
-export interface SupabaseBroadcastReturn {
-    minutes: number;
-    seconds: number;
-    tenths: number;
-    shotClock: number;
-    period: number;
-    gameRunning: boolean;
-    shotClockRunning: boolean;
-    startClock: () => void;
-    stopClock: () => void;
-    toggleClock: () => void;
-    resetShotClock24: () => void;
-    resetShotClock14: () => void;
-    resetShotClock: (value: number) => void;
-    nextPeriod: () => void;
-    editClocks: (minutes: number, seconds: number, tenths: number, shotClock: number) => void;
-}
-
-export type { BroadcastScoreState } from '../services/supabaseBroadcastService';
 
 export const useSupabaseBroadcast = ({
     gameCode,
     isHost,
     periodDuration,
-    shotClockDuration,
-    onScoreUpdate,
-}: UseSupabaseBroadcastOptions): SupabaseBroadcastReturn => {
+    shotClockDuration
+}: UseSupabaseBroadcastProps) => {
+    const [gameRunning, setGameRunning] = useState(false);
+    const [period, setPeriod] = useState(1);
 
-    const [clock, setClock] = useState<BroadcastClockState>({
-        gameRunning: false,
-        shotClockRunning: false,
-        minutes: periodDuration,
-        seconds: 0,
-        tenths: 0,
-        shotClock: shotClockDuration,
-        period: 1,
-        startedAt: null,
-        shotClockStartedAt: null,
-    });
+    // Store time in pure milliseconds for flawless math
+    const [gameTimeMs, setGameTimeMs] = useState(periodDuration * 60000);
+    const [shotClockMs, setShotClockMs] = useState(shotClockDuration * 1000);
 
-    const clockRef = useRef<BroadcastClockState>(clock);
-    useEffect(() => { clockRef.current = clock; }, [clock]);
+    const lastTickRef = useRef<number>(0);
 
-    const { getSyncedNow } = useClockSync();
+    // FIX: Added | null and (null) to satisfy TypeScript
+    const requestRef = useRef<number | null>(null);
+    const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Use refs for settings to avoid re-triggering the subscription effect
-    const periodDurationRef = useRef(periodDuration);
-    const shotClockDurationRef = useRef(shotClockDuration);
-    useEffect(() => { periodDurationRef.current = periodDuration; }, [periodDuration]);
-    useEffect(() => { shotClockDurationRef.current = shotClockDuration; }, [shotClockDuration]);
+    // Track running state in a ref so the animation loop never goes stale
+    const gameRunningRef = useRef(gameRunning);
+    useEffect(() => { gameRunningRef.current = gameRunning; }, [gameRunning]);
 
-    const snapshotIntervalRef = useRef<number | null>(null);
+    // ─── THE ENGINE: Delta-Time Clock ────────────────────────────────────────
+    // Calculates the exact mathematical time passed between frames.
+    // Completely immune to React re-renders and "fast clock" glitches.
+    const tick = useCallback(() => {
+        if (!gameRunningRef.current) return;
 
-    const onScoreUpdateRef = useRef(onScoreUpdate);
-    useEffect(() => { onScoreUpdateRef.current = onScoreUpdate; }, [onScoreUpdate]);
+        const now = Date.now();
+        const delta = now - lastTickRef.current;
+        lastTickRef.current = now;
 
-    // ── Web Worker Initialization ─────────────────────────────────────────────
-    const workerRef = useRef<Worker | null>(null);
-    useEffect(() => {
-        const code = `let id=null;self.onmessage=e=>{if(e.data==='start'){if(id)return;id=setInterval(()=>self.postMessage('tick'),100);}else if(e.data==='stop'){if(id){clearInterval(id);id=null;}}};`;
-        const blob = new Blob([code], { type: 'application/javascript' });
-        workerRef.current = new Worker(URL.createObjectURL(blob));
-        return () => workerRef.current?.terminate();
-    }, []);
-
-    // ── Step 1: Subscribe ─────────────────────────────────────────────────────
-
-    useEffect(() => {
-        if (!gameCode) return;
-
-        const unsub = subscribeToGameBroadcast(gameCode, {
-            onClockTick: (payload) => {
-                setClock(prev => ({ ...prev, minutes: payload.minutes, seconds: payload.seconds, tenths: payload.tenths, shotClock: payload.shotClock }));
-            },
-            onClockStart: (payload) => {
-                setClock({ ...payload });
-            },
-            onClockStop: (payload) => {
-                setClock({ ...payload });
-            },
-            onShotClockReset: (payload) => {
-                setClock(prev => ({ ...prev, shotClock: payload.shotClock, shotClockRunning: payload.shotClockRunning }));
-            },
-            onPeriodChange: (payload) => {
-                setClock(prev => ({
-                    ...prev,
-                    gameRunning: false,
-                    shotClockRunning: false,
-                    minutes: periodDurationRef.current,
-                    seconds: 0,
-                    tenths: 0,
-                    shotClock: shotClockDurationRef.current,
-                    period: payload.period,
-                    startedAt: null,
-                    shotClockStartedAt: null,
-                }));
-            },
-            onClockEdit: (payload) => {
-                setClock(prev => ({ ...prev, minutes: payload.minutes, seconds: payload.seconds, tenths: payload.tenths, shotClock: payload.shotClock, startedAt: null, shotClockStartedAt: null }));
-            },
-            onGameSnapshot: (payload) => {
-                setClock(payload.clock);
-                if (onScoreUpdateRef.current && payload.score) onScoreUpdateRef.current(payload.score);
-            },
-            onScoreUpdate: (payload) => {
-                if (onScoreUpdateRef.current) onScoreUpdateRef.current(payload);
-            },
+        setGameTimeMs(prevGame => {
+            const nextGame = prevGame - delta;
+            if (nextGame <= 0) {
+                setGameRunning(false);
+                return 0;
+            }
+            return nextGame;
         });
 
-        // ONLY dependency is gameCode. Settings are safely handled via Refs.
-        return unsub;
-    }, [gameCode]);
+        setShotClockMs(prevShot => {
+            const nextShot = prevShot - delta;
+            if (nextShot <= 0) {
+                setGameRunning(false); // FIBA: shot clock violation stops game clock
+                return 0;
+            }
+            return nextShot;
+        });
 
-    // ── Step 2: Host Interval (Web Worker based) ──────────────────────────────
+        requestRef.current = requestAnimationFrame(tick);
+    }, []);
 
+    // Start/Stop the engine
     useEffect(() => {
-        if (!isHost || !workerRef.current) return;
-
-        if (!clock.gameRunning) {
-            workerRef.current.postMessage('stop');
-            return;
+        if (isHost && gameRunning) {
+            lastTickRef.current = Date.now();
+            requestRef.current = requestAnimationFrame(tick);
+        } else if (requestRef.current) {
+            cancelAnimationFrame(requestRef.current);
         }
-
-        workerRef.current.onmessage = () => {
-            const c = clockRef.current;
-            if (!c.gameRunning) {
-                workerRef.current?.postMessage('stop');
-                return;
-            }
-
-            // Use synced time to calculate exact elapsed tenths since clock started.
-            // This corrects for slow hardware that may fire setInterval late.
-            const now = getSyncedNow();
-            const elapsedMs = c.startedAt ? now - c.startedAt : 0;
-            const elapsedTenths = Math.floor(elapsedMs / 100);
-
-            // Reference total at clock-start, minus elapsed
-            const startTotalTenths = (c.minutes * 600) + (c.seconds * 10) + c.tenths;
-            let totalTenths = Math.max(0, startTotalTenths - elapsedTenths);
-
-            if (totalTenths <= 0) {
-                workerRef.current?.postMessage('stop');
-                broadcastClockStop(gameCode, { ...c, gameRunning: false, shotClockRunning: false, minutes: 0, seconds: 0, tenths: 0, startedAt: null, shotClockStartedAt: null });
-                window.dispatchEvent(new CustomEvent('periodEnd', { detail: { period: c.period } }));
-                return;
-            }
-
-            const newMin = Math.floor(totalTenths / 600);
-            const remainder = totalTenths % 600;
-            const newSec = Math.floor(remainder / 10);
-            const newTenths = remainder % 10;
-
-            const secondBoundary = (newTenths === 9 && c.tenths === 0);
-            const newShot = (c.shotClockRunning && secondBoundary) ? Math.max(0, c.shotClock - 1) : c.shotClock;
-
-            setClock(prev => ({ ...prev, minutes: newMin, seconds: newSec, tenths: newTenths, shotClock: newShot }));
-            broadcastClockTick(gameCode, newMin, newSec, newTenths, newShot);
-        };
-
-        workerRef.current.postMessage('start');
-
         return () => {
-            workerRef.current?.postMessage('stop');
+            if (requestRef.current) cancelAnimationFrame(requestRef.current);
         };
-    }, [isHost, gameCode, clock.gameRunning, getSyncedNow]);
+    }, [isHost, gameRunning, tick]);
 
-    // ── Visibility Change Recovery ────────────────────────────────────────────
-
-    useEffect(() => {
-        if (!isHost) return;
-        const onVisible = () => {
-            if (document.visibilityState === 'visible' && clockRef.current.gameRunning) {
-                // Re-anchor startedAt to now, adjusting for already-elapsed time
-                // The worker will correct on next tick naturally since it uses epoch math
-                console.log('[Clock] Tab refocused — epoch math self-corrects');
-            }
-        };
-        document.addEventListener('visibilitychange', onVisible);
-        return () => document.removeEventListener('visibilitychange', onVisible);
-    }, [isHost]);
-
-
-    // ── Step 3: Host Snapshot ─────────────────────────────────────────────────
-
-    useEffect(() => {
+    // ─── SYNC TO SUPABASE ──────────────────────────────────────────────────
+    // Send clock state to Spectators and TVs every 300ms
+    const broadcastState = useCallback(() => {
         if (!isHost || !gameCode) return;
-        snapshotIntervalRef.current = window.setInterval(() => {
-            broadcastGameSnapshot(gameCode, clockRef.current, { teamA: 0, teamB: 0, foulsA: 0, foulsB: 0, timeoutsA: 0, timeoutsB: 0, possession: 'A' });
-        }, 5000);
+
+        supabase.channel(`clock-${gameCode}`).send({
+            type: 'broadcast',
+            event: 'sync',
+            payload: { gameRunning, gameTimeMs, shotClockMs, period }
+        });
+    }, [isHost, gameCode, gameRunning, gameTimeMs, shotClockMs, period]);
+
+    useEffect(() => {
+        if (isHost && gameRunning) {
+            syncIntervalRef.current = setInterval(broadcastState, 300);
+        } else if (isHost && !gameRunning) {
+            broadcastState(); // Force one final sync when paused
+        }
         return () => {
-            if (snapshotIntervalRef.current !== null) clearInterval(snapshotIntervalRef.current);
+            if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
         };
+    }, [isHost, gameRunning, broadcastState]);
+
+    // ─── SPECTATOR LISTENER ────────────────────────────────────────────────
+    useEffect(() => {
+        if (isHost || !gameCode) return;
+
+        const channel = supabase.channel(`clock-${gameCode}`)
+            .on('broadcast', { event: 'sync' }, ({ payload }) => {
+                setGameRunning(payload.gameRunning);
+                setGameTimeMs(payload.gameTimeMs);
+                setShotClockMs(payload.shotClockMs);
+                setPeriod(payload.period);
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
     }, [isHost, gameCode]);
 
-    // ── Host Controls ─────────────────────────────────────────────────────────
+    // ─── ACTIONS ───────────────────────────────────────────────────────────
+    const toggleClock = () => setGameRunning(prev => !prev);
+    const stopClock = () => setGameRunning(false);
 
-    const startClock = useCallback(() => {
-        if (!isHost) return;
-        const now = getSyncedNow(); // Server-corrected timestamp
-        const newState: BroadcastClockState = { ...clockRef.current, gameRunning: true, shotClockRunning: true, startedAt: now, shotClockStartedAt: now };
-        setClock(newState);
-        broadcastClockStart(gameCode, newState);
-    }, [isHost, gameCode, getSyncedNow]);
+    const resetShotClock24 = () => {
+        setShotClockMs(24000);
+        if (!gameRunning) broadcastState();
+    };
+    const resetShotClock14 = () => {
+        setShotClockMs(14000);
+        if (!gameRunning) broadcastState();
+    };
+    const nextPeriod = () => {
+        setGameRunning(false);
+        setPeriod(p => p + 1);
+        setGameTimeMs(periodDuration * 60000);
+        setShotClockMs(shotClockDuration * 1000);
+    };
 
-    const stopClock = useCallback(() => {
-        if (!isHost) return;
-        workerRef.current?.postMessage('stop');
-        const newState: BroadcastClockState = { ...clockRef.current, gameRunning: false, shotClockRunning: false, startedAt: null, shotClockStartedAt: null };
-        setClock(newState);
-        broadcastClockStop(gameCode, newState);
-    }, [isHost, gameCode]);
+    // ─── FIBA FORMATTING ───────────────────────────────────────────────────
+    const minutes = Math.floor(gameTimeMs / 60000);
+    const seconds = Math.floor((gameTimeMs % 60000) / 1000);
+    const tenths = Math.floor((gameTimeMs % 1000) / 100);
 
-    const toggleClock = useCallback(() => {
-        if (clockRef.current.gameRunning) stopClock();
-        else startClock();
-    }, [startClock, stopClock]);
+    // FIBA Rule: 23.9s shows as 24, 0.1s shows as 1.
+    const displayShotClock = Math.ceil(shotClockMs / 1000);
 
-    const resetShotClock = useCallback((value: number) => {
-        if (!isHost) return;
-        setClock(prev => ({ ...prev, shotClock: value, shotClockRunning: prev.gameRunning, shotClockStartedAt: prev.gameRunning ? Date.now() : null }));
-        broadcastShotClockReset(gameCode, value, clockRef.current.gameRunning);
-    }, [isHost, gameCode]);
-
-    const resetShotClock24 = useCallback(() => resetShotClock(shotClockDurationRef.current), [resetShotClock]);
-    const resetShotClock14 = useCallback(() => resetShotClock(14), [resetShotClock]);
-
-    const nextPeriod = useCallback(() => {
-        if (!isHost) return;
-        workerRef.current?.postMessage('stop');
-        const newPeriod = clockRef.current.period + 1;
-        const newState: BroadcastClockState = { gameRunning: false, shotClockRunning: false, minutes: periodDurationRef.current, seconds: 0, tenths: 0, shotClock: shotClockDurationRef.current, period: newPeriod, startedAt: null, shotClockStartedAt: null };
-        setClock(newState);
-        broadcastPeriodChange(gameCode, newPeriod, newState);
-    }, [isHost, gameCode]);
-
-    const editClocks = useCallback((minutes: number, seconds: number, tenths: number, shotClock: number) => {
-        if (!isHost) return;
-        setClock(prev => ({ ...prev, minutes, seconds, tenths, shotClock, startedAt: null, shotClockStartedAt: null }));
-        broadcastClockEdit(gameCode, minutes, seconds, tenths, shotClock);
-    }, [isHost, gameCode]);
-
-    return { minutes: clock.minutes, seconds: clock.seconds, tenths: clock.tenths, shotClock: clock.shotClock, period: clock.period, gameRunning: clock.gameRunning, shotClockRunning: clock.shotClockRunning, startClock, stopClock, toggleClock, resetShotClock24, resetShotClock14, resetShotClock, nextPeriod, editClocks };
+    return {
+        minutes,
+        seconds,
+        tenths,
+        shotClock: displayShotClock,
+        period,
+        gameRunning,
+        toggleClock,
+        stopClock,
+        resetShotClock24,
+        resetShotClock14,
+        nextPeriod,
+    };
 };
