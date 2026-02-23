@@ -108,7 +108,7 @@ export interface BasketballGame {
 // 7. SPORT TYPES & TOURNAMENT CONFIGS
 // ══════════════════════════════════════════════
 // All sports that can appear in tournament schedules (present + future)
-export type SchedulableSport = 'basketball' | 'badminton' | 'volleyball' | 'kabaddi' | 'table_tennis' | 'football' | 'cricket';
+export type SchedulableSport = 'basketball' | 'badminton' | 'volleyball' | 'kabaddi' | 'table_tennis' | 'tabletennis' | 'football' | 'cricket' | 'general';
 
 // Currently live-scoring-supported sports only
 export type SportType = 'basketball' | 'badminton';
