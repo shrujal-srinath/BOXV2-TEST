@@ -81,13 +81,12 @@ export const initializeNewGame = async (
         .from('games')
         .insert({
             code: gameCode,
-            host_id: hostId,
+            hostId,
             sport,
             status: 'live',
-            game_type: isOnline ? 'online' : 'local',
+            gameType: isOnline ? 'online' : 'local',
             data: newGame,
-            created_at: Date.now(),
-            last_update: Date.now(),
+            lastUpdate: Date.now(),
         });
 
     if (error) {
@@ -176,8 +175,8 @@ export const subscribeToLiveGames = (
             .from('games')
             .select('data')
             .eq('status', 'live')
-            .gt('last_update', cutoff)
-            .order('last_update', { ascending: false });
+            .gt('lastUpdate', cutoff)
+            .order('lastUpdate', { ascending: false });
 
         if (!error && data) {
             callback(data.map(row => row.data as BasketballGame));
@@ -241,7 +240,7 @@ export const updateGameField = async (
     // Write back
     const { error } = await supabase
         .from('games')
-        .update({ data: gameData, last_update: Date.now() })
+        .update({ data: gameData, lastUpdate: Date.now() })
         .eq('code', gameId);
 
     if (error) {
@@ -283,7 +282,7 @@ export const batchUpdateGame = async (
 
     const { error } = await supabase
         .from('games')
-        .update({ data: gameData, last_update: Date.now() })
+        .update({ data: gameData, lastUpdate: Date.now() })
         .eq('code', gameId);
 
     if (error) {
@@ -297,7 +296,7 @@ export const batchUpdateGame = async (
 export const finishGame = async (gameId: string): Promise<void> => {
     const { error } = await supabase
         .from('games')
-        .update({ status: 'finished', last_update: Date.now() })
+        .update({ status: 'finished', lastUpdate: Date.now() })
         .eq('code', gameId);
 
     if (error) {

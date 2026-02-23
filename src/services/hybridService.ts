@@ -177,16 +177,12 @@ const processSyncQueueWithRetry = async (): Promise<SaveResult> => {
       ));
 
       const { error } = await supabase.from('games').upsert({
-        id: cleanData.id,
         code: cleanData.code,
         hostId: cleanData.hostId,
         sportId: cleanData.sportId || 'basketball',
         status: cleanData.status,
         gameType: cleanData.gameType || 'online',
-        rules: cleanData.rules,
-        state: cleanData.state,
-        teamA: cleanData.teamA,
-        teamB: cleanData.teamB,
+        data: cleanData,
         lastUpdate: Date.now()
       }, { onConflict: 'code' });
 
