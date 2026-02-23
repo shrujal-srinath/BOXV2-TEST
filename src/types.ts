@@ -1,9 +1,7 @@
 // src/types.ts
 //
 // HYBRID ARCHITECTURE TYPES
-// Merges Tournament System + Live Game Engine (Firestore/RTDB)
-
-import type { SupportedSport } from './sports/registry';
+// Merges Tournament System + Live Game Engine (Supabase)
 
 // ══════════════════════════════════════════════
 // 1. PLAYER
@@ -57,7 +55,7 @@ export interface GameSettings {
   venue?: string;        // Venue name
   courtNumber?: string;
   tournamentId?: string;
-  sport?: string;
+  // sport removed — belongs on the root BasketballGame object, not here
 }
 
 // ══════════════════════════════════════════════
@@ -89,13 +87,14 @@ export interface GameState {
 }
 
 // ══════════════════════════════════════════════
-// 6. BASKETBALL GAME (Firestore document shape)
+// 6. BASKETBALL GAME (Supabase document shape)
 // ══════════════════════════════════════════════
 export interface BasketballGame {
   code: string;
   hostId: string;
-  sport: string;
-  status: 'live' | 'completed' | 'finished'; // Normalized status
+  sportId: string;                                              // Canonical field (matches DB column)
+  sport?: string;                                               // Legacy fallback — use sportId going forward
+  status: 'scheduled' | 'live' | 'completed' | 'archived';     // Standardized union
   gameType: 'local' | 'online';
   createdAt: number;
   lastUpdate: number;
@@ -108,7 +107,11 @@ export interface BasketballGame {
 // ══════════════════════════════════════════════
 // 7. SPORT TYPES & TOURNAMENT CONFIGS
 // ══════════════════════════════════════════════
-export type SportType = SupportedSport;
+// All sports that can appear in tournament schedules (present + future)
+export type SchedulableSport = 'basketball' | 'badminton' | 'volleyball' | 'kabaddi' | 'table_tennis' | 'football' | 'cricket';
+
+// Currently live-scoring-supported sports only
+export type SportType = 'basketball' | 'badminton';
 
 export type TournamentFormat = 'random' | 'knockout' | 'league';
 export type GenderCategory = 'men' | 'women' | 'mixed';

@@ -206,7 +206,7 @@ export const startTournamentMatch = async (tournamentId: string, fixtureId: stri
     if (lockErr || !updatedFixture) throw new Error('This match has already been started by another scorer or could not be found.');
 
     const newGameCode = await initializeNewGame(
-        { gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`, periodDuration: 10, shotClockDuration: 24, periodType: 'quarter', courtNumber: court, tournamentId: tournamentId, sport: fixtureData.sport },
+        { gameName: `${fixtureData.teamA} vs ${fixtureData.teamB}`, periodDuration: 10, shotClockDuration: 24, periodType: 'quarter', courtNumber: court, tournamentId: tournamentId },
         { name: fixtureData.teamA, color: '#DC2626', players: [], score: 0, timeouts: 2, timeoutsFirstHalf: 2, timeoutsSecondHalf: 3, fouls: 0, foulsThisQuarter: 0 },
         { name: fixtureData.teamB, color: '#2563EB', players: [], score: 0, timeouts: 2, timeoutsFirstHalf: 2, timeoutsSecondHalf: 3, fouls: 0, foulsThisQuarter: 0 },
         false, fixtureData.sport, userId

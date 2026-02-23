@@ -179,7 +179,7 @@ const processSyncQueueWithRetry = async (): Promise<SaveResult> => {
       const { error } = await supabase.from('games').upsert({
         code: cleanData.code,
         hostId: cleanData.hostId,
-        sportId: cleanData.sportId || 'basketball',
+        sportId: (cleanData as any).sport || 'basketball',  // BasketballGame uses .sport not .sportId
         status: cleanData.status,
         gameType: cleanData.gameType || 'online',
         data: cleanData,

@@ -15,6 +15,16 @@ import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/
 // ─── Channel cache for realtime subscriptions ─────────────────────────────────
 const gameSubChannels = new Map<string, RealtimeChannel>();
 
+// ─── Data normalizer — runs on every row read from the DB ─────────────────────
+const normalizeGameData = (data: any): BasketballGame => {
+    const game = { ...data };
+    // Ensure sportId is always populated (handles rows written before the migration)
+    game.sportId = game.sportId || game.sport || 'basketball';
+    // Standardize legacy status value
+    if (game.status === 'finished') game.status = 'completed';
+    return game as BasketballGame;
+};
+
 // ============================================
 // GAME CREATION (replaces Firestore setDoc)
 // ============================================
@@ -65,7 +75,8 @@ export const initializeNewGame = async (
     const newGame: BasketballGame = {
         code: gameCode,
         hostId,
-        sport,
+        sportId: sport,
+        sport,      // legacy fallback
         status: 'live',
         gameType: isOnline ? 'online' : 'local',
         createdAt: Date.now(),
@@ -82,7 +93,7 @@ export const initializeNewGame = async (
         .insert({
             code: gameCode,
             hostId,
-            sport,
+            sportId: sport,
             status: 'live',
             gameType: isOnline ? 'online' : 'local',
             data: newGame,
@@ -124,7 +135,7 @@ export const subscribeToGame = (
             if (error || !data) {
                 callback(null);
             } else {
-                callback(data.data as BasketballGame);
+                callback(normalizeGameData(data.data));
             }
         });
 
@@ -144,7 +155,7 @@ export const subscribeToGame = (
                 if (payload.eventType === 'DELETE') {
                     callback(null);
                 } else if (payload.new && (payload.new as any).data) {
-                    callback((payload.new as any).data as BasketballGame);
+                    callback(normalizeGameData((payload.new as any).data));
                 }
             }
         )
@@ -179,7 +190,7 @@ export const subscribeToLiveGames = (
             .order('lastUpdate', { ascending: false });
 
         if (!error && data) {
-            callback(data.map(row => row.data as BasketballGame));
+            callback(data.map(row => normalizeGameData(row.data)));
         }
     };
 
@@ -329,7 +340,7 @@ export const getGameByCode = async (code: string): Promise<BasketballGame | null
         .single();
 
     if (error || !data) return null;
-    return data.data as BasketballGame;
+    return normalizeGameData(data.data);
 };
 
 /**
