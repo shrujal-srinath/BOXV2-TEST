@@ -1,15 +1,4 @@
 // src/components/ConnectControllerModal.tsx
-//
-// REWRITE — AirPods-style pairing with true 4-phase handshake
-//
-// Phases:
-//   input       → User enters 4-char code
-//   searching   → Checking RTDB for registered device
-//   found       → Device found, sending pairRequest
-//   handshaking → Waiting for ESP32 pairAck (the real confirmation)
-//   confirmed   → ESP32 acknowledged — truly paired
-//   error       → Any failure with specific reason
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     pairHandheldDevice,
@@ -347,14 +336,12 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                 <div className="flex items-center justify-between">
                                     <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Transport</span>
                                     <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest
-                                        ${transport === 'websocket'
-                                            ? 'bg-green-900/30 border border-green-700/50 text-green-400'
-                                            : transport === 'rtdb'
-                                                ? 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
-                                                : 'bg-zinc-900 border border-zinc-700 text-zinc-500'
+                                        ${transport === 'supabase'
+                                            ? 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
+                                            : 'bg-zinc-900 border border-zinc-700 text-zinc-500'
                                         }`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${transport === 'websocket' ? 'bg-green-400 animate-pulse' : transport === 'rtdb' ? 'bg-blue-400' : 'bg-zinc-600'}`} />
-                                        {transport === 'websocket' ? 'LOCAL WS' : transport === 'rtdb' ? 'CLOUD RTDB' : 'DISCONNECTED'}
+                                        <span className={`w-1.5 h-1.5 rounded-full ${transport === 'supabase' ? 'bg-blue-400 animate-pulse' : 'bg-zinc-600'}`} />
+                                        {transport === 'supabase' ? 'CLOUD RTDB' : 'DISCONNECTED'}
                                     </div>
                                 </div>
 
