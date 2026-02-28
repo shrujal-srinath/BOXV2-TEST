@@ -10,8 +10,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToGame } from '../services/supabaseGameService';
 import { getLocalGame } from '../services/localGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
-import { type BroadcastScoreState } from '../hooks/useSupabaseBroadcast';
-import { BasketballGame } from '../types';
+import { type BasketballGame } from '../types';
 import { SPORT_REGISTRY, isSportSupported } from '../sports/registry';
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
@@ -905,14 +904,11 @@ export const SpectatorView: React.FC = () => {
 
   const isLocalGame = gameCode?.startsWith('LOCAL-');
 
-  const [rtdbScore, setRtdbScore] = useState<BroadcastScoreState | null>(null);
-
   const rtdbTimer = useSupabaseBroadcast({
     gameCode: gameCode || '',
     isHost: false,
     periodDuration: game?.settings?.periodDuration || 10,
     shotClockDuration: game?.settings?.shotClockDuration || 24,
-    onScoreUpdate: (score) => setRtdbScore(score),
   });
 
   // Firestore subscription (cold data — names, colors, rosters)
@@ -954,27 +950,12 @@ export const SpectatorView: React.FC = () => {
   }, [gameCode, isLocalGame, loading]);
 
   // Merge logic:
-  // - Clock fields: RTDB (already existed)
-  // - Score fields: RTDB when online, Firestore when local
-  // Everything else (names, colors, rosters, settings) stays from Firestore
+  // - Clock fields: From fast Delta-Time engine (useSupabaseBroadcast)
+  // - Everything else: From standard DB polling (scores, names, etc.)
   const activeGame = game ? {
     ...game,
-    teamA: {
-      ...game.teamA,
-      score: (!isLocalGame && rtdbScore != null) ? rtdbScore.teamA : game.teamA.score,
-      fouls: (!isLocalGame && rtdbScore != null) ? rtdbScore.foulsA : game.teamA.fouls,
-      timeouts: (!isLocalGame && rtdbScore != null) ? rtdbScore.timeoutsA : game.teamA.timeouts,
-    },
-    teamB: {
-      ...game.teamB,
-      score: (!isLocalGame && rtdbScore != null) ? rtdbScore.teamB : game.teamB.score,
-      fouls: (!isLocalGame && rtdbScore != null) ? rtdbScore.foulsB : game.teamB.fouls,
-      timeouts: (!isLocalGame && rtdbScore != null) ? rtdbScore.timeoutsB : game.teamB.timeouts,
-    },
     gameState: {
       ...game.gameState,
-      possession: (!isLocalGame && rtdbScore != null) ? rtdbScore.possession : game.gameState.possession,
-      // Clock fields — same as before
       gameTime: isLocalGame ? game.gameState.gameTime : {
         minutes: rtdbTimer.minutes,
         seconds: rtdbTimer.seconds,
