@@ -109,7 +109,7 @@ export const HostConsole: React.FC = () => {
     });
 
     // ── Hardware Control Mode ─────────────────────────────────────────────────────
-    const [hwMode, setHwMode] = useState<'web' | 'hardware'>('hardware');
+    const [hwMode, setHwMode] = useState<'web' | 'hardware'>('web');
     const hwDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
 
     // Subscribe to control mode changes in real time
