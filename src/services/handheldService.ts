@@ -11,14 +11,25 @@
 //   2. Operator enters code on website → pairHandheldDevice() runs the handshake
 //   3. Game launches → activateGameOnDevice() tells ESP32 which game to control
 //   4. During game → ESP32 sends Broadcast signals → useHardwareSignaling picks them up
-//   5. Control mode can be switched anytime: hardware | web | shared
+//   5. Control mode can be switched anytime: hardware | web
+//
+// v3.0 — Simplified to 2 modes only (removed 'shared' mode)
+//   - 'hardware': ESP32 buttons are active, web console is locked (read-only)
+//   - 'web': Web console is active, ESP32 buttons are ignored (display-only)
+//   One authority at a time. No race conditions. No sync nightmares.
 
 import { supabase } from './supabase';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const HW_SESSION_KEY = 'BOX_HW_SESSION';
-export type ControlMode = 'web' | 'hardware' | 'shared';
+
+/**
+ * v3.0: Only two modes — one authority at a time.
+ *   'hardware' → ESP32 is parent. Ref scores from physical buttons. Web is read-only.
+ *   'web'      → Web is parent. Operator scores from browser. ESP32 is display-only.
+ */
+export type ControlMode = 'web' | 'hardware';
 
 // How long without a heartbeat before we consider the device offline
 const ONLINE_THRESHOLD_MS = 15000;
@@ -70,7 +81,7 @@ export const pairHandheldDevice = async (
     if (fetchError || !device) {
         return {
             success: false,
-            message: `No device found with code "${upperCode}". Make sure the ESP32 is powered on and connected to WiFi.`,
+            message: `No device found with code "${upperCode}".\n\nMake sure the ESP32 is powered on and connected to WiFi.`,
         };
     }
 
@@ -97,8 +108,6 @@ export const pairHandheldDevice = async (
     }
 
     // ── Phase 4: Confirm — verify the row is now in paired state ──────────────
-    // We poll a few times to confirm our write landed and the row is stable.
-    // This also gives the ESP32 time to detect the status change on its next poll.
     const confirmed = await waitForPairedStatus(upperCode, 10000);
 
     if (!confirmed) {
@@ -124,11 +133,6 @@ export const pairHandheldDevice = async (
 /**
  * Polls Supabase until the terminal row has status='paired' (our own write confirmed)
  * OR until timeout. Returns true on success.
- *
- * We check status, NOT last_heartbeat, because:
- *   - ESP32 heartbeat uses millis() (uptime), not Unix epoch
- *   - Comparing millis() to Date.now() always fails
- *   - Status field is fully controlled by us and is reliable
  */
 const waitForPairedStatus = async (code: string, timeoutMs: number): Promise<boolean> => {
     const start = Date.now();
@@ -142,7 +146,6 @@ const waitForPairedStatus = async (code: string, timeoutMs: number): Promise<boo
             .eq('id', code)
             .single();
 
-        // Row exists and is in paired or active state → success
         if (data && (data.status === 'paired' || data.status === 'active')) {
             return true;
         }
@@ -183,10 +186,8 @@ export const subscribeToDeviceHeartbeat = (
     callback: (isOnline: boolean, lastSeen: number) => void
 ): (() => void) => {
 
-    // Track when we last received any update from the device
     let lastReceivedAt = 0;
 
-    // Initial fetch — just check the row exists
     supabase
         .from('hardware_terminals')
         .select('id, status, last_heartbeat')
@@ -194,7 +195,6 @@ export const subscribeToDeviceHeartbeat = (
         .single()
         .then(({ data }) => {
             if (data) {
-                // If the row exists and is paired/active, assume online initially
                 const isOnline = data.status === 'paired' || data.status === 'active';
                 lastReceivedAt = Date.now();
                 callback(isOnline, lastReceivedAt);
@@ -203,7 +203,6 @@ export const subscribeToDeviceHeartbeat = (
             }
         });
 
-    // Real-time subscription — every heartbeat update from ESP32 triggers this
     const channel = supabase
         .channel(`heartbeat:${code}`)
         .on(
@@ -215,14 +214,12 @@ export const subscribeToDeviceHeartbeat = (
                 filter: `id=eq.${code}`,
             },
             (_payload) => {
-                // We received an update → device is alive
                 lastReceivedAt = Date.now();
                 callback(true, lastReceivedAt);
             }
         )
         .subscribe();
 
-    // Watchdog: check every 8s if we haven't received anything recently
     const watchdog = setInterval(() => {
         if (lastReceivedAt > 0 && Date.now() - lastReceivedAt > ONLINE_THRESHOLD_MS) {
             callback(false, lastReceivedAt);
@@ -241,10 +238,9 @@ export const subscribeToDeviceHeartbeat = (
  * Sets the control mode in the database.
  * ESP32 polls hardware_terminals on its next cycle and obeys this.
  *
- * Modes:
+ * v3.0: Only two modes:
  *   'hardware' → Only ESP32 buttons score. Website console is locked (read-only).
  *   'web'      → Only website scores. ESP32 buttons are ignored.
- *   'shared'   → Both score simultaneously. Last write wins.
  */
 export const setControlMode = async (
     code: string,
@@ -271,14 +267,17 @@ export const subscribeToControlMode = (
     callback: (mode: ControlMode) => void
 ): (() => void) => {
 
-    // Initial fetch
     supabase
         .from('hardware_terminals')
         .select('control_mode')
         .eq('id', code)
         .single()
         .then(({ data }) => {
-            if (data) callback(data.control_mode as ControlMode);
+            if (data) {
+                // Normalize: if DB still has 'shared' from old version, treat as 'hardware'
+                const raw = data.control_mode as string;
+                callback(raw === 'web' ? 'web' : 'hardware');
+            }
         });
 
     const channel = supabase
@@ -292,8 +291,8 @@ export const subscribeToControlMode = (
                 filter: `id=eq.${code}`,
             },
             (payload) => {
-                const newMode = (payload.new as any).control_mode as ControlMode;
-                if (newMode) callback(newMode);
+                const raw = (payload.new as any).control_mode as string;
+                if (raw) callback(raw === 'web' ? 'web' : 'hardware');
             }
         )
         .subscribe();

@@ -99,7 +99,7 @@ export const HostConsole: React.FC = () => {
     const updateScore = (team: 'A' | 'B', value: number) => dispatch({ type: 'ADD_POINTS', team, amount: value });
     const updateFouls = (team: 'A' | 'B', _value: number) => dispatch({ type: 'ADD_FOUL', team });
     const updateTimeouts = (team: 'A' | 'B', _value: number) => dispatch({ type: 'USE_TIMEOUT', team });
-    const togglePossession = () => { };
+    const togglePossession = () => dispatch({ type: 'SET_POSSESSION', team: state.possession === 'A' ? 'B' : 'A' });
 
     const timer = useSupabaseBroadcast({
         gameCode: gameCode || '',
@@ -109,7 +109,7 @@ export const HostConsole: React.FC = () => {
     });
 
     // ── Hardware Control Mode ─────────────────────────────────────────────────────
-    const [hwMode, setHwMode] = useState<'web' | 'hardware' | 'shared'>('hardware');
+    const [hwMode, setHwMode] = useState<'web' | 'hardware'>('hardware');
     const hwDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
 
     // Subscribe to control mode changes in real time
@@ -221,20 +221,11 @@ export const HostConsole: React.FC = () => {
     // Subscribe — stable channel, latest handler via ref inside the hook
     const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHwSignal);
 
-    // ── WRAP web score buttons to notify ESP32 in shared mode ─────────────────────
-    // When web scores in shared mode, ESP32 display needs to update too.
-    // Call this instead of handleScoreWithPlayer for web-initiated scores.
+    // ── WRAP web score buttons to record action history ────────────────────────────
     const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {
         updateScore(team, points);
         recordActionRef.current({ type: 'score', team, value: points, playerId, timestamp: Date.now() });
-
-        if (hwMode === 'shared' && game) {
-            sendToHardware('SCORE_UPDATE', {
-                scoreA: team === 'A' ? (game.teamA.score + points) : game.teamA.score,
-                scoreB: team === 'B' ? (game.teamB.score + points) : game.teamB.score,
-            });
-        }
-    }, [updateScore, hwMode, game, sendToHardware]);
+    }, [updateScore]);
 
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -367,8 +358,8 @@ export const HostConsole: React.FC = () => {
     const handleExportStats = () => {
         if (!game) return;
         const headers = "Team,Player,Number,PTS,Fouls\n";
-        const rowsA = game.teamA.players.map(p => `"${game.teamA.name}","${p.name}",${p.number},${p.points},${p.fouls}`).join("\n");
-        const rowsB = game.teamB.players.map(p => `"${game.teamB.name}","${p.name}",${p.number},${p.points},${p.fouls}`).join("\n");
+        const rowsA = game.teamA.players.filter((p: any) => p.name).map((p: any) => `"${game.teamA.name}","${p.name}",${p.number},${p.points},${p.fouls}`).join("\n");
+        const rowsB = game.teamB.players.filter((p: any) => p.name).map((p: any) => `"${game.teamB.name}","${p.name}",${p.number},${p.points},${p.fouls}`).join("\n");
         const csvContent = "data:text/csv;charset=utf-8," + headers + rowsA + "\n" + rowsB;
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent));

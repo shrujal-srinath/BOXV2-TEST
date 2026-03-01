@@ -30,6 +30,7 @@ export type BasketballAction =
     | { type: 'ADD_POINTS'; team: 'A' | 'B'; amount: number }
     | { type: 'ADD_FOUL'; team: 'A' | 'B' }
     | { type: 'USE_TIMEOUT'; team: 'A' | 'B' }
+    | { type: 'SET_POSSESSION'; team: 'A' | 'B' }
     | { type: 'NEXT_PERIOD' }
     | { type: 'TOGGLE_MAIN_CLOCK' }
     | { type: 'RESET_SHOT_CLOCK' };
@@ -64,6 +65,11 @@ const reducer = (state: BasketballState, action: BasketballAction, rules: Basket
                 ...state,
                 gameRunning: !state.gameRunning,
                 startedAt: !state.gameRunning ? Date.now() : null, // Used for drift calculation
+            };
+        case 'SET_POSSESSION':
+            return {
+                ...state,
+                possession: action.team,
             };
         default:
             return state;

@@ -22,59 +22,36 @@ export const useSupabaseBroadcast = ({
     const [gameTimeMs, setGameTimeMs] = useState(periodDuration * 60000);
     const [shotClockMs, setShotClockMs] = useState(shotClockDuration * 1000);
 
-    const lastTickRef = useRef<number>(0);
-
-    // FIX: Added | null and (null) to satisfy TypeScript
-    const requestRef = useRef<number | null>(null);
     const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Track running state in a ref so the animation loop never goes stale
-    const gameRunningRef = useRef(gameRunning);
-    useEffect(() => { gameRunningRef.current = gameRunning; }, [gameRunning]);
-
-    // ─── THE ENGINE: Delta-Time Clock ────────────────────────────────────────
-    // Calculates the exact mathematical time passed between frames.
-    // Completely immune to React re-renders and "fast clock" glitches.
-    const tick = useCallback(() => {
-        if (!gameRunningRef.current) return;
-
-        const now = Date.now();
-        const delta = now - lastTickRef.current;
-        lastTickRef.current = now;
-
-        setGameTimeMs(prevGame => {
-            const nextGame = prevGame - delta;
-            if (nextGame <= 0) {
-                setGameRunning(false);
-                return 0;
-            }
-            return nextGame;
-        });
-
-        setShotClockMs(prevShot => {
-            const nextShot = prevShot - delta;
-            if (nextShot <= 0) {
-                setGameRunning(false); // FIBA: shot clock violation stops game clock
-                return 0;
-            }
-            return nextShot;
-        });
-
-        requestRef.current = requestAnimationFrame(tick);
-    }, []);
-
-    // Start/Stop the engine
+    // ─── THE ENGINE: Epoch-Based Interval ────────────────────────────────────
+    // Captures start timestamps and computes elapsed time from those anchors.
+    // 100ms interval is plenty for display — invisible to the eye.
+    // Immune to browser throttling because elapsed = Date.now() - startEpoch.
     useEffect(() => {
-        if (isHost && gameRunning) {
-            lastTickRef.current = Date.now();
-            requestRef.current = requestAnimationFrame(tick);
-        } else if (requestRef.current) {
-            cancelAnimationFrame(requestRef.current);
-        }
-        return () => {
-            if (requestRef.current) cancelAnimationFrame(requestRef.current);
-        };
-    }, [isHost, gameRunning, tick]);
+        if (!isHost || !gameRunning) return;
+
+        const startEpoch = Date.now();
+        const startGameMs = gameTimeMs;
+        const startShotMs = shotClockMs;
+
+        const interval = setInterval(() => {
+            const elapsed = Date.now() - startEpoch;
+
+            const nextGame = Math.max(0, startGameMs - elapsed);
+            const nextShot = Math.max(0, startShotMs - elapsed);
+
+            setGameTimeMs(nextGame);
+            setShotClockMs(nextShot);
+
+            if (nextGame <= 0 || nextShot <= 0) {
+                setGameRunning(false);
+            }
+        }, 100);
+
+        return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isHost, gameRunning]); // intentionally excludes gameTimeMs/shotClockMs
 
     // ─── SYNC TO SUPABASE ──────────────────────────────────────────────────
     // Send clock state to Spectators and TVs every 300ms
@@ -97,6 +74,20 @@ export const useSupabaseBroadcast = ({
         return () => {
             if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
         };
+    }, [isHost, gameRunning, broadcastState]);
+
+    // ─── VISIBILITY RE-SYNC ───────────────────────────────────────────────
+    // When the host tab comes back from background, force a broadcast
+    // so spectators re-align immediately.
+    useEffect(() => {
+        if (!isHost) return;
+        const handleVisible = () => {
+            if (document.visibilityState === 'visible' && gameRunning) {
+                broadcastState();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisible);
+        return () => document.removeEventListener('visibilitychange', handleVisible);
     }, [isHost, gameRunning, broadcastState]);
 
     // ─── SPECTATOR LISTENER ────────────────────────────────────────────────

@@ -321,34 +321,8 @@ export const TvKiosk: React.FC = () => {
     );
 };
 
-// ─── SpectatorView Wrapper ────────────────────────────────────────────────────
-//
-// SpectatorView normally reads gameCode from useParams().
-// Since we're rendering it without navigation, we need a thin wrapper
-// that spoofs the route context using a mock params approach.
-// We do this cleanly by creating a wrapper that passes gameCode as a prop.
-// SpectatorView will need a minor update to accept an optional prop override.
-//
-// For now this wrapper uses a hidden iframe approach as zero-touch solution:
-// it doesn't require ANY changes to SpectatorView.tsx.
-
 const SpectatorViewWrapper: React.FC<{ gameCode: string }> = ({ gameCode }) => {
-    const spectatorUrl = `${window.location.origin}/watch/${gameCode}`;
-
-    return (
-        <iframe
-            src={spectatorUrl}
-            style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                display: 'block',
-                background: '#000000',
-            }}
-            title="Live Scoreboard"
-            allow="autoplay"
-        />
-    );
+    return <SpectatorView gameCode={gameCode} />;
 };
 
 export default TvKiosk;

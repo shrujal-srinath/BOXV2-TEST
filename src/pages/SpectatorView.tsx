@@ -895,8 +895,9 @@ const GlobalStyles = () => (
 
 // ─── MAIN SPECTATOR VIEW ─────────────────────────────────────────────────────
 
-export const SpectatorView: React.FC = () => {
-  const { gameCode } = useParams<{ gameCode: string }>();
+export const SpectatorView: React.FC<{ gameCode?: string }> = (props) => {
+  const params = useParams<{ gameCode: string }>();
+  const gameCode = props?.gameCode ?? params.gameCode;
   const navigate = useNavigate();
   const [game, setGame] = useState<BasketballGame | null>(null);
   const [loading, setLoading] = useState(true);
