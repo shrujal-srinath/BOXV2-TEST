@@ -153,9 +153,6 @@ export const GameSetup: React.FC = () => {
   };
 
   const handleLaunchRequest = () => {
-    if (trackStats && (rosterA.length === 0 || rosterB.length === 0)) {
-      if (!window.confirm("⚠️ Warning: One or both teams have NO players. Stats tracking will be limited. Continue?")) return;
-    }
     setShowConfirmation(true);
   };
 

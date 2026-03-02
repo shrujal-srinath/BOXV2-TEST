@@ -249,17 +249,39 @@ export const HostConsole: React.FC = () => {
     };
     recordActionRef.current = recordAction; // Sync ref so useCallback uses latest state
 
-    // ── Score / Foul with player selection ────────────────────────────────────
+    // ── Helper to check if a team has players ─────────────────────────────────
+    const getTeamPlayers = (team: 'A' | 'B') => {
+        const roster = team === 'A' ? game?.teamA?.players : game?.teamB?.players;
+        return roster?.filter((p: any) => p.name) || [];
+    };
+
+    // ── Score / Foul with player selection (or bypass if empty) ───────────────
     const handleScoreWithPlayer = (e: React.MouseEvent | null, team: 'A' | 'B', points: number) => {
         e?.stopPropagation();
-        setPendingAction({ team, type: 'points', value: points });
-        setShowPlayerPopup(true);
+        const players = getTeamPlayers(team);
+
+        if (players.length === 0) {
+            // Bypass popup if no players (or Standard Timer mode)
+            handleWebScore(team, points);
+        } else {
+            setPendingAction({ team, type: 'points', value: points });
+            setShowPlayerPopup(true);
+        }
     };
 
     const handleFoulWithPlayer = (e: React.MouseEvent | null, team: 'A' | 'B') => {
         e?.stopPropagation();
-        setPendingAction({ team, type: 'foul', value: 1 });
-        setShowPlayerPopup(true);
+        const players = getTeamPlayers(team);
+
+        if (players.length === 0) {
+            // Bypass popup if no players
+            recordActionRef.current({ type: 'foul', team, value: 1, timestamp: Date.now() });
+            updateFouls(team, 1);
+            if (timer.gameRunning) timer.stopClock();
+        } else {
+            setPendingAction({ team, type: 'foul', value: 1 });
+            setShowPlayerPopup(true);
+        }
     };
 
     const confirmPlayerAction = (player: Player) => {
