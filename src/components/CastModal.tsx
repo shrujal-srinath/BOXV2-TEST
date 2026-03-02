@@ -10,7 +10,7 @@ interface CastModalProps {
 
 type CastPhase = 'loading' | 'input' | 'searching' | 'success' | 'casting' | 'error';
 
-// ─── Code Input ───────────────────────────────────────────────────────────────
+// ─── Code Input (Optimized for iPads & Tablets) ───────────────────────────────
 const CodeInput: React.FC<{ value: string; onChange: (v: string) => void; disabled: boolean }> = ({ value, onChange, disabled }) => {
     const chars = value.toUpperCase().split('').slice(0, 4);
     while (chars.length < 4) chars.push('');
@@ -29,7 +29,12 @@ const CodeInput: React.FC<{ value: string; onChange: (v: string) => void; disabl
                 disabled={disabled}
                 maxLength={4}
                 autoFocus
-                className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+                // CRITICAL UX FIXES FOR iPAD/TABLET:
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+                autoCapitalize="characters"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-text z-10"
             />
         </div>
     );
