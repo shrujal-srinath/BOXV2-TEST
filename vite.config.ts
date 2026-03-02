@@ -8,20 +8,20 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'The Box - Referee Unit', // Optional: Rename for the dedicated device
+        name: 'The Box by BMSCE', // Optional: Rename for the dedicated device
         short_name: 'Referee',
         description: 'Professional basketball scoring system',
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
         orientation: 'landscape',
-        
+
         // 🚨 CRITICAL FIX: Point this to your Dedicated Tablet Page
-        start_url: '/tablet/standalone', 
-        
+        start_url: '/tablet/standalone',
+
         // Ensure scope includes the tablet path
-        scope: '/', 
-        
+        scope: '/',
+
         // Note: Ensure your icons are present in /public for the install to work fully
         icons: [
           {
@@ -52,17 +52,6 @@ export default defineConfig({
               },
               cacheableResponse: {
                 statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'firebase-storage',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 7
               }
             }
           }
