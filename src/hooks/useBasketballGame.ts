@@ -1,8 +1,8 @@
 // src/hooks/useBasketballGame.ts
 import { useState, useEffect, useCallback } from 'react';
 import type { BasketballGame, TeamData, Player } from '../types';
-import { updateGameField, batchUpdateGame, subscribeToGame } from '../services/supabaseGameService';
-import { broadcastScoreUpdate } from '../services/supabaseBroadcastService';
+import { updateGameField, batchUpdateGame, subscribeToGame, recordGameEvent } from '../services/supabaseGameService';
+import { supabase } from '../services/supabase';
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -66,87 +66,106 @@ export const useBasketballGame = (
   }, [code]);
 
 
-  const syncScoreToRTDB = useCallback((updatedGame: BasketballGame) => {
-    if (gameType === 'local') return;
-    broadcastScoreUpdate(
-      code,
-      updatedGame.teamA.score,
-      updatedGame.teamB.score,
-      updatedGame.teamA.fouls,
-      updatedGame.teamB.fouls,
-      updatedGame.teamA.timeouts,
-      updatedGame.teamB.timeouts,
-      updatedGame.gameState.possession || 'A'
-    );
-  }, [code, gameType]);
+
 
   // ─── Score ────────────────────────────────────────────────────────────────
 
-  const updateScore = useCallback((team: 'A' | 'B', points: number) => {
+  const updateScore = useCallback(async (team: 'A' | 'B', points: number) => {
     const teamKey = team === 'A' ? 'teamA' : 'teamB';
     const newScore = Math.max(0, game[teamKey].score + points);
+    const updatedGame = { ...game, [teamKey]: { ...game[teamKey], score: newScore } };
 
-    // 1. Durable Write (Firestore)
-    updateGameField(code, `${teamKey}.score`, newScore);
+    if (gameType === 'local') {
+      setGame(updatedGame);
+      return;
+    }
 
-    // 2. Instant Mirror (RTDB)
-    const updatedGame = {
-      ...game,
-      [teamKey]: { ...game[teamKey], score: newScore },
-    };
-    syncScoreToRTDB(updatedGame);
-  }, [code, game, syncScoreToRTDB]);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    await recordGameEvent({
+      gameCode: code,
+      eventType: team === 'A' ? 'SCORE_A' : 'SCORE_B',
+      team,
+      amount: points,
+      period: game.gameState.period,
+      actorId: user?.id,
+      actorType: 'web',
+      gameSnapshot: updatedGame
+    });
+  }, [code, game, gameType]);
 
   // ─── Fouls ────────────────────────────────────────────────────────────────
 
-  const updateFouls = useCallback((team: 'A' | 'B', increment = 1) => {
+  const updateFouls = useCallback(async (team: 'A' | 'B', increment = 1) => {
     const teamKey = team === 'A' ? 'teamA' : 'teamB';
     const newFouls = Math.max(0, game[teamKey].fouls + increment);
     const newFoulsThisQ = Math.max(0, game[teamKey].foulsThisQuarter + increment);
+    const updatedGame = { ...game, [teamKey]: { ...game[teamKey], fouls: newFouls, foulsThisQuarter: newFoulsThisQ } };
 
-    batchUpdateGame(code, {
-      [`${teamKey}.fouls`]: newFouls,
-      [`${teamKey}.foulsThisQuarter`]: newFoulsThisQ,
+    if (gameType === 'local') {
+      setGame(updatedGame);
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    await recordGameEvent({
+      gameCode: code,
+      eventType: team === 'A' ? 'FOUL_A' : 'FOUL_B',
+      team,
+      amount: increment,
+      period: game.gameState.period,
+      actorId: user?.id,
+      actorType: 'web',
+      gameSnapshot: updatedGame
     });
-
-    const updatedGame = {
-      ...game,
-      [teamKey]: { ...game[teamKey], fouls: newFouls, foulsThisQuarter: newFoulsThisQ },
-    };
-    syncScoreToRTDB(updatedGame);
-  }, [code, game, syncScoreToRTDB]);
+  }, [code, game, gameType]);
 
   // ─── Timeouts ─────────────────────────────────────────────────────────────
 
-  const updateTimeouts = useCallback((team: 'A' | 'B', increment = -1) => {
+  const updateTimeouts = useCallback(async (team: 'A' | 'B', increment = -1) => {
     const teamKey = team === 'A' ? 'teamA' : 'teamB';
     const newTimeouts = Math.max(0, game[teamKey].timeouts + increment);
+    const updatedGame = { ...game, [teamKey]: { ...game[teamKey], timeouts: newTimeouts } };
 
-    updateGameField(code, `${teamKey}.timeouts`, newTimeouts);
+    if (gameType === 'local') {
+      setGame(updatedGame);
+      return;
+    }
 
-    const updatedGame = {
-      ...game,
-      [teamKey]: { ...game[teamKey], timeouts: newTimeouts },
-    };
-    syncScoreToRTDB(updatedGame);
-  }, [code, game, syncScoreToRTDB]);
+    const { data: { user } } = await supabase.auth.getUser();
+    await recordGameEvent({
+      gameCode: code,
+      eventType: team === 'A' ? 'TIMEOUT_A' : 'TIMEOUT_B',
+      team,
+      amount: increment,
+      period: game.gameState.period,
+      actorId: user?.id,
+      actorType: 'web',
+      gameSnapshot: updatedGame
+    });
+  }, [code, game, gameType]);
 
   // ─── Possession ───────────────────────────────────────────────────────────
 
-  const togglePossession = useCallback(() => {
-    const nextPos = game.gameState.possession === 'A' ? 'B' : 'A';
-    updateGameField(code, 'gameState.possession', nextPos);
+  const togglePossession = useCallback(async () => {
+    const nextPos: 'A' | 'B' = game.gameState.possession === 'A' ? 'B' : 'A';
+    const updatedGame: BasketballGame = { ...game, gameState: { ...game.gameState, possession: nextPos } };
 
-    // Manual sync because 'game' state might be stale in this closure
-    if (gameType !== 'local') {
-      broadcastScoreUpdate(
-        code,
-        game.teamA.score, game.teamB.score,
-        game.teamA.fouls, game.teamB.fouls,
-        game.teamA.timeouts, game.teamB.timeouts,
-        nextPos
-      );
+    if (gameType === 'local') {
+      setGame(updatedGame);
+      return;
     }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    await recordGameEvent({
+      gameCode: code,
+      eventType: 'POSSESSION',
+      team: nextPos,
+      period: game.gameState.period,
+      actorId: user?.id,
+      actorType: 'web',
+      gameSnapshot: updatedGame
+    });
   }, [code, game, gameType]);
 
   // ─── Period Transition ────────────────────────────────────────────────────

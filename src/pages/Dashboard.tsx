@@ -373,12 +373,15 @@ export const Dashboard: React.FC = () => {
               )}
 
               <MenuItem
-                label="Broadcast on LED"
+                label="Open TV Kiosk (Display)"
                 icon="📺"
-                onClick={() => { setIsMenuOpen(false); setActiveModal('broadcast_led'); }}
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  // Opens the actual Pi Receiver screen in a new tab
+                  window.open('/tv', '_blank');
+                }}
                 highlight={true}
-                subtitle={user ? "Cast a game to a Pi screen" : "Login required"}
-                disabled={!user}
+                subtitle="Launch the Pi holding screen"
               />
             </div>
 

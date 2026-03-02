@@ -43,14 +43,20 @@ export const createTournament = async (
         });
     });
 
-    const newTournament: Tournament = {
-        id, adminId: userId, name, logoUrl, ...details,
-        scorerPin: generatePin(), status: 'active', sportConfig,
-        divisions: initialDivisions, approvedScorers: [userId], pendingRequests: {},
-        createdAt: Date.now()
-    };
-
-    const { error } = await supabase.from('tournaments').insert(newTournament);
+    const { error } = await supabase.rpc('create_tournament_with_pin', {
+        p_id: id,
+        p_admin_id: userId,
+        p_name: name,
+        p_logo_url: logoUrl ?? '',
+        p_organizer: details.organizer ?? '',
+        p_location: details.location ?? '',
+        p_start_date: details.startDate ?? '',
+        p_end_date: details.endDate ?? '',
+        p_scorer_pin: generatePin(),
+        p_sport_config: sportConfig,
+        p_divisions: initialDivisions,
+        p_created_at: Date.now()
+    });
     if (error) throw error;
     return id;
 };
@@ -308,4 +314,25 @@ export const handleRequest = async (tournamentId: string, userId: string, action
     } else { delete pendingRequests[userId]; }
 
     await supabase.from('tournaments').update({ pendingRequests, approvedScorers }).eq('id', tournamentId);
+};
+
+/**
+ * NEW: Verify a scorer PIN for a specific tournament.
+ * Returns true if valid, false otherwise.
+ */
+export const verifyScorerPin = async (tournamentId: string, enteredPin: string): Promise<boolean> => {
+    try {
+        const { data: isValid, error } = await supabase.rpc('verify_scorer_pin', {
+            p_tournament_id: tournamentId,
+            p_pin: enteredPin
+        });
+        if (error) {
+            console.error('[Supabase] verify_scorer_pin failed:', error);
+            return false;
+        }
+        return isValid ?? false;
+    } catch (err) {
+        console.error('[Supabase] verifyScorerPin error:', err);
+        return false;
+    }
 };

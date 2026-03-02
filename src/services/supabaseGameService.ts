@@ -347,3 +347,36 @@ export const getGameByCode = async (code: string): Promise<BasketballGame | null
  * Alias for backward compatibility.
  */
 export const getGame = getGameByCode;
+
+/**
+ * NEW: Record a game event (score, foul, etc) via RPC.
+ * This both updates the durable JSONB and triggers real-time broadcasts.
+ */
+export const recordGameEvent = async (params: {
+    gameCode: string;
+    eventType: string;
+    team?: 'A' | 'B' | null;
+    amount?: number;
+    period?: number;
+    actorId?: string;
+    actorType?: 'web' | 'hardware';
+    eventData?: any;
+    gameSnapshot: BasketballGame;
+}): Promise<void> => {
+    const { error } = await supabase.rpc('record_game_event', {
+        p_game_code: params.gameCode,
+        p_event_type: params.eventType,
+        p_team: params.team || null,
+        p_amount: params.amount || 0,
+        p_period: params.period || 1,
+        p_actor_id: params.actorId || 'system',
+        p_actor_type: params.actorType || 'web',
+        p_event_data: params.eventData || {},
+        p_game_snapshot: params.gameSnapshot
+    });
+
+    if (error) {
+        console.error('[Supabase] record_game_event failed:', error);
+        throw error;
+    }
+};
