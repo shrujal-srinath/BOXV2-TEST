@@ -32,13 +32,7 @@ export const HardwareControlOverlay: React.FC<HardwareControlOverlayProps> = ({
     if (!isLocked) return null;
 
     const handleSwitch = (mode: ControlMode) => {
-        // Web-only can be instant (no danger). Hardware re-lock also instant.
-        // Shared needs a confirm since it means both can score simultaneously.
-        if (mode === 'shared') {
-            setShowConfirm(mode);
-        } else {
-            doSwitch(mode);
-        }
+        doSwitch(mode);
     };
 
     const doSwitch = async (mode: ControlMode) => {
@@ -51,31 +45,7 @@ export const HardwareControlOverlay: React.FC<HardwareControlOverlayProps> = ({
 
     return (
         <div className="relative">
-            {/* Confirm dialog for SHARED mode */}
-            {showConfirm === 'shared' && (
-                <div className="absolute inset-0 z-20 bg-black/95 flex items-center justify-center rounded-xl border border-amber-800/50">
-                    <div className="text-center px-6">
-                        <p className="text-amber-400 text-sm font-bold mb-1">Enable Shared Control?</p>
-                        <p className="text-zinc-500 text-xs font-mono mb-5 leading-relaxed">
-                            Both web and ESP32 can score. Last action wins. Only use as backup.
-                        </p>
-                        <div className="flex gap-3 justify-center">
-                            <button
-                                onClick={() => doSwitch('shared')}
-                                className="px-5 py-2 bg-amber-500 text-black font-black text-xs uppercase tracking-widest rounded-lg hover:bg-amber-400 transition-colors"
-                            >
-                                Enable
-                            </button>
-                            <button
-                                onClick={() => setShowConfirm(null)}
-                                className="px-5 py-2 border border-zinc-700 text-zinc-400 font-bold text-xs uppercase tracking-widest rounded-lg hover:text-white transition-colors"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+
 
             {/* Lock banner */}
             <div className={`
@@ -97,13 +67,11 @@ export const HardwareControlOverlay: React.FC<HardwareControlOverlayProps> = ({
                             </svg>
                         </div>
                         <div>
-                            <p className={`text-xs font-black uppercase tracking-widest ${controlMode === 'hardware' ? 'text-green-400' : 'text-amber-400'}`}>
-                                {controlMode === 'hardware' ? 'ESP32 Has Control' : 'Shared Control'}
+                            <p className="text-xs font-black uppercase tracking-widest text-green-400">
+                                ESP32 Has Control
                             </p>
                             <p className="text-zinc-600 text-[10px] font-mono mt-0.5">
-                                {controlMode === 'hardware'
-                                    ? 'Referee is scoring from the handheld controller'
-                                    : 'Both web and controller are active'}
+                                Referee is scoring from the handheld controller
                             </p>
                         </div>
                     </div>
@@ -114,13 +82,6 @@ export const HardwareControlOverlay: React.FC<HardwareControlOverlayProps> = ({
                             <span className="text-[10px] font-mono text-zinc-600 animate-pulse">Switching...</span>
                         ) : (
                             <>
-                                <button
-                                    onClick={() => handleSwitch('shared')}
-                                    disabled={controlMode === 'shared'}
-                                    className="px-3 py-1.5 border border-amber-800/50 text-amber-600 hover:text-amber-400 hover:border-amber-600 transition-colors text-[10px] font-bold uppercase tracking-widest rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
-                                >
-                                    Share
-                                </button>
                                 <button
                                     onClick={() => handleSwitch('web')}
                                     className="px-3 py-1.5 bg-white text-black font-black text-[10px] uppercase tracking-widest rounded-lg hover:bg-zinc-200 transition-colors"

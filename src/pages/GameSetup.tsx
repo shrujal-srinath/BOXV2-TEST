@@ -262,13 +262,12 @@ export const GameSetup: React.FC = () => {
                     <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${controlMode === 'hardware' ? 'bg-green-900/30 border border-green-800' : 'bg-blue-900/30 border border-blue-800'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${controlMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
                       <span className={`text-[8px] font-bold uppercase tracking-wide ${controlMode === 'hardware' ? 'text-green-500' : 'text-blue-400'}`}>
-                        {controlMode === 'hardware' ? 'ESP CTRL' : controlMode === 'shared' ? 'SPLIT' : 'WEB CTRL'}
+                        {controlMode === 'hardware' ? 'ESP CTRL' : 'WEB CTRL'}
                       </span>
                     </div>
                     <div className="flex bg-black p-0.5 rounded border border-zinc-800">
                       <button onClick={() => setAuthority('hardware')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'hardware' ? 'bg-green-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>ESP</button>
                       <button onClick={() => setAuthority('web')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'web' ? 'bg-blue-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>WEB</button>
-                      <button onClick={() => setAuthority('shared')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'shared' ? 'bg-zinc-700 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>SPL</button>
                     </div>
                   </div>
                 )}
@@ -307,7 +306,7 @@ export const GameSetup: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 bg-black p-1 rounded-lg border border-zinc-800">
+                  <div className="grid grid-cols-2 gap-2 bg-black p-1 rounded-lg border border-zinc-800">
                     <button
                       onClick={() => setAuthority('hardware')}
                       className={`py-2 text-[9px] font-black rounded uppercase transition-all ${controlMode === 'hardware' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
@@ -320,12 +319,7 @@ export const GameSetup: React.FC = () => {
                     >
                       Web Parent
                     </button>
-                    <button
-                      onClick={() => setAuthority('shared')}
-                      className={`py-2 text-[9px] font-black rounded uppercase transition-all ${controlMode === 'shared' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      Shared
-                    </button>
+
                   </div>
                 </div>
               )}

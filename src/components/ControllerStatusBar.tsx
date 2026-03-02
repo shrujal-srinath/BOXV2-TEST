@@ -114,13 +114,11 @@ export const ControllerStatusBar: React.FC<ControllerStatusBarProps> = ({
     // ── Active game — show control mode switcher ──────────────────────────────
     const modes: { key: ControlMode; label: string; short: string }[] = [
         { key: 'hardware', label: 'ESP32 Only', short: 'HW' },
-        { key: 'shared', label: 'Shared', short: 'SH' },
         { key: 'web', label: 'Web Only', short: 'WEB' },
     ];
 
     const modeColors: Record<ControlMode, string> = {
         hardware: 'bg-green-500/10 border-green-600 text-green-400',
-        shared: 'bg-amber-500/10 border-amber-600 text-amber-400',
         web: 'bg-zinc-800 border-zinc-600 text-zinc-300',
     };
 

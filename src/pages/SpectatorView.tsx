@@ -895,9 +895,13 @@ const GlobalStyles = () => (
 
 // ─── MAIN SPECTATOR VIEW ─────────────────────────────────────────────────────
 
-export const SpectatorView: React.FC<{ gameCode?: string }> = (props) => {
-  const params = useParams<{ gameCode: string }>();
-  const gameCode = props?.gameCode ?? params.gameCode;
+interface SpectatorViewProps {
+  gameCode?: string; // optional override (used by TvKiosk inline render)
+}
+
+export const SpectatorView: React.FC<SpectatorViewProps> = ({ gameCode: propGameCode }) => {
+  const { gameCode: paramGameCode } = useParams<{ gameCode: string }>();
+  const gameCode = propGameCode || paramGameCode; // prop takes priority
   const navigate = useNavigate();
   const [game, setGame] = useState<BasketballGame | null>(null);
   const [loading, setLoading] = useState(true);
