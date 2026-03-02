@@ -71,35 +71,18 @@ export const startTvHeartbeat = (tvCode: string): (() => void) => {
  *
  * Returns unsubscribe function.
  */
-export const subscribeTvDisplay = (
-    tvCode: string,
-    onUpdate: (display: TvDisplay) => void
-): (() => void) => {
-    const code = tvCode.toUpperCase();
-
-    // Initial fetch
-    supabase
-        .from('tv_displays')
-        .select('*')
-        .eq('tv_code', code)
-        .single()
-        .then(({ data }) => {
-            if (data) onUpdate(data as TvDisplay);
-        });
-
-    // Realtime subscription
-    const channel = supabase
-        .channel(`tv_display:${code}`)
+export const subscribeTvDisplay = (tvCode: string, callback: (data: TvDisplay) => void) => {
+    const channel = supabase.channel(`tv_kiosk_${tvCode}`)
         .on(
             'postgres_changes',
             {
-                event: 'UPDATE',
+                event: '*',
                 schema: 'public',
                 table: 'tv_displays',
-                filter: `tv_code=eq.${code}`,
+                filter: `tv_code=eq.${tvCode}` // <--- THIS IS THE CRITICAL LINE
             },
             (payload) => {
-                onUpdate(payload.new as TvDisplay);
+                callback(payload.new as TvDisplay);
             }
         )
         .subscribe();

@@ -1,13 +1,14 @@
 // src/components/CastModal.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { validateTvCode, castGameToTv, stopCastingToTv, subscribeTvStatus, type TvDisplay } from '../services/tvDisplayService';
+import { supabase } from '../services/supabase'; // <-- Added to query state
 
 interface CastModalProps {
     gameCode: string;
     onClose: () => void;
 }
 
-type CastPhase = 'input' | 'searching' | 'success' | 'casting' | 'error';
+type CastPhase = 'loading' | 'input' | 'searching' | 'success' | 'casting' | 'error';
 
 // ─── Code Input ───────────────────────────────────────────────────────────────
 const CodeInput: React.FC<{ value: string; onChange: (v: string) => void; disabled: boolean }> = ({ value, onChange, disabled }) => {
@@ -36,31 +37,58 @@ const CodeInput: React.FC<{ value: string; onChange: (v: string) => void; disabl
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export const CastModal: React.FC<CastModalProps> = ({ gameCode, onClose }) => {
-    const [phase, setPhase] = useState<CastPhase>('input');
+    const [phase, setPhase] = useState<CastPhase>('loading');
     const [tvCodeInput, setTvCodeInput] = useState('');
     const [activeTvCode, setActiveTvCode] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
     const [tvStatus, setTvStatus] = useState<TvDisplay | null>(null);
     const unsubRef = useRef<(() => void) | null>(null);
 
-    useEffect(() => () => unsubRef.current?.(), []);
+    // ─── THE FIX: INSTANT STATE RECOVERY ───
+    useEffect(() => {
+        const checkExistingCast = async () => {
+            const { data } = await supabase
+                .from('tv_displays')
+                .select('*')
+                .eq('game_code', gameCode)
+                .limit(1);
+
+            if (data && data.length > 0 && data[0].tv_code) {
+                // We are ALREADY casting this game! Resume the dashboard.
+                const code = data[0].tv_code.toUpperCase();
+                setActiveTvCode(code);
+                setTvStatus(data[0] as TvDisplay);
+                setPhase('casting');
+
+                unsubRef.current = subscribeTvStatus(code, (d) => {
+                    setTvStatus(d);
+                    if (d.status === 'idle') {
+                        setPhase('input');
+                        setTvCodeInput('');
+                    }
+                });
+            } else {
+                // Not casting, show input screen
+                setPhase('input');
+            }
+        };
+
+        checkExistingCast();
+
+        return () => unsubRef.current?.();
+    }, [gameCode]);
 
     const handleCast = async () => {
         if (tvCodeInput.length < 4) return;
         setPhase('searching');
         setErrorMsg('');
 
-        // Step 1: Validate
         const { valid, message } = await validateTvCode(tvCodeInput);
         if (!valid) {
-            setTimeout(() => {
-                setPhase('error');
-                setErrorMsg(message);
-            }, 800);
+            setTimeout(() => { setPhase('error'); setErrorMsg(message); }, 800);
             return;
         }
 
-        // Step 2: Establish Cast
         const result = await castGameToTv(tvCodeInput, gameCode);
         if (!result.success) {
             setPhase('error');
@@ -68,17 +96,15 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, onClose }) => {
             return;
         }
 
-        // Step 3: Success Animation
         const code = tvCodeInput.toUpperCase();
         setActiveTvCode(code);
         setPhase('success');
 
-        // Step 4: Move to Live Telemetry Dashboard
         setTimeout(() => {
             setPhase('casting');
             unsubRef.current = subscribeTvStatus(code, (d) => {
                 setTvStatus(d);
-                if (d.status === 'idle' && phase === 'casting') {
+                if (d.status === 'idle') {
                     setPhase('input');
                     setTvCodeInput('');
                 }
@@ -110,16 +136,23 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, onClose }) => {
                             {phase === 'casting' ? 'Live Telemetry' : 'Establish Link'}
                         </h2>
                     </div>
-                    {phase !== 'searching' && phase !== 'success' && (
+                    {phase !== 'searching' && phase !== 'success' && phase !== 'loading' && (
                         <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl transition-colors">&times;</button>
                     )}
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 min-h-[250px] flex flex-col justify-center">
+                    {/* ── LOADING PHASE ── */}
+                    {phase === 'loading' && (
+                        <div className="flex justify-center animate-pulse text-zinc-600 uppercase tracking-widest text-xs font-bold">
+                            Checking Signal...
+                        </div>
+                    )}
+
                     {/* ── INPUT PHASE ── */}
                     {(phase === 'input' || phase === 'error') && (
-                        <div className="animate-in fade-in slide-in-from-bottom-4">
-                            <p className="text-xs text-zinc-400 font-mono mb-6">Enter the 4-digit code displayed on the arena screen.</p>
+                        <div className="animate-in fade-in slide-in-from-bottom-4 w-full">
+                            <p className="text-xs text-zinc-400 font-mono mb-6 text-center">Enter the 4-digit code displayed on the arena screen.</p>
                             <CodeInput value={tvCodeInput} onChange={setTvCodeInput} disabled={false} />
 
                             {phase === 'error' && (
@@ -140,10 +173,10 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, onClose }) => {
 
                     {/* ── SEARCHING PHASE ── */}
                     {phase === 'searching' && (
-                        <div className="py-12 flex flex-col items-center justify-center animate-in fade-in">
+                        <div className="flex flex-col items-center justify-center animate-in fade-in">
                             <div className="relative w-20 h-20 flex items-center justify-center mb-6">
                                 <div className="absolute inset-0 border-2 border-red-600 rounded-full animate-ping opacity-20"></div>
-                                <div className="absolute inset-2 border-2 border-red-600 rounded-full animate-ping opacity-40 animation-delay-150"></div>
+                                <div className="absolute inset-2 border-2 border-red-600 rounded-full animate-ping opacity-40" style={{ animationDelay: '150ms' }}></div>
                                 <div className="w-12 h-12 bg-red-600 rounded-full shadow-[0_0_30px_red]"></div>
                             </div>
                             <div className="text-sm font-bold text-white uppercase tracking-widest animate-pulse">Locating Terminal...</div>
@@ -153,7 +186,7 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, onClose }) => {
 
                     {/* ── SUCCESS PHASE ── */}
                     {phase === 'success' && (
-                        <div className="py-12 flex flex-col items-center justify-center animate-in zoom-in-95">
+                        <div className="flex flex-col items-center justify-center animate-in zoom-in-95">
                             <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(34,197,94,0.5)]">
                                 <svg className="w-10 h-10 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
                             </div>
@@ -163,7 +196,7 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, onClose }) => {
 
                     {/* ── CASTING PHASE (TELEMETRY) ── */}
                     {phase === 'casting' && (
-                        <div className="animate-in slide-in-from-bottom-4">
+                        <div className="animate-in slide-in-from-bottom-4 w-full">
                             <div className="bg-black border border-zinc-800 rounded-xl p-4 mb-6">
                                 <div className="flex justify-between items-center mb-3 pb-3 border-b border-zinc-900">
                                     <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Target Screen</span>
