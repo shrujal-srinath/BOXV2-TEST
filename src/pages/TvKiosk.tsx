@@ -1,328 +1,201 @@
-// src/pages/TvKiosk.tsx
-//
-// THE PERMANENT KIOSK SHELL — runs on the Pi Zero 2 forever.
-//
-// This page never navigates away. It has two states:
-//   IDLE    → Shows the glowing holding screen with the TV code
-//   CASTING → Renders SpectatorView inline as a component swap
-//
-// The Pi boots Chromium pointed at: https://yourapp.com/tv?code=8X2F
-// The code comes from a config file on the Pi — stable across reboots.
-//
-// Flow:
-//   1. Mount → register in tv_displays, start heartbeat
-//   2. Subscribe to own row via Supabase Realtime
-//   3. game_code null   → IDLE screen
-//   4. game_code set    → crossfade into SpectatorView (inline, no navigate)
-//   5. game_code cleared → crossfade back to IDLE
+// src/components/CastModal.tsx
+import React, { useState, useEffect, useRef } from 'react';
+import { validateTvCode, castGameToTv, stopCastingToTv, subscribeTvStatus, type TvDisplay } from '../services/tvDisplayService';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import {
-    registerTvDisplay,
-    startTvHeartbeat,
-    subscribeTvDisplay,
-    type TvDisplay,
-} from '../services/tvDisplayService';
-import { SpectatorView } from './SpectatorView';
+interface CastModalProps {
+    gameCode: string;
+    onClose: () => void;
+}
 
-// ─── Code Generation (fallback if no URL param) ───────────────────────────────
+type CastPhase = 'input' | 'searching' | 'success' | 'casting' | 'error';
 
-/**
- * Generates a deterministic 4-char code from browser fingerprint.
- * This is the FALLBACK only — ideally the Pi always has ?code= in the URL.
- * Uses canvas fingerprinting + screen resolution for reasonable uniqueness.
- */
-const generateFallbackCode = (): string => {
-    const stored = localStorage.getItem('TV_DISPLAY_CODE');
-    if (stored) return stored;
+// ─── Code Input ───────────────────────────────────────────────────────────────
+const CodeInput: React.FC<{ value: string; onChange: (v: string) => void; disabled: boolean }> = ({ value, onChange, disabled }) => {
+    const chars = value.toUpperCase().split('').slice(0, 4);
+    while (chars.length < 4) chars.push('');
 
-    const seed = `${screen.width}x${screen.height}-${navigator.hardwareConcurrency}-${navigator.language}`;
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-        hash = (hash << 5) - hash + seed.charCodeAt(i);
-        hash |= 0;
-    }
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
-    const code = [
-        chars[Math.abs(hash >> 24) % chars.length],
-        chars[Math.abs(hash >> 16) % chars.length],
-        chars[Math.abs(hash >> 8) % chars.length],
-        chars[Math.abs(hash) % chars.length],
-    ].join('');
-
-    localStorage.setItem('TV_DISPLAY_CODE', code);
-    return code;
-};
-
-// ─── Idle / Holding Screen ────────────────────────────────────────────────────
-
-const IdleScreen: React.FC<{ tvCode: string; visible: boolean }> = ({ tvCode, visible }) => (
-    <div
-        style={{
-            position: 'absolute',
-            inset: 0,
-            background: '#000000',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: '"Oswald", "Arial Narrow", sans-serif',
-            opacity: visible ? 1 : 0,
-            transition: 'opacity 0.8s ease',
-            pointerEvents: visible ? 'auto' : 'none',
-        }}
-    >
-        {/* Subtle grid texture */}
-        <div style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
-        }} />
-
-        {/* Glow orb behind the code */}
-        <div style={{
-            position: 'absolute',
-            width: '500px',
-            height: '500px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(220,38,38,0.08) 0%, transparent 70%)',
-            filter: 'blur(40px)',
-        }} />
-
-        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-
-            {/* Brand mark */}
-            <div style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.4em',
-                color: '#333333',
-                marginBottom: '64px',
-                textTransform: 'uppercase',
-            }}>
-                THE BOX · DISPLAY TERMINAL
-            </div>
-
-            {/* Status indicator */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                marginBottom: '40px',
-            }}>
-                <div style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: '#22c55e',
-                    boxShadow: '0 0 12px #22c55e',
-                    animation: 'tvPulse 2s ease-in-out infinite',
-                }} />
-                <span style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.3em',
-                    color: '#22c55e',
-                    textTransform: 'uppercase',
-                }}>
-                    Ready to Display
-                </span>
-            </div>
-
-            {/* The big code */}
-            <div style={{
-                fontSize: '140px',
-                fontWeight: 900,
-                letterSpacing: '0.15em',
-                color: '#ffffff',
-                lineHeight: 1,
-                textShadow: '0 0 80px rgba(255,255,255,0.15)',
-                marginBottom: '32px',
-            }}>
-                {tvCode}
-            </div>
-
-            {/* Instruction */}
-            <div style={{
-                fontSize: '18px',
-                fontWeight: 400,
-                letterSpacing: '0.15em',
-                color: '#444444',
-                textTransform: 'uppercase',
-                lineHeight: 1.8,
-            }}>
-                Cast to this screen from your<br />
-                <span style={{ color: '#666666' }}>Host Console → 📺 Cast</span>
-            </div>
-
-            {/* Bottom code repeat for easy reading from across room */}
-            <div style={{
-                marginTop: '80px',
-                padding: '12px 32px',
-                border: '1px solid #1a1a1a',
-                borderRadius: '4px',
-                display: 'inline-block',
-            }}>
-                <span style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    letterSpacing: '0.3em',
-                    color: '#2a2a2a',
-                    textTransform: 'uppercase',
-                    fontFamily: 'monospace',
-                }}>
-                    TV CODE: {tvCode}
-                </span>
-            </div>
-        </div>
-
-        <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700;900&display=swap');
-            @keyframes tvPulse {
-                0%, 100% { opacity: 1; box-shadow: 0 0 12px #22c55e; }
-                50% { opacity: 0.5; box-shadow: 0 0 4px #22c55e; }
-            }
-        `}</style>
-    </div>
-);
-
-// ─── Casting Transition Screen ────────────────────────────────────────────────
-
-const TransitionScreen: React.FC<{ visible: boolean }> = ({ visible }) => (
-    <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: '#000000',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 0.3s ease',
-        pointerEvents: visible ? 'auto' : 'none',
-        zIndex: 10,
-    }}>
-        <div style={{
-            width: '48px',
-            height: '48px',
-            border: '3px solid #1a1a1a',
-            borderTopColor: '#DC2626',
-            borderRadius: '50%',
-            animation: 'tvSpin 0.8s linear infinite',
-        }} />
-        <style>{`@keyframes tvSpin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-);
-
-// ─── Main TvKiosk Component ───────────────────────────────────────────────────
-
-export const TvKiosk: React.FC = () => {
-    const [searchParams] = useSearchParams();
-
-    // Resolve the TV code: URL param (Pi) → fallback (dev/testing)
-    const tvCode = (searchParams.get('code') || generateFallbackCode()).toUpperCase();
-
-    const [gameCode, setGameCode] = useState<string | null>(null);
-    const [showScoreboard, setShowScoreboard] = useState(false);
-    const [transitioning, setTransitioning] = useState(false);
-    const [registered, setRegistered] = useState(false);
-
-    const prevGameCode = useRef<string | null>(null);
-
-    // ── Boot sequence ──────────────────────────────────────────────────────────
-    useEffect(() => {
-        let stopHeartbeat: (() => void) | null = null;
-        let unsubscribe: (() => void) | null = null;
-
-        const boot = async () => {
-            await registerTvDisplay(tvCode);
-            setRegistered(true);
-
-            stopHeartbeat = startTvHeartbeat(tvCode);
-
-            unsubscribe = subscribeTvDisplay(tvCode, (display: TvDisplay) => {
-                handleDisplayUpdate(display.game_code);
-            });
-        };
-
-        boot();
-
-        return () => {
-            stopHeartbeat?.();
-            unsubscribe?.();
-        };
-    }, [tvCode]);
-
-    // ── React to game_code changes ─────────────────────────────────────────────
-    const handleDisplayUpdate = useCallback((newGameCode: string | null) => {
-        if (newGameCode === prevGameCode.current) return;
-        prevGameCode.current = newGameCode;
-
-        if (newGameCode && !showScoreboard) {
-            // IDLE → CASTING: brief transition then show scoreboard
-            setTransitioning(true);
-            setTimeout(() => {
-                setGameCode(newGameCode);
-                setShowScoreboard(true);
-                setTransitioning(false);
-            }, 600);
-        } else if (!newGameCode && showScoreboard) {
-            // CASTING → IDLE: fade out scoreboard
-            setTransitioning(true);
-            setTimeout(() => {
-                setShowScoreboard(false);
-                setGameCode(null);
-                setTransitioning(false);
-            }, 600);
-        } else if (newGameCode) {
-            // Game code CHANGED while casting (e.g. host switched games)
-            setTransitioning(true);
-            setTimeout(() => {
-                setGameCode(newGameCode);
-                setTransitioning(false);
-            }, 400);
-        }
-    }, [showScoreboard]);
-
-    // ── Render ─────────────────────────────────────────────────────────────────
     return (
-        <div style={{
-            width: '100vw',
-            height: '100vh',
-            background: '#000000',
-            overflow: 'hidden',
-            position: 'relative',
-        }}>
-            {/* IDLE HOLDING SCREEN */}
-            <IdleScreen tvCode={tvCode} visible={!showScoreboard && !transitioning} />
-
-            {/* LIVE SCOREBOARD — inline component swap, no navigation */}
-            {gameCode && (
-                <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    opacity: showScoreboard && !transitioning ? 1 : 0,
-                    transition: 'opacity 0.8s ease',
-                }}>
-                    {/* 
-                        SpectatorView is rendered inline. It handles its own
-                        Supabase subscriptions via the gameCode prop.
-                        No URL change, no navigation — the TV page stays mounted.
-                    */}
-                    <SpectatorViewWrapper gameCode={gameCode} />
+        <div className="flex gap-3 justify-center relative">
+            {chars.map((char, i) => (
+                <div key={i} className={`w-14 h-16 flex items-center justify-center text-3xl font-black font-mono rounded-lg border-2 transition-all ${char ? 'border-red-600 bg-red-950/20 text-white shadow-[0_0_15px_rgba(220,38,38,0.2)]' : 'border-zinc-800 bg-black text-zinc-700'}`}>
+                    {char || '·'}
                 </div>
-            )}
-
-            {/* TRANSITION FLASH */}
-            <TransitionScreen visible={transitioning} />
+            ))}
+            <input
+                type="text"
+                value={value}
+                onChange={e => onChange(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 4))}
+                disabled={disabled}
+                maxLength={4}
+                autoFocus
+                className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+            />
         </div>
     );
 };
 
-const SpectatorViewWrapper: React.FC<{ gameCode: string }> = ({ gameCode }) => {
-    return <SpectatorView gameCode={gameCode} />;
+// ─── Main Component ───────────────────────────────────────────────────────────
+export const CastModal: React.FC<CastModalProps> = ({ gameCode, onClose }) => {
+    const [phase, setPhase] = useState<CastPhase>('input');
+    const [tvCodeInput, setTvCodeInput] = useState('');
+    const [activeTvCode, setActiveTvCode] = useState('');
+    const [errorMsg, setErrorMsg] = useState('');
+    const [tvStatus, setTvStatus] = useState<TvDisplay | null>(null);
+    const unsubRef = useRef<(() => void) | null>(null);
+
+    useEffect(() => () => unsubRef.current?.(), []);
+
+    const handleCast = async () => {
+        if (tvCodeInput.length < 4) return;
+        setPhase('searching');
+        setErrorMsg('');
+
+        // Step 1: Validate Terminal Exists
+        const { valid, message } = await validateTvCode(tvCodeInput);
+        if (!valid) {
+            setTimeout(() => {
+                setPhase('error');
+                setErrorMsg(message);
+            }, 800);
+            return;
+        }
+
+        // Step 2: Establish the Database Cast Link
+        const result = await castGameToTv(tvCodeInput, gameCode);
+        if (!result.success) {
+            setPhase('error');
+            setErrorMsg(result.message);
+            return;
+        }
+
+        // Step 3: Success "Handshake" Animation
+        const code = tvCodeInput.toUpperCase();
+        setActiveTvCode(code);
+        setPhase('success');
+
+        // Step 4: Move to Live Telemetry Dashboard
+        setTimeout(() => {
+            setPhase('casting');
+            unsubRef.current = subscribeTvStatus(code, (d) => {
+                setTvStatus(d);
+                // If TV is manually closed/disconnected, close the casting state on the host side
+                if (d.status === 'idle' && phase === 'casting') {
+                    setPhase('input');
+                    setTvCodeInput('');
+                }
+            });
+        }, 1500);
+    };
+
+    const handleStop = async () => {
+        unsubRef.current?.();
+        unsubRef.current = null;
+        await stopCastingToTv(activeTvCode);
+        setPhase('input');
+        setTvCodeInput('');
+        setActiveTvCode('');
+        setTvStatus(null);
+    };
+
+    // Calculate online state based on Pi's 8-second heartbeat
+    const isOnline = tvStatus ? Date.now() - tvStatus.last_seen < 20000 : true;
+
+    return (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] relative animate-in zoom-in-95 duration-200">
+
+                {/* Header */}
+                <div className="p-6 pb-0 flex justify-between items-start">
+                    <div>
+                        <div className="text-[10px] font-black text-red-600 uppercase tracking-[0.3em] mb-1">LED Cast Control</div>
+                        <h2 className="text-xl font-black text-white uppercase tracking-tight">
+                            {phase === 'casting' ? 'Live Telemetry' : 'Establish Link'}
+                        </h2>
+                    </div>
+                    {/* Hide close button during transitions */}
+                    {phase !== 'searching' && phase !== 'success' && (
+                        <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl transition-colors">&times;</button>
+                    )}
+                </div>
+
+                <div className="p-6">
+                    {/* ── INPUT PHASE ── */}
+                    {(phase === 'input' || phase === 'error') && (
+                        <div className="animate-in fade-in slide-in-from-bottom-4">
+                            <p className="text-xs text-zinc-400 font-mono mb-6">Enter the 4-digit code displayed on the arena screen.</p>
+                            <CodeInput value={tvCodeInput} onChange={setTvCodeInput} disabled={false} />
+
+                            {phase === 'error' && (
+                                <div className="mt-4 p-3 bg-red-950/30 border border-red-900/50 rounded-lg text-center">
+                                    <p className="text-xs text-red-500 font-bold uppercase tracking-widest">{errorMsg}</p>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleCast}
+                                disabled={tvCodeInput.length < 4}
+                                className={`mt-8 w-full py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-all ${tvCodeInput.length === 4 ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'bg-zinc-900 text-zinc-600 cursor-not-allowed'}`}
+                            >
+                                Initiate Cast 📡
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ── SEARCHING PHASE ── */}
+                    {phase === 'searching' && (
+                        <div className="py-12 flex flex-col items-center justify-center animate-in fade-in">
+                            <div className="relative w-20 h-20 flex items-center justify-center mb-6">
+                                <div className="absolute inset-0 border-2 border-red-600 rounded-full animate-ping opacity-20"></div>
+                                <div className="absolute inset-2 border-2 border-red-600 rounded-full animate-ping opacity-40" style={{ animationDelay: '150ms' }}></div>
+                                <div className="w-12 h-12 bg-red-600 rounded-full shadow-[0_0_30px_red]"></div>
+                            </div>
+                            <div className="text-sm font-bold text-white uppercase tracking-widest animate-pulse">Locating Terminal...</div>
+                            <div className="text-xs text-zinc-500 font-mono mt-2">Target: {tvCodeInput.toUpperCase()}</div>
+                        </div>
+                    )}
+
+                    {/* ── SUCCESS PHASE ── */}
+                    {phase === 'success' && (
+                        <div className="py-12 flex flex-col items-center justify-center animate-in zoom-in-95">
+                            <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(34,197,94,0.5)]">
+                                <svg className="w-10 h-10 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                            </div>
+                            <div className="text-sm font-bold text-green-500 uppercase tracking-widest">Handshake Complete</div>
+                        </div>
+                    )}
+
+                    {/* ── CASTING PHASE (TELEMETRY) ── */}
+                    {phase === 'casting' && (
+                        <div className="animate-in slide-in-from-bottom-4">
+                            <div className="bg-black border border-zinc-800 rounded-xl p-4 mb-6">
+                                <div className="flex justify-between items-center mb-3 pb-3 border-b border-zinc-900">
+                                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Target Screen</span>
+                                    <span className="text-lg font-black text-white tracking-widest">{activeTvCode}</span>
+                                </div>
+                                <div className="flex justify-between items-center mb-3 pb-3 border-b border-zinc-900">
+                                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Stream Source</span>
+                                    <span className="text-xs font-bold text-blue-400 font-mono">{gameCode}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Connection</span>
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse shadow-[0_0_8px_#22c55e]' : 'bg-red-500'}`}></div>
+                                        <span className={`text-[10px] font-bold uppercase tracking-widest ${isOnline ? 'text-green-500' : 'text-red-500'}`}>
+                                            {isOnline ? 'STABLE' : 'DROPPED'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button onClick={handleStop} className="w-full py-4 border border-zinc-700 text-zinc-300 hover:bg-red-950/30 hover:border-red-900/50 hover:text-red-500 rounded-xl font-bold uppercase tracking-widest text-xs transition-all">
+                                Terminate Cast ⏹
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 };
 
-export default TvKiosk;
+export default CastModal;
