@@ -57,135 +57,59 @@ const generateFallbackCode = (): string => {
 
 // ─── Idle / Holding Screen ────────────────────────────────────────────────────
 
+// ─── Cinematic Idle Screen (Hardware Accelerated for Pi) ─────────────────────
 const IdleScreen: React.FC<{ tvCode: string; visible: boolean }> = ({ tvCode, visible }) => (
     <div
-        style={{
-            position: 'absolute',
-            inset: 0,
-            background: '#000000',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: '"Oswald", "Arial Narrow", sans-serif',
-            opacity: visible ? 1 : 0,
-            transition: 'opacity 0.8s ease',
-            pointerEvents: visible ? 'auto' : 'none',
-        }}
+        className={`absolute inset-0 bg-black flex flex-col items-center justify-center font-sans transition-opacity duration-1000 ${visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
     >
-        {/* Subtle grid texture */}
-        <div style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
-        }} />
+        {/* HIGH-PERFORMANCE MESH BACKGROUND (Zero CSS Blur) */}
+        <div className="absolute inset-0 opacity-50 pointer-events-none">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(153,27,27,0.3)_0%,transparent_50%)] animate-pulse"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_80%,rgba(30,58,138,0.2)_0%,transparent_50%)]" style={{ animation: 'pulse 8s infinite alternate' }}></div>
+        </div>
 
-        {/* Glow orb behind the code */}
-        <div style={{
-            position: 'absolute',
-            width: '500px',
-            height: '500px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(220,38,38,0.08) 0%, transparent 70%)',
-            filter: 'blur(40px)',
-        }} />
+        {/* Scanlines Overlay */}
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)' }}></div>
 
-        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-
+        <div className="relative z-10 flex flex-col items-center text-center">
             {/* Brand mark */}
-            <div style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.4em',
-                color: '#333333',
-                marginBottom: '64px',
-                textTransform: 'uppercase',
-            }}>
-                THE BOX · DISPLAY TERMINAL
+            <div className="mb-16">
+                <div className="text-zinc-600 text-sm font-black tracking-[0.5em] uppercase mb-2">BMSCE Sports Tech</div>
+                <div className="w-24 h-px bg-gradient-to-r from-transparent via-red-600 to-transparent mx-auto"></div>
             </div>
 
             {/* Status indicator */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                marginBottom: '40px',
-            }}>
-                <div style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: '#22c55e',
-                    boxShadow: '0 0 12px #22c55e',
-                    animation: 'tvPulse 2s ease-in-out infinite',
-                }} />
-                <span style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '0.3em',
-                    color: '#22c55e',
-                    textTransform: 'uppercase',
-                }}>
-                    Ready to Display
-                </span>
+            <div className="flex items-center gap-3 mb-10 bg-zinc-900/80 px-6 py-2 rounded-full border border-zinc-800 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                <div className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 shadow-[0_0_10px_#22c55e]"></span>
+                </div>
+                <span className="text-green-500 text-sm font-bold tracking-[0.3em] uppercase">Awaiting Broadcast Signal</span>
             </div>
 
-            {/* The big code */}
-            <div style={{
-                fontSize: '140px',
-                fontWeight: 900,
-                letterSpacing: '0.15em',
-                color: '#ffffff',
-                lineHeight: 1,
-                textShadow: '0 0 80px rgba(255,255,255,0.15)',
-                marginBottom: '32px',
-            }}>
-                {tvCode}
+            {/* The Big Code (Optimized Glow) */}
+            <div className="relative group">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(220,38,38,0.3)_0%,transparent_70%)] scale-150 pointer-events-none"></div>
+                <div className="text-[12rem] md:text-[16rem] font-black tracking-widest text-white leading-none tabular-nums relative z-10 drop-shadow-[0_0_30px_rgba(255,255,255,0.15)]">
+                    {tvCode}
+                </div>
             </div>
 
             {/* Instruction */}
-            <div style={{
-                fontSize: '18px',
-                fontWeight: 400,
-                letterSpacing: '0.15em',
-                color: '#444444',
-                textTransform: 'uppercase',
-                lineHeight: 1.8,
-            }}>
-                Cast to this screen from your<br />
-                <span style={{ color: '#666666' }}>Host Console → 📺 Cast</span>
-            </div>
-
-            {/* Bottom code repeat for easy reading from across room */}
-            <div style={{
-                marginTop: '80px',
-                padding: '12px 32px',
-                border: '1px solid #1a1a1a',
-                borderRadius: '4px',
-                display: 'inline-block',
-            }}>
-                <span style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    letterSpacing: '0.3em',
-                    color: '#2a2a2a',
-                    textTransform: 'uppercase',
-                    fontFamily: 'monospace',
-                }}>
-                    TV CODE: {tvCode}
-                </span>
+            <div className="mt-12 text-zinc-400 text-2xl font-light tracking-[0.2em] uppercase">
+                Enter code in Host Console to cast
             </div>
         </div>
 
-        <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700;900&display=swap');
-            @keyframes tvPulse {
-                0%, 100% { opacity: 1; box-shadow: 0 0 12px #22c55e; }
-                50% { opacity: 0.5; box-shadow: 0 0 4px #22c55e; }
-            }
-        `}</style>
+        {/* Bottom Bar */}
+        <div className="absolute bottom-0 left-0 w-full p-8 flex justify-between items-end border-t border-zinc-900/50 bg-black/80">
+            <div className="text-zinc-600 text-xs font-mono tracking-widest">
+                TERMINAL ID: <span className="text-zinc-400">{tvCode}</span>
+            </div>
+            <div className="text-zinc-600 text-xs font-mono tracking-widest">
+                SYSTEM VER 4.0
+            </div>
+        </div>
     </div>
 );
 
