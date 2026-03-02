@@ -291,7 +291,7 @@ export const Dashboard: React.FC = () => {
   );
 
   return (
-    <div className={`min-h-screen bg-black font-sans text-white transition-transform duration-300`}>
+    <div className={`min-h-screen bg-black font-sans text-white transition-transform duration-300 overflow-x-hidden`}>
       {/* HEADER */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20">
         <button onClick={() => setActiveModal('profile')} className="flex items-center gap-4 group hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all">
