@@ -9,7 +9,6 @@ import type { User } from '@supabase/supabase-js';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { ConnectControllerModal } from '../components/ConnectControllerModal';
-import { BroadcastModal } from '../components/BroadcastModal';
 import { useHardwareBridge } from '../hooks/useHardwareBridge';
 
 export const Dashboard: React.FC = () => {
@@ -27,7 +26,7 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | 'confirmTournament' | 'connect_controller' | 'broadcast_led' | null>(null);
+  const [activeModal, setActiveModal] = useState<'profile' | 'status' | 'history' | 'settings' | 'tablet' | 'provision' | 'confirmTournament' | 'connect_controller' | null>(null);
 
   // Track if controller is linked (checks session storage on load)
   const [controllerLinked, setControllerLinked] = useState(!!sessionStorage.getItem('BOX_HANDHELD_ID'));
@@ -559,12 +558,7 @@ export const Dashboard: React.FC = () => {
         </Modal>
       )}
 
-      {activeModal === 'broadcast_led' && user && (
-        <BroadcastModal
-          userId={user.id}
-          onClose={() => setActiveModal(null)}
-        />
-      )}
+
     </div>
   );
 };

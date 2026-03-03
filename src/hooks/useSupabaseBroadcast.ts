@@ -17,6 +17,7 @@ export const useSupabaseBroadcast = ({
 }: UseSupabaseBroadcastProps) => {
     const [gameRunning, setGameRunning] = useState(false);
     const [period, setPeriod] = useState(1);
+    const [clockKey, setClockKey] = useState(0);
 
     // Store time in pure milliseconds for flawless math
     const [gameTimeMs, setGameTimeMs] = useState(periodDuration * 60000);
@@ -51,7 +52,7 @@ export const useSupabaseBroadcast = ({
 
         return () => clearInterval(interval);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, gameRunning]); // intentionally excludes gameTimeMs/shotClockMs
+    }, [isHost, gameRunning, clockKey]); // intentionally excludes gameTimeMs/shotClockMs
 
     // ─── SYNC TO SUPABASE ──────────────────────────────────────────────────
     // Send clock state to Spectators and TVs every 300ms
@@ -112,11 +113,13 @@ export const useSupabaseBroadcast = ({
 
     const resetShotClock24 = () => {
         setShotClockMs(24000);
-        if (!gameRunning) broadcastState();
+        setClockKey(k => k + 1);
+        broadcastState();
     };
     const resetShotClock14 = () => {
         setShotClockMs(14000);
-        if (!gameRunning) broadcastState();
+        setClockKey(k => k + 1);
+        broadcastState();
     };
     const nextPeriod = () => {
         setGameRunning(false);

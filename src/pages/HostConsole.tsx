@@ -22,7 +22,7 @@ import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
 import { subscribeToControlMode, subscribeToDeviceHeartbeat, unpairHandheldDevice, setControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
-import { CastPanel } from '../components/CastPanel';
+import { CastModal } from '../components/CastModal';
 import { stopAllCastsForGame } from '../services/tvDisplayService';
 import { supabase } from '../services/supabase';
 import type { Player } from '../types';
@@ -552,8 +552,8 @@ export const HostConsole: React.FC = () => {
                             <button
                                 onClick={() => setIsDeviceMenuOpen(!isDeviceMenuOpen)}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded border transition-colors ${deviceOnline
-                                        ? 'bg-green-900/20 border-green-800/50 hover:bg-green-900/40 text-green-400'
-                                        : 'bg-red-900/20 border-red-800/50 hover:bg-red-900/40 text-red-400'
+                                    ? 'bg-green-900/20 border-green-800/50 hover:bg-green-900/40 text-green-400'
+                                    : 'bg-red-900/20 border-red-800/50 hover:bg-red-900/40 text-red-400'
                                     }`}
                             >
                                 <div className={`w-2 h-2 rounded-full ${deviceOnline ? 'bg-green-500 animate-pulse shadow-[0_0_5px_#22c55e]' : 'bg-red-500'}`} />
@@ -915,7 +915,7 @@ export const HostConsole: React.FC = () => {
             )}
 
             {showCastModal && (
-                <CastPanel
+                <CastModal
                     gameCode={gameCode!}
                     gameName={game?.settings?.gameName}
                     onClose={() => setShowCastModal(false)}
