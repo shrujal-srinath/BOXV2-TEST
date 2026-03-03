@@ -61,6 +61,18 @@ export const GameSetup: React.FC = () => {
   // FIXED: Removed updateScreen (deprecated)
   const { isConnected, controlMode, setAuthority } = useHardwareBridge();
 
+  // Optimistic UI state for instant feedback
+  const [localHwMode, setLocalHwMode] = useState<'web' | 'hardware'>('hardware');
+
+  useEffect(() => {
+    setLocalHwMode(controlMode);
+  }, [controlMode]);
+
+  const handleModeToggle = async (mode: 'web' | 'hardware') => {
+    setLocalHwMode(mode); // Instant visual update
+    await setAuthority(mode); // Background DB update
+  };
+
   // Control whether we are using the controller for this game
   // Defaults to true if connected, but user can toggle it off
   const [useHardware, setUseHardware] = useState(isConnected);
@@ -194,7 +206,7 @@ export const GameSetup: React.FC = () => {
             gameCode,
             teamAName || 'TEAM A',
             teamBName || 'TEAM B',
-            'hardware', // Default: hardware has control when game starts
+            localHwMode,
           );
           console.log('[GameSetup] Hardware controller activated for game', gameCode);
         } catch (err) {
@@ -256,15 +268,15 @@ export const GameSetup: React.FC = () => {
                 {/* Authority Switcher */}
                 {isConnected && (
                   <div className="flex items-center gap-2 ml-2">
-                    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${controlMode === 'hardware' ? 'bg-green-900/30 border border-green-800' : 'bg-blue-900/30 border border-blue-800'}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${controlMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
-                      <span className={`text-[8px] font-bold uppercase tracking-wide ${controlMode === 'hardware' ? 'text-green-500' : 'text-blue-400'}`}>
-                        {controlMode === 'hardware' ? 'ESP CTRL' : 'WEB CTRL'}
+                    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${localHwMode === 'hardware' ? 'bg-green-900/30 border border-green-800' : 'bg-blue-900/30 border border-blue-800'}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${localHwMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
+                      <span className={`text-[8px] font-bold uppercase tracking-wide ${localHwMode === 'hardware' ? 'text-green-500' : 'text-blue-400'}`}>
+                        {localHwMode === 'hardware' ? 'ESP CTRL' : 'WEB CTRL'}
                       </span>
                     </div>
                     <div className="flex bg-black p-0.5 rounded border border-zinc-800">
-                      <button onClick={() => setAuthority('hardware')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'hardware' ? 'bg-green-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>ESP</button>
-                      <button onClick={() => setAuthority('web')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${controlMode === 'web' ? 'bg-blue-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>WEB</button>
+                      <button onClick={() => handleModeToggle('hardware')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${localHwMode === 'hardware' ? 'bg-green-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>ESP</button>
+                      <button onClick={() => handleModeToggle('web')} className={`px-2 py-0.5 text-[8px] font-black rounded transition-colors ${localHwMode === 'web' ? 'bg-blue-600 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>WEB</button>
                     </div>
                   </div>
                 )}
@@ -283,49 +295,50 @@ export const GameSetup: React.FC = () => {
             {/* Rules Section */}
             <div className="lg:col-span-7 flex flex-col gap-8">
 
-              {/* --- AUTHORITY & STATUS BANNER --- */}
-              {isConnected && (
-                <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-xl space-y-6 mb-8">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-green-900/30 text-green-500 rounded-full flex items-center justify-center text-xl animate-pulse">🎮</div>
-                      <div>
-                        <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest">Hardware Controller Linked</h3>
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase">Mode: {controlMode === 'hardware' ? 'ESP32 is Parent' : 'Web is Parent'}</p>
-                      </div>
-                    </div>
 
-                    <button
-                      onClick={() => setUseHardware(!useHardware)}
-                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${useHardware ? 'bg-green-600 text-black border-green-600' : 'text-zinc-500 border-zinc-700'}`}
-                    >
-                      {useHardware ? 'ENABLED' : 'DISABLED'}
-                    </button>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2 bg-black p-1 rounded-lg border border-zinc-800">
-                    <button
-                      onClick={() => setAuthority('hardware')}
-                      className={`py-2 text-[9px] font-black rounded uppercase transition-all ${controlMode === 'hardware' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      ESP Parent
-                    </button>
-                    <button
-                      onClick={() => setAuthority('web')}
-                      className={`py-2 text-[9px] font-black rounded uppercase transition-all ${controlMode === 'web' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      Web Parent
-                    </button>
-
-                  </div>
-                </div>
-              )}
 
 
               {/* Match Details */}
               <section className="bg-zinc-900/50 p-6 rounded-xl border border-zinc-800">
                 <h2 className="text-zinc-400 text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> Match Details</h2>
                 <div className="space-y-6">
+                  {/* AUTHORITY & STATUS BANNER */}
+                  {isConnected && (
+                    <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-xl space-y-6 mb-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-green-900/30 text-green-500 rounded-full flex items-center justify-center text-xl animate-pulse">🎮</div>
+                          <div>
+                            <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest">Hardware Controller Linked</h3>
+                            <p className="text-[10px] text-zinc-500 font-bold uppercase">Mode: {localHwMode === 'hardware' ? 'ESP32 is Parent' : 'Web is Parent'}</p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => setUseHardware(!useHardware)}
+                          className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${useHardware ? 'bg-green-600 text-black border-green-600' : 'text-zinc-500 border-zinc-700'}`}
+                        >
+                          {useHardware ? 'ENABLED' : 'DISABLED'}
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 bg-black p-1 rounded-lg border border-zinc-800">
+                        <button
+                          onClick={() => handleModeToggle('hardware')}
+                          className={`py-2 text-[9px] font-black rounded uppercase transition-all ${localHwMode === 'hardware' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                          ESP Parent
+                        </button>
+                        <button
+                          onClick={() => handleModeToggle('web')}
+                          className={`py-2 text-[9px] font-black rounded uppercase transition-all ${localHwMode === 'web' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                          Web Parent
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Match Title</label>
                     <input

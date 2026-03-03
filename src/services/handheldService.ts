@@ -76,7 +76,7 @@ export const pairHandheldDevice = async (
         .from('hardware_terminals')
         .select('id, status')
         .eq('id', upperCode)
-        .single();
+        .maybeSingle();
 
     if (fetchError || !device) {
         return {
@@ -144,7 +144,7 @@ const waitForPairedStatus = async (code: string, timeoutMs: number): Promise<boo
             .from('hardware_terminals')
             .select('id, status')
             .eq('id', code)
-            .single();
+            .maybeSingle();
 
         if (data && (data.status === 'paired' || data.status === 'active')) {
             return true;
@@ -192,7 +192,7 @@ export const subscribeToDeviceHeartbeat = (
         .from('hardware_terminals')
         .select('id, status, last_heartbeat')
         .eq('id', code)
-        .single()
+        .maybeSingle()
         .then(({ data }) => {
             if (data) {
                 const isOnline = data.status === 'paired' || data.status === 'active';
@@ -271,7 +271,7 @@ export const subscribeToControlMode = (
         .from('hardware_terminals')
         .select('control_mode')
         .eq('id', code)
-        .single()
+        .maybeSingle()
         .then(({ data }) => {
             if (data) {
                 // Normalize: if DB still has 'shared' from old version, treat as 'hardware'

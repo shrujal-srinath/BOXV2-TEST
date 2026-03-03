@@ -956,11 +956,24 @@ export const SpectatorView: React.FC<SpectatorViewProps> = ({ gameCode: propGame
 
   // Merge logic:
   // - Clock fields: From fast Delta-Time engine (useSupabaseBroadcast)
-  // - Everything else: From standard DB polling (scores, names, etc.)
+  // - Game State: Map the new engine state over the legacy team schema
   const activeGame = game ? {
     ...game,
+    teamA: {
+      ...game.teamA,
+      score: (game as any).state?.scoreA ?? game.teamA?.score ?? 0,
+      fouls: (game as any).state?.foulsA ?? game.teamA?.fouls ?? 0,
+      timeouts: (game as any).state?.timeoutsA ?? game.teamA?.timeouts ?? 0,
+    },
+    teamB: {
+      ...game.teamB,
+      score: (game as any).state?.scoreB ?? game.teamB?.score ?? 0,
+      fouls: (game as any).state?.foulsB ?? game.teamB?.fouls ?? 0,
+      timeouts: (game as any).state?.timeoutsB ?? game.teamB?.timeouts ?? 0,
+    },
     gameState: {
       ...game.gameState,
+      possession: (game as any).state?.possession ?? game.gameState?.possession,
       gameTime: isLocalGame ? game.gameState.gameTime : {
         minutes: rtdbTimer.minutes,
         seconds: rtdbTimer.seconds,

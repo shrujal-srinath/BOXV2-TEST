@@ -21,8 +21,7 @@ import { deleteGame, subscribeToGame } from '../services/supabaseGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
-import { subscribeToControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
-import { HardwareControlOverlay } from '../components/HardwareControlOverlay';
+import { subscribeToControlMode, subscribeToDeviceHeartbeat, unpairHandheldDevice, setControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
 import { CastPanel } from '../components/CastPanel';
 import { stopAllCastsForGame } from '../services/tvDisplayService';
 import { supabase } from '../services/supabase';
@@ -81,6 +80,11 @@ export const HostConsole: React.FC = () => {
         value: number;
     } | null>(null);
 
+    const [showBackConfirm, setShowBackConfirm] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
+    const [deviceOnline, setDeviceOnline] = useState(false);
+
     const [castingActive, setCastingActive] = useState(false);
     useEffect(() => {
         if (!gameCode) return;
@@ -135,6 +139,23 @@ export const HostConsole: React.FC = () => {
     const [hwMode, setHwMode] = useState<'web' | 'hardware'>('web');
     const hwDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
 
+    useEffect(() => {
+        if (!hwDeviceId) return;
+        const unsub = subscribeToDeviceHeartbeat(hwDeviceId, (isOnline) => {
+            setDeviceOnline(isOnline);
+        });
+        return unsub;
+    }, [hwDeviceId]);
+
+    const handleDisconnectDevice = async () => {
+        if (hwDeviceId) {
+            // Wait for unpair, then clear session and reload to clean the UI
+            await unpairHandheldDevice(hwDeviceId, '');
+            sessionStorage.removeItem(HW_SESSION_KEY);
+            window.location.reload();
+        }
+    };
+
     // Subscribe to control mode changes in real time
     useEffect(() => {
         if (!hwDeviceId) return;
@@ -147,6 +168,12 @@ export const HostConsole: React.FC = () => {
 
     // Web buttons locked when ESP32 has exclusive control
     const isWebLocked = hwMode === 'hardware' && !!hwDeviceId;
+
+    const handleModeSwitch = async (mode: 'web' | 'hardware') => {
+        if (!hwDeviceId || hwMode === mode) return;
+        setHwMode(mode); // Optimistic UI update for instant feedback
+        await setControlMode(hwDeviceId, mode);
+    };
 
     // Refs to avoid hoisting issues within the useCallback hook
     const handleUndoRef = useRef<() => void>(() => { });
@@ -449,10 +476,17 @@ export const HostConsole: React.FC = () => {
             <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex justify-between items-center px-4 lg:px-6 shrink-0 z-50 relative">
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => navigate('/dashboard')}
-                        className="w-9 h-9 rounded-full bg-black border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+                        onClick={() => setShowBackConfirm(true)}
+                        className="w-9 h-9 rounded-full bg-black border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors active:scale-95"
                     >
                         ←
+                    </button>
+                    <button
+                        onClick={() => setShowSettings(true)}
+                        className="w-9 h-9 rounded-full bg-black border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors active:scale-95 text-sm"
+                        title="Settings"
+                    >
+                        ⚙️
                     </button>
 
                     <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-md p-1 gap-1">
@@ -513,6 +547,40 @@ export const HostConsole: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {hwDeviceId && (
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsDeviceMenuOpen(!isDeviceMenuOpen)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded border transition-colors ${deviceOnline
+                                        ? 'bg-green-900/20 border-green-800/50 hover:bg-green-900/40 text-green-400'
+                                        : 'bg-red-900/20 border-red-800/50 hover:bg-red-900/40 text-red-400'
+                                    }`}
+                            >
+                                <div className={`w-2 h-2 rounded-full ${deviceOnline ? 'bg-green-500 animate-pulse shadow-[0_0_5px_#22c55e]' : 'bg-red-500'}`} />
+                                <span className="text-[10px] font-bold uppercase tracking-widest font-mono hidden md:block">
+                                    {deviceOnline ? 'ESP-ONLINE' : 'ESP-OFFLINE'}
+                                </span>
+                            </button>
+
+                            {isDeviceMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setIsDeviceMenuOpen(false)}></div>
+                                    <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-950 border border-zinc-800 rounded shadow-2xl overflow-hidden z-50">
+                                        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
+                                            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Connected Device</div>
+                                            <div className="font-mono text-sm text-white">CTRL-{hwDeviceId}</div>
+                                        </div>
+                                        <button
+                                            onClick={handleDisconnectDevice}
+                                            className="w-full px-4 py-3 text-left text-sm text-red-500 hover:bg-red-900/20 transition-colors flex items-center gap-2"
+                                        >
+                                            <span>🔌</span> Disconnect Controller
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
                     <button onClick={() => setShowHelp(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all">
                         <span className="text-sm">?</span>
                         <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">Help</span>
@@ -639,13 +707,6 @@ export const HostConsole: React.FC = () => {
 
             {/* ── PRO CONTROL DECK ──────────────────────────────────────────── */}
             <div className="relative">
-                <HardwareControlOverlay
-                    controlMode={hwMode}
-                    isLocked={isWebLocked}
-                    deviceId={hwDeviceId || ''}
-                    teamAName={game.teamA.name}
-                    teamBName={game.teamB.name}
-                />
                 <div className="bg-zinc-950 border-t-4 border-zinc-900 p-4 shrink-0 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
                     <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 h-full pt-2">
 
@@ -657,18 +718,42 @@ export const HostConsole: React.FC = () => {
                                 </span>
                             </div>
                             <div className="grid grid-cols-3 gap-1 h-16">
-                                <TactileBtn label="+1" color={game.teamA.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 1); }} />
-                                <TactileBtn label="+2" color={game.teamA.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 2); }} />
-                                <TactileBtn label="+3" color={game.teamA.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 3); }} />
+                                <TactileBtn label="+1" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 1); }} />
+                                <TactileBtn label="+2" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 2); }} />
+                                <TactileBtn label="+3" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 3); }} />
                             </div>
                             <div className="grid grid-cols-2 gap-1">
-                                <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'A'); }} />
-                                <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'A'); }} />
+                                <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'A'); }} />
+                                <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'A'); }} />
                             </div>
                         </div>
 
                         {/* CENTER CONSOLE */}
                         <div className="col-span-6 bg-zinc-900/50 rounded-xl border border-zinc-800 p-2 flex flex-col gap-2">
+                            {hwDeviceId && (
+                                <div className="bg-black border border-zinc-800 rounded-lg p-1 flex items-center justify-between mb-2 shadow-inner">
+                                    <div className="flex items-center gap-2 pl-2">
+                                        <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${hwMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
+                                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Input Source</span>
+                                    </div>
+                                    <div className="flex bg-zinc-900 border border-zinc-800 rounded p-0.5">
+                                        <button
+                                            onClick={() => handleModeSwitch('hardware')}
+                                            className={`px-4 py-1.5 text-[10px] font-black uppercase rounded transition-all flex items-center gap-1.5
+                                                ${hwMode === 'hardware' ? 'bg-green-600 text-white shadow-[0_0_10px_rgba(22,163,74,0.3)]' : 'text-zinc-600 hover:text-zinc-400'}`}
+                                        >
+                                            ESP32 Controller
+                                        </button>
+                                        <button
+                                            onClick={() => handleModeSwitch('web')}
+                                            className={`px-4 py-1.5 text-[10px] font-black uppercase rounded transition-all flex items-center gap-1.5
+                                                ${hwMode === 'web' ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.3)]' : 'text-zinc-600 hover:text-zinc-400'}`}
+                                        >
+                                            Web Console
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex-1 grid grid-cols-12 gap-2">
                                 <div className="col-span-5 flex flex-col gap-1">
                                     <button
@@ -732,13 +817,13 @@ export const HostConsole: React.FC = () => {
                                 </span>
                             </div>
                             <div className="grid grid-cols-3 gap-1 h-16">
-                                <TactileBtn label="+3" color={game.teamB.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 3); }} />
-                                <TactileBtn label="+2" color={game.teamB.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 2); }} />
-                                <TactileBtn label="+1" color={game.teamB.color} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 1); }} />
+                                <TactileBtn label="+3" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 3); }} />
+                                <TactileBtn label="+2" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 2); }} />
+                                <TactileBtn label="+1" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 1); }} />
                             </div>
                             <div className="grid grid-cols-2 gap-1">
-                                <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'B'); }} />
-                                <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'B'); }} />
+                                <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'B'); }} />
+                                <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'B'); }} />
                             </div>
                         </div>
 
@@ -837,34 +922,103 @@ export const HostConsole: React.FC = () => {
                 />
             )}
 
+            {/* BACK CONFIRMATION MODAL */}
+            {showBackConfirm && (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur flex items-center justify-center p-4">
+                    <div className="bg-zinc-900 border border-zinc-700 w-full max-w-md shadow-2xl rounded-xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="bg-black p-4 border-b border-zinc-800 flex justify-between items-center">
+                            <h3 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                <span className="text-amber-500">⚠️</span> Pause & Exit
+                            </h3>
+                            <button onClick={() => setShowBackConfirm(false)} className="text-zinc-500 hover:text-white transition-colors">&times;</button>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-zinc-400 text-sm mb-6">
+                                Are you sure you want to leave the console? The game clock will be paused and you will return to the dashboard.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowBackConfirm(false)}
+                                    className="flex-1 py-3 rounded border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 text-xs font-bold uppercase tracking-widest transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (timer.gameRunning) timer.stopClock();
+                                        navigate('/dashboard');
+                                    }}
+                                    className="flex-1 py-3 rounded bg-white text-black hover:bg-zinc-200 text-xs font-bold uppercase tracking-widest transition-all"
+                                >
+                                    Yes, Exit
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SETTINGS MODAL */}
+            {showSettings && (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur flex items-center justify-center p-4">
+                    <div className="bg-zinc-900 border border-zinc-700 w-full max-w-md shadow-2xl rounded-xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="bg-black p-4 border-b border-zinc-800 flex justify-between items-center">
+                            <h3 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                <span>⚙️</span> Match Settings
+                            </h3>
+                            <button onClick={() => setShowSettings(false)} className="text-zinc-500 hover:text-white transition-colors">&times;</button>
+                        </div>
+                        <div className="p-8 text-center">
+                            <span className="text-4xl grayscale opacity-50 mb-4 block">🛠️</span>
+                            <h4 className="text-white font-bold mb-2">Advanced Settings</h4>
+                            <p className="text-zinc-500 text-xs">This feature is currently under development. You will be able to edit team names, colors, and game rules here soon.</p>
+                        </div>
+                        <div className="p-4 bg-black border-t border-zinc-800">
+                            <button
+                                onClick={() => setShowSettings(false)}
+                                className="w-full py-3 rounded bg-white text-black hover:bg-zinc-200 text-xs font-bold uppercase tracking-widest transition-all active:scale-95"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
 
 // ─── Helper Components ────────────────────────────────────────────────────────
 
-const TactileBtn = ({ label, color, onClick }: { label: string; color: string; onClick: (e: React.MouseEvent) => void }) => (
+const TactileBtn = ({ label, color, isLocked, onClick }: { label: string; color: string; isLocked?: boolean; onClick: (e: React.MouseEvent) => void }) => (
     <button
         onClick={onClick}
-        className="h-full rounded bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-500 transition-all active:scale-95 active:bg-white group relative overflow-hidden shadow-sm"
-        style={{ borderBottom: `3px solid ${color}` }}
+        disabled={isLocked}
+        className={`h-full rounded border hover:border-zinc-500 transition-all relative overflow-hidden shadow-sm flex items-center justify-center
+            ${isLocked ? 'bg-zinc-950/50 border-zinc-800/50 opacity-50 cursor-not-allowed grayscale' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 active:scale-95 active:bg-white group'}`}
+        style={{ borderBottom: isLocked ? '1px solid #333' : `3px solid ${color}` }}
     >
-        <span className="relative z-10 text-xl font-black italic text-white group-active:text-black">{label}</span>
+        {isLocked && <span className="absolute top-1 right-1 text-[8px] opacity-50">🔒</span>}
+        <span className={`relative z-10 text-xl font-black italic ${isLocked ? 'text-zinc-600' : 'text-white group-active:text-black'}`}>{label}</span>
     </button>
 );
 
-const AdminBtn = ({ label, value, type, onClick }: { label: string; value: number; type: 'danger' | 'warning'; onClick: (e: React.MouseEvent) => void }) => {
+const AdminBtn = ({ label, value, type, isLocked, onClick }: { label: string; value: number; type: 'danger' | 'warning'; isLocked?: boolean; onClick: (e: React.MouseEvent) => void }) => {
     const styles = {
-        danger: "text-red-500 border-red-900/30 hover:bg-red-900/20",
-        warning: "text-yellow-500 border-yellow-900/30 hover:bg-yellow-900/20",
+        danger: isLocked ? "text-red-900 border-red-900/10 bg-black" : "text-red-500 border-red-900/30 hover:bg-red-900/20 bg-black",
+        warning: isLocked ? "text-yellow-900 border-yellow-900/10 bg-black" : "text-yellow-500 border-yellow-900/30 hover:bg-yellow-900/20 bg-black",
     };
     return (
         <button
             onClick={onClick}
-            className={`h-8 rounded bg-black border ${styles[type]} flex items-center justify-between px-2 transition-all active:scale-95 group`}
+            disabled={isLocked}
+            className={`h-8 rounded border ${styles[type]} flex items-center justify-between px-2 transition-all relative
+                ${isLocked ? 'opacity-50 cursor-not-allowed grayscale' : 'active:scale-95 group'}`}
         >
-            <span className="text-[9px] font-bold uppercase tracking-widest opacity-70 group-hover:opacity-100">{label}</span>
-            <span className="font-mono font-bold text-sm">{value}</span>
+            {isLocked && <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[12px] opacity-20">🔒</span>}
+            <span className={`text-[9px] font-bold uppercase tracking-widest ${isLocked ? 'opacity-30' : 'opacity-70 group-hover:opacity-100'}`}>{label}</span>
+            <span className={`font-mono font-bold text-sm ${isLocked ? 'opacity-50' : ''}`}>{value}</span>
         </button>
     );
 };
