@@ -19,6 +19,7 @@ import { useGameEngine } from '../core/engine/useGameEngine';
 import { SPORT_REGISTRY } from '../sports/registry';
 import { deleteGame, subscribeToGame } from '../services/supabaseGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
+import { usePersistEngine } from '../hooks/usePersistEngine';
 
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
 import { subscribeToControlMode, subscribeToDeviceHeartbeat, unpairHandheldDevice, setControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
@@ -114,6 +115,8 @@ export const HostConsole: React.FC = () => {
         manifest,
         true
     );
+
+    usePersistEngine(gameCode || null, dbGame, state, !!dbGame && !!gameCode);
 
     // --- 3. THE UI FACADE (Protects all HTML below) ---
     const game = dbGame ? {

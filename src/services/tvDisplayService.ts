@@ -123,26 +123,34 @@ export const castGameToTv = async (
     tvCode: string,
     gameCode: string
 ): Promise<{ success: boolean; message: string }> => {
-    const upper = tvCode.toUpperCase();
+    const upper = tvCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
 
-    // Verify online first
-    const { data } = await supabase
-        .from('tv_displays')
-        .select('last_seen')
-        .eq('tv_code', upper)
-        .single();
-
-    if (!data || Date.now() - data.last_seen > 20000) {
-        return { success: false, message: `Screen "${upper}" appears offline. Check Pi is powered on.` };
+    if (upper.length < 4) {
+        return { success: false, message: 'Invalid screen code. Must be 4 characters.' };
     }
 
+    // Upsert the row — creates it if it doesn't exist yet.
+    // If the screen is already registered, this updates game_code + status.
+    // If the screen boots LATER (laptop, Pi cold-start), it will read this
+    // row in registerTvDisplay() and resume the cast automatically.
     const { error } = await supabase
         .from('tv_displays')
-        .update({ game_code: gameCode.toUpperCase(), status: 'casting' })
-        .eq('tv_code', upper);
+        .upsert(
+            {
+                tv_code: upper,
+                game_code: gameCode.toUpperCase(),
+                status: 'casting',
+                last_seen: Date.now(),   // treat "just cast" as a heartbeat
+            },
+            { onConflict: 'tv_code', ignoreDuplicates: false }
+        );
 
-    if (error) return { success: false, message: 'Cast failed. Try again.' };
-    return { success: true, message: `Casting to ${upper}` };
+    if (error) {
+        console.error('[TvDisplay] castGameToTv failed:', error.message);
+        return { success: false, message: 'Cast failed — database error. Try again.' };
+    }
+
+    return { success: true, message: `Cast sent to ${upper}` };
 };
 
 /**

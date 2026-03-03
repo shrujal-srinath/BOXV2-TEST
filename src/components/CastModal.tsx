@@ -130,15 +130,15 @@ const ScreenCard: React.FC<{
     return (
         <button
             onClick={onClick}
-            disabled={!display.online || operating}
+            disabled={operating}
             style={{
                 width: '100%', textAlign: 'left',
                 background: bg, border: `1px solid ${border}`,
                 borderRadius: 10, padding: '11px 13px',
                 display: 'flex', alignItems: 'center', gap: 11,
-                cursor: display.online && !operating ? 'pointer' : 'not-allowed',
+                cursor: !operating ? 'pointer' : 'not-allowed',
                 transition: 'all 0.16s ease',
-                opacity: display.online ? 1 : 0.4,
+                opacity: 1,
                 animation: `cm-cardin 0.28s ${delay}s both`,
                 position: 'relative', overflow: 'hidden',
             }}
@@ -435,11 +435,11 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                 : targetDisp?.online
                     ? '✓ screen found and ready'
                     : targetDisp
-                        ? '✗ screen offline'
-                        : '? not found in registry';
+                        ? '✓ ready (currently offline)'
+                        : '✓ NEW screen — will register on cast';
 
     const hintColor = inputCode.length === 4
-        ? targetDisp?.online ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.5)'
+        ? (targetDisp?.online || !targetDisp) ? 'rgba(34,197,94,0.6)' : 'rgba(255,191,0,0.5)'
         : 'rgba(255,255,255,0.14)';
 
     // ─────────────────────────────────────────────────────────────────────────
