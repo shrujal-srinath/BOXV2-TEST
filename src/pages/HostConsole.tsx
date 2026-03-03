@@ -23,7 +23,9 @@ import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
 import { subscribeToControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
 import { HardwareControlOverlay } from '../components/HardwareControlOverlay';
-import { CastModal } from '../components/CastModal';
+import { CastPanel } from '../components/CastPanel';
+import { stopAllCastsForGame } from '../services/tvDisplayService';
+import { supabase } from '../services/supabase';
 import type { Player } from '../types';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -56,6 +58,13 @@ const getPeriodName = (p: number) => p <= 4 ? `Q${p}` : `OT${p - 4}`;
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+const CONSOLE_CSS = `
+@keyframes cpPulse {
+    0%,100% { opacity:1; box-shadow:0 0 6px #22c55e; }
+    50%      { opacity:0.3; box-shadow:0 0 2px #22c55e; }
+}
+`;
+
 export const HostConsole: React.FC = () => {
     const { gameCode } = useParams<{ gameCode: string }>();
     const navigate = useNavigate();
@@ -71,6 +80,20 @@ export const HostConsole: React.FC = () => {
         type: 'points' | 'foul';
         value: number;
     } | null>(null);
+
+    const [castingActive, setCastingActive] = useState(false);
+    useEffect(() => {
+        if (!gameCode) return;
+        const channel = supabase.channel(`cast_status_${gameCode}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tv_displays' }, () => {
+                supabase.from('tv_displays').select('tv_code').eq('game_code', gameCode.toUpperCase()).limit(1)
+                    .then(({ data }) => setCastingActive(!!data && data.length > 0));
+            })
+            .subscribe();
+        supabase.from('tv_displays').select('tv_code').eq('game_code', gameCode.toUpperCase()).limit(1)
+            .then(({ data }) => setCastingActive(!!data && data.length > 0));
+        return () => { supabase.removeChannel(channel); };
+    }, [gameCode]);
 
     // --- 1. LIVE DB FETCH ---
     const [dbGame, setDbGame] = useState<any>(null);
@@ -394,6 +417,7 @@ export const HostConsole: React.FC = () => {
     const handleEndGame = async () => {
         if (window.confirm("⚠️ END GAME?\n\nThis will permanently end the session.\n\nContinue?")) {
             try {
+                await stopAllCastsForGame(gameCode!);
                 await deleteGame(gameCode!);
                 navigate('/dashboard');
             } catch {
@@ -419,6 +443,7 @@ export const HostConsole: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-black text-white font-sans flex flex-col overflow-hidden">
+            <style>{CONSOLE_CSS}</style>
 
             {/* ── HEADER ────────────────────────────────────────────────────── */}
             <header className="h-16 bg-zinc-950 border-b border-zinc-800 flex justify-between items-center px-4 lg:px-6 shrink-0 z-50 relative">
@@ -466,10 +491,24 @@ export const HostConsole: React.FC = () => {
 
                     <button
                         onClick={() => setShowCastModal(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '6px 14px',
+                            background: castingActive ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${castingActive ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                            borderRadius: 8, cursor: 'pointer',
+                            transition: 'all 0.2s',
+                        }}
                     >
-                        <span className="text-sm">📺</span>
-                        <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">Cast</span>
+                        <div style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: castingActive ? '#22c55e' : 'rgba(255,255,255,0.3)',
+                            boxShadow: castingActive ? '0 0 6px #22c55e' : 'none',
+                            animation: castingActive ? 'cpPulse 2s infinite' : 'none',
+                        }} />
+                        <span style={{ fontSize: 10, fontWeight: 700, color: castingActive ? '#22c55e' : 'rgba(255,255,255,0.5)', letterSpacing: '0.2em', textTransform: 'uppercase', fontFamily: 'monospace' }}>
+                            {castingActive ? 'LIVE' : 'CAST'}
+                        </span>
                     </button>
                 </div>
 
@@ -791,8 +830,9 @@ export const HostConsole: React.FC = () => {
             )}
 
             {showCastModal && (
-                <CastModal
+                <CastPanel
                     gameCode={gameCode!}
+                    gameName={game?.settings?.gameName}
                     onClose={() => setShowCastModal(false)}
                 />
             )}
