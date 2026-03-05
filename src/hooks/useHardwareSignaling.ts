@@ -29,13 +29,13 @@ export function useHardwareSignaling(
         return () => { supabase.removeChannel(channel); };
     }, [gameId]); // Only re-subscribe on gameId change
 
-    const sendToHardware = useCallback(async (event: string, data: any) => {
+    const sendToHardware = useCallback(async (payload: any) => {
         if (!gameId) return;
         try {
             const ch = supabase.channel(`hw-${gameId}`);
             await ch.send({
                 type: 'broadcast', event: 'feedback',
-                payload: { event, data, timestamp: Date.now() }
+                payload: { ...payload, timestamp: Date.now() }
             });
         } catch (e) { console.warn('[HW] sendToHardware:', e); }
     }, [gameId]);

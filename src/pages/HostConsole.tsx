@@ -274,6 +274,16 @@ export const HostConsole: React.FC = () => {
     // Subscribe — stable channel, latest handler via ref inside the hook
     const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHwSignal);
 
+    useEffect(() => {
+        if (hwMode === 'web' && hwDeviceId) {
+            sendToHardware({
+                action: 'SCORE_STATE',
+                scoreA: game?.teamA?.score ?? 0,
+                scoreB: game?.teamB?.score ?? 0
+            });
+        }
+    }, [game?.teamA?.score, game?.teamB?.score, hwMode, hwDeviceId, sendToHardware, game?.teamA, game?.teamB]);
+
     // ── WRAP web score buttons to record action history ────────────────────────────
     const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {
         updateScore(team, points);

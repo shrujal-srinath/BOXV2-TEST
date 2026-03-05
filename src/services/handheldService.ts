@@ -173,20 +173,12 @@ export const unpairHandheldDevice = async (code: string, _userId: string): Promi
 
 // ─── Heartbeat ────────────────────────────────────────────────────────────────
 
-/**
- * Subscribes to live heartbeat changes via Supabase Realtime Postgres Changes.
- * Calls callback with (isOnline: boolean, lastSeen: number).
- *
- * IMPORTANT: ESP32 sends last_heartbeat as millis() (uptime in ms, NOT Unix epoch).
- * We cannot compare it to Date.now(). Instead, we track when WE last received
- * an update from Supabase — if an update arrived within ONLINE_THRESHOLD_MS, it's online.
- */
 export const subscribeToDeviceHeartbeat = (
     code: string,
     callback: (isOnline: boolean, lastSeen: number) => void
 ): (() => void) => {
-
     let lastReceivedAt = 0;
+    let lastHeartbeatValue = 0;
 
     supabase
         .from('hardware_terminals')
@@ -197,6 +189,7 @@ export const subscribeToDeviceHeartbeat = (
             if (data) {
                 const isOnline = data.status === 'paired' || data.status === 'active';
                 lastReceivedAt = Date.now();
+                lastHeartbeatValue = data.last_heartbeat || 0;
                 callback(isOnline, lastReceivedAt);
             } else {
                 callback(false, 0);
@@ -207,21 +200,21 @@ export const subscribeToDeviceHeartbeat = (
         .channel(`heartbeat:${code}`)
         .on(
             'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'hardware_terminals',
-                filter: `id=eq.${code}`,
-            },
-            (_payload) => {
-                lastReceivedAt = Date.now();
-                callback(true, lastReceivedAt);
+            { event: 'UPDATE', schema: 'public', table: 'hardware_terminals', filter: `id=eq.${code}` },
+            (payload) => {
+                const incomingHeartbeat = (payload.new as any).last_heartbeat;
+                // FIX: Only pulse if the ESP32 itself actually ticked the heartbeat number up!
+                if (incomingHeartbeat && incomingHeartbeat !== lastHeartbeatValue) {
+                    lastHeartbeatValue = incomingHeartbeat;
+                    lastReceivedAt = Date.now();
+                    callback(true, lastReceivedAt);
+                }
             }
         )
         .subscribe();
 
     const watchdog = setInterval(() => {
-        if (lastReceivedAt > 0 && Date.now() - lastReceivedAt > ONLINE_THRESHOLD_MS) {
+        if (lastReceivedAt > 0 && Date.now() - lastReceivedAt > 15000) {
             callback(false, lastReceivedAt);
         }
     }, 8000);
