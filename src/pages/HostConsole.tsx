@@ -123,7 +123,7 @@ export const HostConsole: React.FC = () => {
         ...dbGame,
         teamA: { ...dbGame.teamA, score: state.scoreA, fouls: state.foulsA, timeouts: state.timeoutsA },
         teamB: { ...dbGame.teamB, score: state.scoreB, fouls: state.foulsB, timeouts: state.timeoutsB },
-        gameState: { possession: state.possession }
+        gameState: { ...dbGame.gameState, possession: state.possession },
     } : null;
 
     const updateScore = (team: 'A' | 'B', value: number) => dispatch({ type: 'ADD_POINTS', team, amount: value });
@@ -273,16 +273,6 @@ export const HostConsole: React.FC = () => {
 
     // Subscribe — stable channel, latest handler via ref inside the hook
     const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHwSignal);
-
-    useEffect(() => {
-        if (hwMode === 'web' && hwDeviceId) {
-            sendToHardware({
-                action: 'SCORE_STATE',
-                scoreA: game?.teamA?.score ?? 0,
-                scoreB: game?.teamB?.score ?? 0
-            });
-        }
-    }, [game?.teamA?.score, game?.teamB?.score, hwMode, hwDeviceId, sendToHardware, game?.teamA, game?.teamB]);
 
     // ── WRAP web score buttons to record action history ────────────────────────────
     const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {

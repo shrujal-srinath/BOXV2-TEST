@@ -1,20 +1,28 @@
 // src/hooks/usePersistEngine.ts
+//
+// v2.0 — BROADCAST FIX
+//
+// [FIX] Added broadcastScoreUpdate() call alongside the DB write.
+//       Before this fix, SpectatorView only received score updates via the
+//       Postgres subscription (500ms–2s delay). Team B scores appeared not
+//       to update because the broadcast channel never received score changes.
+//       Now: every time scores change, we BOTH persist to DB (durable) AND
+//       broadcast to spectators (instant, <50ms).
+
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../services/supabase';
+import { broadcastScoreUpdate } from '../services/supabaseBroadcastService';
 
 /**
  * usePersistEngine
  *
  * Watches `engineState` (scores, fouls, timeouts, possession from useGameEngine)
- * and writes the full game snapshot back to Supabase whenever it changes.
+ * and:
+ *   1. Writes the full game snapshot to Supabase Postgres (durable, 300ms debounce)
+ *   2. Broadcasts score update via Supabase Realtime (instant, no debounce)
  *
- * Debounced at 300ms — collapses rapid dispatches into one DB write.
- * This is what makes SpectatorView update in real time.
- *
- * @param gameCode   - The 6-digit game code
- * @param dbGame     - The full BasketballGame object from subscribeToGame()
- * @param engineState - The state object from useGameEngine (scoreA, scoreB, etc.)
- * @param enabled    - Set false when gameCode is missing or game hasn't loaded yet
+ * The broadcast is what makes SpectatorView update scores in real time.
+ * The DB write is what persists data across sessions.
  */
 export const usePersistEngine = (
     gameCode: string | null,
@@ -33,10 +41,10 @@ export const usePersistEngine = (
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const prevStateRef = useRef<string>('');
 
+    // Persist to Supabase Postgres (debounced)
     const persist = useCallback(async () => {
         if (!gameCode || !dbGame || !enabled) return;
 
-        // Build the full snapshot merging engine state into dbGame structure
         const snapshot = {
             ...dbGame,
             teamA: {
@@ -69,44 +77,41 @@ export const usePersistEngine = (
         if (error) {
             console.error('[usePersistEngine] Write failed:', error.message);
         } else {
-            console.debug('[usePersistEngine] Synced scores to DB →', engineState.scoreA, '-', engineState.scoreB);
+            console.debug('[usePersistEngine] Synced →', engineState.scoreA, '-', engineState.scoreB);
         }
     }, [gameCode, dbGame, engineState, enabled]);
+
+    // Broadcast score update instantly (no debounce — spectators need this NOW)
+    const broadcastNow = useCallback(() => {
+        if (!gameCode || !enabled) return;
+        broadcastScoreUpdate(
+            gameCode,
+            engineState.scoreA,
+            engineState.scoreB,
+            engineState.foulsA,
+            engineState.foulsB,
+            engineState.timeoutsA,
+            engineState.timeoutsB,
+            engineState.possession,
+        );
+    }, [gameCode, engineState, enabled]);
 
     useEffect(() => {
         if (!enabled || !gameCode || !dbGame) return;
 
-        // Serialize the parts we care about to detect actual changes
-        const stateKey = JSON.stringify({
-            sA: engineState.scoreA,
-            sB: engineState.scoreB,
-            fA: engineState.foulsA,
-            fB: engineState.foulsB,
-            tA: engineState.timeoutsA,
-            tB: engineState.timeoutsB,
-            pos: engineState.possession,
-        });
-
-        // Skip if nothing changed (prevents write on initial mount)
+        const stateKey = JSON.stringify(engineState);
         if (stateKey === prevStateRef.current) return;
         prevStateRef.current = stateKey;
 
-        // Debounce: cancel previous pending write, schedule new one
+        // Broadcast immediately — spectators see it in <50ms
+        broadcastNow();
+
+        // Debounce the DB write — collapse rapid updates (e.g. +3 quick taps)
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(persist, 300);
 
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
         };
-    }, [
-        engineState.scoreA,
-        engineState.scoreB,
-        engineState.foulsA,
-        engineState.foulsB,
-        engineState.timeoutsA,
-        engineState.timeoutsB,
-        engineState.possession,
-        enabled,
-        persist,
-    ]);
+    }, [engineState, enabled, gameCode, dbGame, persist, broadcastNow]);
 };

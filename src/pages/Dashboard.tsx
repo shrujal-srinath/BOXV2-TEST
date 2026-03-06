@@ -331,8 +331,15 @@ export const Dashboard: React.FC = () => {
         </button>
       </header>
 
-      {/* SLIDE-OUT MENU */}
-      <div className={`fixed top-0 right-0 w-[320px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+      {/* SLIDE-OUT MENU BACKDROP — must be BEFORE the panel in DOM */}
+      <div
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${isMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+        onClick={() => setIsMenuOpen(false)}
+      />
+
+      {/* SLIDE-OUT MENU PANEL — isolate prevents stacking context bleed */}
+      <div className={`fixed top-0 right-0 w-[320px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 isolate transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-6 h-full flex flex-col">
           <div className="flex justify-between items-center mb-8 border-b border-zinc-900 pb-4">
             <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Command Menu</h2>
@@ -399,8 +406,6 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {isMenuOpen && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => setIsMenuOpen(false)}></div>}
 
       <main className="max-w-7xl mx-auto p-6 md:p-12">
         {showInstallCard && !isInstalled && (

@@ -1,7 +1,7 @@
 // src/pages/SpectatorView.tsx
 //
-// CHANGE: Added subscribeToRTDBScore subscription.
-// RTDB score (teamA.score, teamB.score, fouls, timeouts, possession) now
+// CHANGE: Added subscribeToGameBroadcast subscription.
+// Live score (teamA.score, teamB.score, fouls, timeouts, possession) now
 // overrides the stale Firestore snapshot for online games, matching the
 // same pattern already used for the clock. Zero UI changes.
 
@@ -10,6 +10,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { subscribeToGame } from '../services/supabaseGameService';
 import { getLocalGame } from '../services/localGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
+import { subscribeToGameBroadcast } from '../services/supabaseBroadcastService';
 import { type BasketballGame } from '../types';
 import { SPORT_REGISTRY, isSportSupported } from '../sports/registry';
 
@@ -909,6 +910,16 @@ export const SpectatorView: React.FC<SpectatorViewProps> = ({ gameCode: propGame
 
   const isLocalGame = gameCode?.startsWith('LOCAL-');
 
+  // Live score state — updated instantly via broadcast, DB is the fallback
+  const [liveScore, setLiveScore] = useState<{
+    scoreA: number; scoreB: number;
+    foulsA: number; foulsB: number;
+    timeoutsA: number; timeoutsB: number;
+    possession: 'A' | 'B';
+    fromBroadcast: boolean;
+  } | null>(null);
+  const liveScoreRef = useRef<typeof liveScore>(null);
+
   const rtdbTimer = useSupabaseBroadcast({
     gameCode: gameCode || '',
     isHost: false,
@@ -954,6 +965,43 @@ export const SpectatorView: React.FC<SpectatorViewProps> = ({ gameCode: propGame
     }
   }, [gameCode, isLocalGame, loading]);
 
+  // ── Instant score updates via broadcast (fixes Team B never updating) ─────
+  useEffect(() => {
+    if (!gameCode || isLocalGame) return;
+
+    const unsub = subscribeToGameBroadcast(gameCode, {
+      onScoreUpdate: (payload) => {
+        const updated = {
+          scoreA: payload.teamA,
+          scoreB: payload.teamB,
+          foulsA: payload.foulsA,
+          foulsB: payload.foulsB,
+          timeoutsA: payload.timeoutsA,
+          timeoutsB: payload.timeoutsB,
+          possession: payload.possession,
+          fromBroadcast: true,
+        };
+        liveScoreRef.current = updated;
+        setLiveScore(updated);
+      },
+      onGameSnapshot: (payload) => {
+        const updated = {
+          scoreA: payload.score.teamA,
+          scoreB: payload.score.teamB,
+          foulsA: payload.score.foulsA,
+          foulsB: payload.score.foulsB,
+          timeoutsA: payload.score.timeoutsA,
+          timeoutsB: payload.score.timeoutsB,
+          possession: payload.score.possession,
+          fromBroadcast: true,
+        };
+        liveScoreRef.current = updated;
+        setLiveScore(updated);
+      },
+    });
+    return unsub;
+  }, [gameCode, isLocalGame]);
+
   // Merge logic:
   // - Clock fields: From fast Delta-Time engine (useSupabaseBroadcast)
   // - Game State: Map the new engine state over the legacy team schema
@@ -961,19 +1009,19 @@ export const SpectatorView: React.FC<SpectatorViewProps> = ({ gameCode: propGame
     ...game,
     teamA: {
       ...game.teamA,
-      score: (game as any).state?.scoreA ?? game.teamA?.score ?? 0,
-      fouls: (game as any).state?.foulsA ?? game.teamA?.fouls ?? 0,
-      timeouts: (game as any).state?.timeoutsA ?? game.teamA?.timeouts ?? 0,
+      score: liveScore?.scoreA ?? (game as any).state?.scoreA ?? game.teamA?.score ?? 0,
+      fouls: liveScore?.foulsA ?? (game as any).state?.foulsA ?? game.teamA?.fouls ?? 0,
+      timeouts: liveScore?.timeoutsA ?? (game as any).state?.timeoutsA ?? game.teamA?.timeouts ?? 0,
     },
     teamB: {
       ...game.teamB,
-      score: (game as any).state?.scoreB ?? game.teamB?.score ?? 0,
-      fouls: (game as any).state?.foulsB ?? game.teamB?.fouls ?? 0,
-      timeouts: (game as any).state?.timeoutsB ?? game.teamB?.timeouts ?? 0,
+      score: liveScore?.scoreB ?? (game as any).state?.scoreB ?? game.teamB?.score ?? 0,
+      fouls: liveScore?.foulsB ?? (game as any).state?.foulsB ?? game.teamB?.fouls ?? 0,
+      timeouts: liveScore?.timeoutsB ?? (game as any).state?.timeoutsB ?? game.teamB?.timeouts ?? 0,
     },
     gameState: {
       ...game.gameState,
-      possession: (game as any).state?.possession ?? game.gameState?.possession,
+      possession: liveScore?.possession ?? (game as any).state?.possession ?? game.gameState?.possession,
       gameTime: isLocalGame ? game.gameState.gameTime : {
         minutes: rtdbTimer.minutes,
         seconds: rtdbTimer.seconds,

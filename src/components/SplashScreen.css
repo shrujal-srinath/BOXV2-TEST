@@ -78,6 +78,7 @@
   transform: translateY(20px);
   background: linear-gradient(180deg, #FFFFFF 20%, #999999 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.1));
 }

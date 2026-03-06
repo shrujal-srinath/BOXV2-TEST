@@ -49,8 +49,7 @@ const createDefaultTeam = (name: string, color: string): TeamData => ({
 
 /**
  * Initialize a new game — writes to Supabase Postgres instead of Firestore.
- * 
- * Drop-in replacement for gameService.initializeNewGame().
+ * * Drop-in replacement for gameService.initializeNewGame().
  * Same signature, same return type (game code string).
  */
 export const initializeNewGame = async (
@@ -196,8 +195,9 @@ export const subscribeToLiveGames = (
 
     fetchLive();
 
+    const channelName = `live-games-feed-${Date.now()}`;
     const channel = supabase
-        .channel('live-games-feed')
+        .channel(channelName)
         .on(
             'postgres_changes',
             {
