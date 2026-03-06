@@ -26,7 +26,6 @@ import {
 } from '../services/tvDisplayService';
 import { SpectatorView } from './SpectatorView';
 
-
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=Barlow:wght@300;400;500;600&display=swap');
@@ -1032,9 +1031,8 @@ export const TvKiosk: React.FC = () => {
     const [registered, setRegistered] = useState(false);
     const [online, setOnline] = useState(true);
     const prevGame = useRef<string | null>(null);
-    const showGameRef = useRef(false);
 
-    // Sync ref whenever state changes so the callback always reads current value
+    const showGameRef = useRef(false);
     useEffect(() => {
         showGameRef.current = showGame;
     }, [showGame]);
@@ -1045,19 +1043,16 @@ export const TvKiosk: React.FC = () => {
         setOnline(true);
 
         if (nc && !showGameRef.current) {
-            // IDLE → CASTING
             setTrans(true);
             setTimeout(() => { setGameCode(nc); setShowGame(true); setTrans(false); }, 500);
         } else if (!nc && showGameRef.current) {
-            // CASTING → IDLE
             setTrans(true);
             setTimeout(() => { setShowGame(false); setGameCode(null); setTrans(false); }, 700);
         } else if (nc && showGameRef.current) {
-            // Game swap
             setTrans(true);
             setTimeout(() => { setGameCode(nc); setTrans(false); }, 350);
         }
-    }, []); // no dependencies needed — reads ref instead of state
+    }, []);
 
     useEffect(() => {
         let stopHB: (() => void) | null = null;
