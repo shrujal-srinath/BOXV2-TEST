@@ -24,12 +24,15 @@ export default function EngineDemo() {
     }));
 
     // 3. Boot up the Universal Engine!
-    const { state, dispatch, isOffline } = useGameEngine(
+    const { state, dispatch } = useGameEngine(
         mockGame.id,
         mockGame,
         manifest,
         true // Enable God Mode/Admin for the demo
     );
+
+    // Mock network status for the demo
+    const isOffline = false;
 
     // 4. Extract the strictly-typed UI components from the plugin
     const { TabletController, WallCard } = manifest.components;
