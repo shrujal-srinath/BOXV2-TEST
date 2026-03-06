@@ -26,22 +26,6 @@ import {
 } from '../services/tvDisplayService';
 import { SpectatorView } from './SpectatorView';
 
-// ─── Code resolution ──────────────────────────────────────────────────────────
-const resolveCode = (urlParam: string | null): string => {
-    if (urlParam) {
-        const c = urlParam.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
-        if (c.length === 4) { localStorage.setItem('TV_CODE_STABLE', c); return c; }
-    }
-    const stored = localStorage.getItem('TV_CODE_STABLE');
-    if (stored?.length === 4) return stored;
-    const seed = `${screen.width}x${screen.height}.${navigator.hardwareConcurrency}.${navigator.language}`;
-    let h = 5381;
-    for (let i = 0; i < seed.length; i++) h = ((h << 5) + h) ^ seed.charCodeAt(i);
-    const ch = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const code = [h >>> 24, h >>> 16, h >>> 8, h].map(b => ch[Math.abs(b) % ch.length]).join('');
-    localStorage.setItem('TV_CODE_STABLE', code);
-    return code;
-};
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -1039,7 +1023,7 @@ const WipeOverlay = memo(({ visible }: { visible: boolean }) => (
 // ═══════════════════════════════════════════════════════════════════════════════
 export const TvKiosk: React.FC = () => {
     const [searchParams] = useSearchParams();
-    const tvCode = resolveCode(searchParams.get('code'));
+    const tvCode = (searchParams.get('code') || 'BOX1').toUpperCase();
 
     const [splashDone, setSplashDone] = useState(false);
     const [gameCode, setGameCode] = useState<string | null>(null);
@@ -1048,23 +1032,32 @@ export const TvKiosk: React.FC = () => {
     const [registered, setRegistered] = useState(false);
     const [online, setOnline] = useState(true);
     const prevGame = useRef<string | null>(null);
+    const showGameRef = useRef(false);
+
+    // Sync ref whenever state changes so the callback always reads current value
+    useEffect(() => {
+        showGameRef.current = showGame;
+    }, [showGame]);
 
     const handleUpdate = useCallback((nc: string | null) => {
         if (nc === prevGame.current) return;
         prevGame.current = nc;
         setOnline(true);
 
-        if (nc && !showGame) {
+        if (nc && !showGameRef.current) {
+            // IDLE → CASTING
             setTrans(true);
             setTimeout(() => { setGameCode(nc); setShowGame(true); setTrans(false); }, 500);
-        } else if (!nc && showGame) {
+        } else if (!nc && showGameRef.current) {
+            // CASTING → IDLE
             setTrans(true);
             setTimeout(() => { setShowGame(false); setGameCode(null); setTrans(false); }, 700);
-        } else if (nc && showGame) {
+        } else if (nc && showGameRef.current) {
+            // Game swap
             setTrans(true);
             setTimeout(() => { setGameCode(nc); setTrans(false); }, 350);
         }
-    }, [showGame]);
+    }, []); // no dependencies needed — reads ref instead of state
 
     useEffect(() => {
         let stopHB: (() => void) | null = null;
