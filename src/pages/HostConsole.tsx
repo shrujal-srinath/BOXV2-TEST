@@ -109,9 +109,22 @@ export const HostConsole: React.FC = () => {
 
     // --- 2. ENGINE SWAP ---
     const manifest = SPORT_REGISTRY['basketball'];
+
+    // Synthesize the engine state from the DB data, or use defaults
+    const engineInitialState = dbGame ? {
+        scoreA: dbGame.teamA?.score ?? 0,
+        scoreB: dbGame.teamB?.score ?? 0,
+        foulsA: dbGame.teamA?.fouls ?? 0,
+        foulsB: dbGame.teamB?.fouls ?? 0,
+        timeoutsA: dbGame.teamA?.timeouts ?? 0,
+        timeoutsB: dbGame.teamB?.timeouts ?? 0,
+        possession: dbGame.gameState?.possession ?? 'A'
+    } : manifest.createInitialState(manifest.rules);
+
+    // Pass the synthesized state into the engine
     const { state, dispatch } = useGameEngine(
         gameCode || '',
-        dbGame || { rules: manifest.rules, state: manifest.createInitialState(manifest.rules) },
+        { ...(dbGame || {}), rules: manifest.rules, state: engineInitialState, code: gameCode },
         manifest,
         true
     );
