@@ -76,153 +76,44 @@ const StatPill: React.FC<{ label: string; value: number | string; accent?: boole
     </div>
 );
 
-// Arena tournament card — full-bleed, always shows actions
-const ArenaTournamentCard: React.FC<{
-    tournament: Tournament;
-    role: 'admin' | 'scorer';
-    onClick: () => void;
-    index: number;
-}> = ({ tournament, role, onClick, index }) => {
-    const [copied, setCopied] = useState(false);
-
-    const divisions = tournament.divisions ? Object.values(tournament.divisions) : [];
-    const completedDivisions = divisions.filter(d => d.status === 'completed').length;
-    const activeDivisions = divisions.filter(d => d.status === 'published').length;
-    const activeSports = [...new Set(divisions.map(d => d.sport))];
-
-    const statusConfig = tournament.status === 'active'
-        ? { label: 'LIVE', dot: 'bg-green-400 animate-pulse', text: 'text-green-400', border: 'border-green-900/40', glow: 'shadow-green-950/30' }
-        : tournament.status === 'archived'
-            ? { label: 'ENDED', dot: 'bg-zinc-500', text: 'text-zinc-500', border: 'border-zinc-800/60', glow: '' }
-            : { label: 'DRAFT', dot: 'bg-yellow-500', text: 'text-yellow-500', border: 'border-yellow-900/40', glow: 'shadow-yellow-950/20' };
-
-    const handleCopy = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(tournament.id);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
+const TournamentCard = ({ tournament, role, onClick }: { tournament: Tournament; role: 'admin' | 'scorer'; onClick: () => void }) => {
+    // sportConfig is the new shape: { basketball: { courts: 2 }, badminton: { courts: 1 } }
+    const sportConfig = tournament.sportConfig || {};
+    const totalCourts = Object.values(sportConfig).reduce((total: number, s: any) => total + (s?.courts || 0), 0);
+    const totalSports = Object.keys(sportConfig).length;
+    const divisionCount = tournament.divisions ? Object.keys(tournament.divisions).length : 0;
+    const publishedCount = tournament.divisions
+        ? Object.values(tournament.divisions).filter((d: any) => d?.status === 'published').length
+        : 0;
 
     return (
-        <div
-            className={`group relative rounded-2xl border bg-zinc-950/80 backdrop-blur-sm cursor-pointer
-                overflow-hidden transition-all duration-300
-                hover:border-yellow-700/50 hover:-translate-y-1 hover:shadow-2xl hover:shadow-yellow-950/20
-                ${statusConfig.border} ${statusConfig.glow}
-            `}
-            style={{ animationDelay: `${index * 80}ms` }}
-            onClick={onClick}
-        >
-            {/* Gold shimmer on hover */}
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                style={{ background: 'linear-gradient(135deg, transparent 60%, rgba(202,138,4,0.04) 100%)' }} />
-
-            {/* Top accent bar */}
-            <div className={`h-[2px] w-full ${role === 'admin'
-                ? 'bg-gradient-to-r from-yellow-600/80 via-yellow-500/60 to-transparent'
-                : 'bg-gradient-to-r from-blue-600/80 via-blue-500/60 to-transparent'}`} />
-
-            {/* Large watermark sport icon */}
-            {activeSports[0] && (
-                <div className="absolute -bottom-4 -right-4 text-[96px] opacity-[0.04] group-hover:opacity-[0.07] transition-opacity duration-500 pointer-events-none select-none rotate-12">
-                    {sportIcons[activeSports[0]] || '🏆'}
-                </div>
-            )}
-
-            <div className="p-6 relative z-10">
-                {/* Header row */}
-                <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        {/* Role badge */}
-                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-md uppercase tracking-widest border
-                            ${role === 'admin'
-                                ? 'bg-yellow-950/50 text-yellow-500 border-yellow-900/50'
-                                : 'bg-blue-950/50 text-blue-500 border-blue-900/50'}`}>
-                            {role}
-                        </span>
-                        {/* Status badge */}
-                        <span className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
-                            <span className={statusConfig.text}>{statusConfig.label}</span>
-                        </span>
-                    </div>
-                    {/* ID chip */}
-                    <span className="text-[9px] font-mono text-zinc-600 bg-zinc-900 px-2 py-1 rounded border border-zinc-800">
-                        {tournament.id}
+        <div onClick={onClick} className="bg-zinc-900 border border-zinc-800 p-6 rounded-xl relative overflow-hidden group hover:border-yellow-600/50 transition-all cursor-pointer">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+            </div>
+            <div className="relative z-10">
+                <div className="flex justify-between items-start mb-4">
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-widest ${role === 'admin' ? 'bg-yellow-900/20 text-yellow-500' : 'bg-blue-900/20 text-blue-500'}`}>
+                        {role}
                     </span>
+                    <span className="text-[10px] font-mono text-zinc-500">{tournament.id}</span>
                 </div>
-
-                {/* Tournament name */}
-                <h3 className="text-2xl font-black italic uppercase tracking-tight text-white mb-1 group-hover:text-yellow-400 transition-colors duration-300 leading-tight">
-                    {tournament.name}
-                </h3>
-
-                {/* Sports row */}
-                <div className="flex items-center gap-1.5 mb-5">
-                    {activeSports.slice(0, 4).map(sport => (
-                        <span key={sport} className="text-base" title={sport}>{sportIcons[sport] || '🏆'}</span>
-                    ))}
-                    {activeSports.length > 4 && (
-                        <span className="text-[10px] text-zinc-600 font-bold">+{activeSports.length - 4}</span>
-                    )}
-                    {activeSports.length === 0 && (
-                        <span className="text-[10px] text-zinc-700 font-bold uppercase tracking-wider">No sports yet</span>
-                    )}
-                </div>
-
-                {/* Stats row */}
-                <div className="grid grid-cols-3 gap-2 mb-5">
-                    {[
-                        { val: divisions.length, label: 'Divisions' },
-                        { val: activeDivisions, label: 'Active' },
-                        { val: completedDivisions, label: 'Done' },
-                    ].map(({ val, label }) => (
-                        <div key={label} className="bg-zinc-900/60 rounded-lg px-3 py-2 text-center border border-zinc-800/60">
-                            <div className="text-base font-black text-white">{val}</div>
-                            <div className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold mt-0.5">{label}</div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Progress bar (only if divisions exist) */}
-                {divisions.length > 0 && (
-                    <div className="mb-5">
-                        <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[9px] text-zinc-600 uppercase tracking-widest font-bold">Progress</span>
-                            <span className="text-[9px] font-black text-zinc-400">
-                                {Math.round((completedDivisions / divisions.length) * 100)}%
-                            </span>
-                        </div>
-                        <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full transition-all duration-700"
-                                style={{ width: `${Math.round((completedDivisions / divisions.length) * 100)}%` }}
-                            />
-                        </div>
-                    </div>
+                <h3 className="text-2xl font-black italic text-white uppercase tracking-tight mb-2 truncate">{tournament.name}</h3>
+                {tournament.organizer && (
+                    <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mb-3">{tournament.organizer}</div>
                 )}
-
-                {/* ALWAYS-VISIBLE action buttons */}
-                <div className="flex gap-2">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onClick(); }}
-                        className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-yellow-600 hover:text-black text-white text-[10px] font-black uppercase tracking-widest transition-all duration-200 border border-zinc-700 hover:border-yellow-600 flex items-center justify-center gap-1.5"
-                    >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                        </svg>
-                        Open
-                    </button>
-                    <button
-                        onClick={handleCopy}
-                        className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-[10px] font-black uppercase tracking-widest transition-all duration-200 border border-zinc-700 hover:border-zinc-600 flex items-center gap-1.5"
-                        title="Copy Tournament Code"
-                    >
-                        {copied
-                            ? <><svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg><span className="text-green-400">Copied</span></>
-                            : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><span>Code</span></>
-                        }
-                    </button>
+                <div className="flex gap-4 text-xs text-zinc-400 font-mono mt-4">
+                    <span>{totalSports} Sport{totalSports !== 1 ? 's' : ''}</span>
+                    <span>•</span>
+                    <span>{totalCourts} Court{totalCourts !== 1 ? 's' : ''}</span>
+                    {publishedCount > 0 && (
+                        <>
+                            <span>•</span>
+                            <span className="text-green-500">{publishedCount} Live</span>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
@@ -579,13 +470,12 @@ export const TournamentDashboard: React.FC = () => {
                 {/* ── FULL-BLEED GRID ───────────────────────── */}
                 {!loading && displayedTournaments.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {displayedTournaments.map((t, index) => (
-                            <ArenaTournamentCard
+                        {displayedTournaments.map((t) => (
+                            <TournamentCard
                                 key={t.id}
                                 tournament={t}
                                 role={activeTab === 'hosting' ? 'admin' : 'scorer'}
                                 onClick={() => navigate(`/tournament/${t.id}/manage`)}
-                                index={index}
                             />
                         ))}
 
