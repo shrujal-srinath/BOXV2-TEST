@@ -19,6 +19,7 @@ import { supabase } from '../services/supabase';
 import {
     subscribeToTournament,
     subscribeToFixtures,
+    verifyScorerPin,
 } from '../services/tournamentService';
 import type {
     Tournament,
@@ -387,9 +388,10 @@ export const TournamentViewer: React.FC = () => {
         setPinLoading(true);
         setPinError('');
         try {
-            const { data } = await supabase.from('tournaments').select('scorerPin, id').eq('id', id).single();
-            if (data && data.scorerPin === pin.trim()) {
-                // Store pin in session for this tournament
+            // Uses verify_scorer_pin() RPC — scorerPin lives in tournament_secrets (v4.1),
+            // never readable directly from the tournaments table.
+            const isValid = await verifyScorerPin(id, pin.trim());
+            if (isValid) {
                 sessionStorage.setItem(`volunteer_pin_${id}`, pin.trim());
                 navigate(`/t/${id}/volunteer`);
             } else {

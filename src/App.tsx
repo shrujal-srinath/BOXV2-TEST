@@ -32,6 +32,8 @@ import { WallView } from './pages/WallView';
 import { TournamentDashboard } from './pages/TournamentDashboard';
 import { TournamentSetup } from './pages/TournamentSetup';
 import { TournamentManager } from './pages/TournamentManager';
+import { TournamentViewer } from './pages/TournamentViewer';
+import { VolunteerConsole } from './pages/VolunteerConsole';
 
 // ── Tablet PWA pages (NO auth wrapper — these must be public) ─
 import { StandaloneTablet } from './pages/StandaloneTablet';
@@ -86,6 +88,12 @@ function App() {
           <Route path="/tv" element={<TvKiosk />} />
           <Route path="/wall" element={<WallView />} />
 
+          {/* ── Tournament PUBLIC viewer (shareable QR link, no auth) ── */}
+          {/* /t/:id      → bracket/results/live scores for spectators   */}
+          {/* /t/:id/volunteer → scorer console (PIN-gated, no auth)     */}
+          <Route path="/t/:id" element={<TournamentViewer />} />
+          <Route path="/t/:id/volunteer" element={<VolunteerConsole />} />
+
           {/* ══════════════════════════════════════════════
               WEBSITE — PROTECTED ROUTES
               ══════════════════════════════════════════════ */}
@@ -101,7 +109,7 @@ function App() {
             <ProtectedHostRoute><HostConsole /></ProtectedHostRoute>
           } />
 
-          {/* Tournament */}
+          {/* Tournament admin routes */}
           <Route path="/tournament" element={
             <ProtectedHostRoute><TournamentDashboard /></ProtectedHostRoute>
           } />
