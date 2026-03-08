@@ -74,7 +74,6 @@ export const initializeNewGame = async (
     const newGame: BasketballGame = {
         code: gameCode,
         hostId,
-        sportId: sport,
         sport,      // legacy fallback
         status: 'live',
         gameType: isOnline ? 'online' : 'local',

@@ -1038,7 +1038,7 @@ export const SpectatorView: React.FC<SpectatorViewProps> = ({ gameCode: propGame
   if (error || !activeGame) return (<><GlobalStyles /><ErrorScreen message={error || 'Game unavailable'} /></>);
 
   // --- BEGIN MULTI-SPORT INTERCEPTOR ---
-  const currentSport = activeGame.sportId || 'basketball';
+  const currentSport = activeGame.sport || 'basketball';
 
   if (currentSport !== 'basketball' && isSportSupported(currentSport)) {
     const DynamicSportView = SPORT_REGISTRY[currentSport].components.SpectatorView;
