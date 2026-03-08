@@ -208,14 +208,26 @@ export const activateDivision = async (
 
         const fixtures = generateBracketSlotsArray(tournamentId, divisionId, sport, gender, config.bracketSize);
         if (fixtures.length > 0) {
-            // FIX 2: Delete existing fixtures for this division first to prevent 409 conflicts
-            await supabase.from('tournament_fixtures')
+            // Delete first — check the error this time
+            const { error: deleteError } = await supabase
+                .from('tournament_fixtures')
                 .delete()
                 .eq('tournamentId', tournamentId)
                 .eq('divisionId', divisionId);
 
-            const { error } = await supabase.from('tournament_fixtures').insert(fixtures);
-            if (error) throw error;
+            if (deleteError) {
+                console.warn('[activateDivision] delete blocked (RLS?), falling back to upsert:', deleteError.message);
+                // upsert is idempotent — safe even if delete was blocked
+                const { error: upsertError } = await supabase
+                    .from('tournament_fixtures')
+                    .upsert(fixtures, { onConflict: 'id' });
+                if (upsertError) throw upsertError;
+            } else {
+                const { error: insertError } = await supabase
+                    .from('tournament_fixtures')
+                    .insert(fixtures);
+                if (insertError) throw insertError;
+            }
         }
     }
 };
