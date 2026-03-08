@@ -1,11 +1,12 @@
 // src/types.ts
-//
-// HYBRID ARCHITECTURE TYPES
-// Merges Tournament System + Live Game Engine (Supabase)
+// ─────────────────────────────────────────────────────────────────────────────
+// THE BOX — Unified Type Definitions
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ══════════════════════════════════════════════
-// 1. PLAYER
-// ══════════════════════════════════════════════
+// ============================================
+// 1. PLAYER & TEAM DATA
+// ============================================
+
 export interface Player {
   id: string;
   name: string;
@@ -27,9 +28,6 @@ export interface Player {
   freeThrowsAttempted: number;
 }
 
-// ══════════════════════════════════════════════
-// 2. TEAM
-// ══════════════════════════════════════════════
 export interface TeamData {
   name: string;
   color: string;
@@ -42,59 +40,34 @@ export interface TeamData {
   players: Player[];
 }
 
-// ══════════════════════════════════════════════
-// 3. GAME SETTINGS
-// ══════════════════════════════════════════════
+// ============================================
+// 2. GAME SETTINGS & STATE
+// ============================================
+
 export interface GameSettings {
   gameName: string;
   periodDuration: number;
   shotClockDuration: number;
   periodType: 'quarter' | 'half';
-  // Optional/Contextual fields
-  periods?: number;      // Total periods (e.g., 4)
-  venue?: string;        // Venue name
   courtNumber?: string;
   tournamentId?: string;
-  // sport removed — belongs on the root BasketballGame object, not here
+  fixtureId?: string; // Links game back to its bracket fixture
 }
 
-// ══════════════════════════════════════════════
-// 4. GAME TIME
-// ══════════════════════════════════════════════
-export interface GameTime {
-  minutes: number;
-  seconds: number;
-  tenths: number;
-}
-
-// ══════════════════════════════════════════════
-// 5. GAME STATE
-// ══════════════════════════════════════════════
 export interface GameState {
   period: number;
-  gameTime: GameTime;
+  gameTime: { minutes: number; seconds: number; tenths: number };
   shotClock: number;
   gameRunning: boolean;
   shotClockRunning: boolean;
-  possession: 'A' | 'B' | null;
-
-  // ─── RTDB / HYBRID FIELDS ───
-  // These are used by rtdbClockService to calculate precise drift.
-  // Optional so Firestore docs without them don't break TS.
-  startedAt?: number | null;
-  shotClockStartedAt?: number | null;
-  timerStartEpoch?: number | null; // Legacy/Backup
+  possession: 'A' | 'B';
 }
 
-// ══════════════════════════════════════════════
-// 6. BASKETBALL GAME (Supabase document shape)
-// ══════════════════════════════════════════════
 export interface BasketballGame {
   code: string;
   hostId: string;
-  sportId: string;                                              // Canonical field (matches DB column)
-  sport?: string;                                               // Legacy fallback — use sportId going forward
-  status: 'scheduled' | 'live' | 'completed' | 'archived';     // Standardized union
+  sport: string;
+  status: 'live' | 'completed' | 'archived';
   gameType: 'local' | 'online';
   createdAt: number;
   lastUpdate: number;
@@ -104,56 +77,53 @@ export interface BasketballGame {
   teamB: TeamData;
 }
 
-// ══════════════════════════════════════════════
-// 7. SPORT TYPES & TOURNAMENT CONFIGS
-// ══════════════════════════════════════════════
-// All sports that can appear in tournament schedules (present + future)
-export type SchedulableSport = 'basketball' | 'badminton' | 'volleyball' | 'kabaddi' | 'table_tennis' | 'tabletennis' | 'football' | 'cricket' | 'general';
+// ============================================
+// 3. TOURNAMENT ARCHITECTURE — CORE TYPES
+// ============================================
 
-// Currently live-scoring-supported sports only
-export type SportType = 'basketball' | 'badminton';
+/** Sports that can be scheduled in a tournament */
+export type SchedulableSport =
+  | 'basketball'
+  | 'badminton'
+  | 'volleyball'
+  | 'football'
+  | 'kabaddi'
+  | 'tabletennis'
+  | 'cricket'
+  | 'general';
 
-export type TournamentFormat = 'random' | 'knockout' | 'league';
+/** SportType is a subset of SchedulableSport (legacy alias kept for compat) */
+export type SportType = SchedulableSport;
+
+/** Gender categories for divisions */
 export type GenderCategory = 'men' | 'women' | 'mixed';
 
+/** Competition formats */
+export type TournamentFormat = 'knockout' | 'roundrobin' | 'group+knockout';
+
+// ============================================
+// 4. DIVISION CONFIG
+// ============================================
+
 export interface DivisionConfig {
+  /** Deterministic ID: `{sport}_{gender}` e.g. "basketball_men" */
   id: string;
   sport: SportType;
   gender: GenderCategory;
   isActive: boolean;
   format: TournamentFormat;
+  /** Power-of-2 bracket size (4, 8, 16, 32, 64) */
   bracketSize?: number;
+  /** Division lifecycle status */
   status: 'setup_required' | 'draft' | 'published' | 'completed';
+  /** Final winner team name — set when division completes */
+  champion?: string;
 }
 
-// ══════════════════════════════════════════════
-// 8. TOURNAMENT FIXTURE
-// ══════════════════════════════════════════════
-export interface TournamentFixture {
-  id: string;
-  tournamentId: string;
-  divisionId: string;
-  sport: SportType;
-  gender: GenderCategory;
-  teamA: string;
-  teamB: string;
-  court: string;
-  time: string;
-  date?: string;
-  status: 'scheduled' | 'live' | 'completed';
-  gameCode?: string;
-  finalScore?: { teamA: number; teamB: number };
-  round?: number;
-  matchNumber?: number;
-  nextMatchId?: string | null;
-  bracketParent?: 'A' | 'B';
-  winnerSide?: 'A' | 'B';
-  isBye?: boolean;
-}
+// ============================================
+// 5. TOURNAMENT DOCUMENT
+// ============================================
 
-// ══════════════════════════════════════════════
-// 9. TOURNAMENT
-// ══════════════════════════════════════════════
 export interface Tournament {
   id: string;
   adminId: string;
@@ -163,15 +133,21 @@ export interface Tournament {
   location?: string;
   startDate?: string;
   endDate?: string;
-  scorerPin: string;
+  /** Tournament lifecycle status */
   status: 'draft' | 'active' | 'archived';
+  /** Court config per sport: { basketball: { courts: 2 }, ... } */
   sportConfig: {
-    [key in SportType]?: { courts: number };
+    [key in SportType]?: {
+      courts: number;
+    };
   };
+  /** All divisions, keyed by divisionId */
   divisions: {
     [divisionId: string]: DivisionConfig;
   };
+  /** User IDs that can score matches */
   approvedScorers: string[];
+  /** Pending join requests */
   pendingRequests: {
     [userId: string]: {
       displayName: string;
@@ -181,12 +157,63 @@ export interface Tournament {
     };
   };
   createdAt: number;
-  accessCode?: string; // Legacy/Helper field
 }
 
-// ══════════════════════════════════════════════
-// 10. UTILITY / COMPAT
-// ══════════════════════════════════════════════
+// ============================================
+// 6. TOURNAMENT FIXTURE (bracket node)
+// ============================================
+
+export interface TournamentFixture {
+  id: string;
+  tournamentId: string;
+  /** Which division this fixture belongs to */
+  divisionId: string;
+  sport: SportType;
+  gender: GenderCategory;
+
+  /** Team names — "TBD" until bracket seeds propagate */
+  teamA: string;
+  teamB: string;
+
+  /** Scheduling */
+  court: string;   // "Court 1" | "Unassigned"
+  time: string;    // "10:00 AM" | "Pending"
+  date?: string;
+
+  /** Game lifecycle */
+  status: 'scheduled' | 'live' | 'completed';
+  gameCode?: string; // Links to live BasketballGame doc
+
+  /** Bracket topology */
+  round?: number;
+  matchNumber?: number;
+  /** ID of the fixture in the NEXT round that the winner feeds into */
+  nextMatchId?: string | null;
+  /** Which slot (A or B) the winner fills in nextMatchId */
+  bracketParent?: 'A' | 'B' | null;
+
+  /** Result */
+  winnerSide?: 'A' | 'B';
+  finalScore?: { teamA: number; teamB: number };
+
+  /** Scheduling metadata */
+  isBye?: boolean;
+  scorerId?: string; // UID of assigned scorer
+  actualStartTime?: number;
+  actualEndTime?: number;
+}
+
+// ============================================
+// 7. LEGACY — TournamentConfig
+// (kept for TournamentSetup backwards compat)
+// ============================================
+
+/** @deprecated Use Tournament.sportConfig + Tournament.divisions instead */
 export interface TournamentConfig {
-  sports: { [key in SportType]?: { isActive: boolean; courts: number } };
+  sports: {
+    [key in SportType]?: {
+      isActive: boolean;
+      courts: number;
+    };
+  };
 }

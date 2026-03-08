@@ -512,3 +512,132 @@ export const checkCourtAvailability = async (tournamentId: string, court: string
         return false;
     }
 };
+
+// ============================================
+// NEW: SCORER MANAGEMENT
+// ============================================
+
+/** Remove a user from the approved scorers list (admin only action) */
+export const revokeScorer = async (tournamentId: string, userId: string): Promise<void> => {
+    const { data: tData } = await supabase
+        .from('tournaments').select('approvedScorers, pendingRequests').eq('id', tournamentId).single();
+    if (!tData) return;
+
+    const approvedScorers = (Array.isArray(tData.approvedScorers) ? tData.approvedScorers as string[] : [])
+        .filter((id: string) => id !== userId);
+    const pendingRequests = tData.pendingRequests || {};
+    delete pendingRequests[userId];
+
+    await supabase.from('tournaments')
+        .update({ approvedScorers, pendingRequests })
+        .eq('id', tournamentId);
+};
+
+// ============================================
+// NEW: TEAM NAME MANAGEMENT
+// ============================================
+
+/**
+ * Update a single team slot in a Round 1 fixture.
+ * Propagates the name forward to any downstream TBD slots automatically.
+ */
+export const updateTeamName = async (
+    tournamentId: string,
+    fixtureId: string,
+    side: 'A' | 'B',
+    name: string
+): Promise<void> => {
+    const field = side === 'A' ? 'teamA' : 'teamB';
+    await supabase.from('tournament_fixtures')
+        .update({ [field]: name })
+        .eq('id', fixtureId)
+        .eq('tournamentId', tournamentId);
+};
+
+// ============================================
+// NEW: ADMIN PIN RETRIEVAL
+// ============================================
+
+/**
+ * Reads the scorer PIN from tournament_secrets.
+ * Only meaningful for the tournament admin — RLS should restrict this.
+ */
+export const getAdminPin = async (tournamentId: string): Promise<string | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('tournament_secrets')
+            .select('scorerPin')
+            .eq('tournament_id', tournamentId)
+            .single();
+        if (error) {
+            console.error('[getAdminPin] RLS/not-found error:', error.message);
+            return null;
+        }
+        return data?.scorerPin ?? null;
+    } catch (err) {
+        console.error('[getAdminPin] unexpected error:', err);
+        return null;
+    }
+};
+
+// ============================================
+// NEW: GAME RESULT FETCH
+// ============================================
+
+/**
+ * Fetches the live game score so the scorer can confirm the result
+ * without re-entering numbers manually.
+ */
+export const getGameResult = async (
+    gameCode: string
+): Promise<{ teamA: number; teamB: number; teamAName: string; teamBName: string } | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('games')
+            .select('teamA, teamB')
+            .eq('code', gameCode)
+            .single();
+        if (error || !data) return null;
+        return {
+            teamA: (data.teamA as any)?.score ?? 0,
+            teamB: (data.teamB as any)?.score ?? 0,
+            teamAName: (data.teamA as any)?.name ?? 'Team A',
+            teamBName: (data.teamB as any)?.name ?? 'Team B',
+        };
+    } catch {
+        return null;
+    }
+};
+
+// ============================================
+// NEW: DIVISION COMPLETION CHECK
+// ============================================
+
+/**
+ * Called after advanceBracketWinner. Checks if ALL non-bye fixtures
+ * in the division are completed. If so, marks the division as 'completed'
+ * and records the champion name.
+ */
+export const checkAndCompleteDivision = async (
+    tournamentId: string,
+    divisionId: string,
+    champion: string
+): Promise<void> => {
+    const { data: fixtures } = await supabase
+        .from('tournament_fixtures')
+        .select('status, isBye')
+        .eq('tournamentId', tournamentId)
+        .eq('divisionId', divisionId);
+
+    if (!fixtures) return;
+    const realFixtures = fixtures.filter((f: any) => !f.isBye);
+    const allDone = realFixtures.every((f: any) => f.status === 'completed');
+
+    if (allDone) {
+        const { data: tData } = await supabase.from('tournaments').select('divisions').eq('id', tournamentId).single();
+        if (!tData) return;
+        tData.divisions[divisionId].status = 'completed';
+        tData.divisions[divisionId].champion = champion;
+        await supabase.from('tournaments').update({ divisions: tData.divisions }).eq('id', tournamentId);
+    }
+};
