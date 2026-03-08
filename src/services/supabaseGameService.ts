@@ -303,11 +303,12 @@ export const batchUpdateGame = async (
 
 /**
  * Finish a game.
+ * NOTE: Schema only allows 'live' | 'completed' | 'archived' — never 'finished'.
  */
 export const finishGame = async (gameId: string): Promise<void> => {
     const { error } = await supabase
         .from('games')
-        .update({ status: 'finished', lastUpdate: Date.now() })
+        .update({ status: 'completed', lastUpdate: Date.now() })
         .eq('code', gameId);
 
     if (error) {
