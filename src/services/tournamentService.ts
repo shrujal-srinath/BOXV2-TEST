@@ -99,6 +99,8 @@ export const activateDivision = async (tournamentId: string, divisionId: string,
         const [sport, gender] = divisionId.split('_');
         const fixtures = generateBracketSlotsArray(tournamentId, divisionId, sport as SportType, gender as GenderCategory, config.bracketSize);
         if (fixtures.length > 0) {
+            await supabase.from('tournament_fixtures').delete().eq('tournamentId', tournamentId).eq('divisionId', divisionId);
+
             const { error } = await supabase.from('tournament_fixtures').insert(fixtures);
             if (error) throw error;
         }
@@ -270,7 +272,11 @@ export const subscribeToMyTournaments = (userId: string, callback: (data: Tourna
 
 export const subscribeToJoinedTournaments = (userId: string, callback: (data: Tournament[]) => void) => {
     const fetchIt = async () => {
-        const { data } = await supabase.from('tournaments').select('*').contains('approvedScorers', [userId]).neq('adminId', userId);
+        const { data } = await supabase
+            .from('tournaments')
+            .select('*')
+            .filter('approvedScorers', 'cs', `{"${userId}"}`)
+            .neq('adminId', userId);
         if (data) callback(data as Tournament[]);
     };
     fetchIt();
