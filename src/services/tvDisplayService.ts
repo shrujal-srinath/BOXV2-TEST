@@ -28,28 +28,12 @@ export interface TvDisplay {
  */
 export const registerTvDisplay = async (tvCode: string): Promise<void> => {
     const upper = tvCode.toUpperCase();
-
-    // Check existing state first — don't reset a mid-cast Pi on page refresh
-    const { data: existing } = await supabase
-        .from('tv_displays')
-        .select('status, game_code')
-        .eq('tv_code', upper)
-        .single();
-
-    const isMidCast = existing?.status === 'casting' && existing?.game_code;
-
     const { error } = await supabase
         .from('tv_displays')
         .upsert(
-            {
-                tv_code: upper,
-                last_seen: Date.now(),
-                // Only reset status if not mid-cast
-                ...(isMidCast ? {} : { status: 'idle', game_code: null }),
-            },
+            { tv_code: upper, status: 'idle', game_code: null, last_seen: Date.now() },
             { onConflict: 'tv_code', ignoreDuplicates: false }
         );
-
     if (error) console.error('[TvDisplay] Register failed:', error.message);
 };
 
@@ -76,14 +60,6 @@ export const subscribeTvDisplay = (
     callback: (data: TvDisplay) => void
 ): (() => void) => {
     const upper = tvCode.toUpperCase();
-
-    // Fetch current state immediately (catches casts that happened before subscribe)
-    supabase
-        .from('tv_displays')
-        .select('*')
-        .eq('tv_code', upper)
-        .single()
-        .then(({ data }) => { if (data) callback(data as TvDisplay); });
 
     const channel = supabase
         .channel(`tv_kiosk_${upper}`)

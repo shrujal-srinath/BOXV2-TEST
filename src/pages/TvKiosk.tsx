@@ -1031,6 +1031,7 @@ export const TvKiosk: React.FC = () => {
     const [registered, setRegistered] = useState(false);
     const [online, setOnline] = useState(true);
     const prevGame = useRef<string | null>(null);
+    const readyRef = useRef(false);
 
     const showGameRef = useRef(false);
     useEffect(() => {
@@ -1038,6 +1039,7 @@ export const TvKiosk: React.FC = () => {
     }, [showGame]);
 
     const handleUpdate = useCallback((nc: string | null) => {
+        if (!readyRef.current) return;
         if (nc === prevGame.current) return;
         prevGame.current = nc;
         setOnline(true);
@@ -1072,13 +1074,19 @@ export const TvKiosk: React.FC = () => {
                     handleUpdate(d.game_code ?? null);
                 });
                 offT = setTimeout(() => setOnline(false), 25_000);
+                readyRef.current = true;
             } catch (err) {
                 console.warn('[TvKiosk] boot failed, retrying in 5s', err);
                 setTimeout(boot, 5000);
             }
         };
         boot();
-        return () => { stopHB?.(); unsub?.(); clearTimeout(offT); };
+        return () => {
+            readyRef.current = false;
+            stopHB?.();
+            unsub?.();
+            clearTimeout(offT);
+        };
     }, [tvCode]); // eslint-disable-line
 
     const handleSplashDone = useCallback(() => {

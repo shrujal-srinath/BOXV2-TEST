@@ -71,6 +71,25 @@ export const Dashboard: React.FC = () => {
     };
   }, []);
 
+  // Body scroll lock for the side menu
+  useEffect(() => {
+    if (isMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isMenuOpen]);
+
+  // Reset side menu state if user switches tabs and comes back
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) setIsMenuOpen(false);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
   // Sync local state when connection changes
   useEffect(() => {
     setControllerLinked(isConnected || !!sessionStorage.getItem('BOX_HANDHELD_ID'));
@@ -324,7 +343,7 @@ export const Dashboard: React.FC = () => {
         </button>
         {/* ----------------------------- */}
 
-        <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-30 hover:bg-zinc-800 rounded transition-colors" aria-label="Open menu">
+        <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-[55] hover:bg-zinc-800 rounded transition-colors" aria-label="Open menu">
           <div className="w-6 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors"></div>
           <div className="w-6 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors"></div>
           <div className="w-4 h-0.5 bg-zinc-400 group-hover:bg-white transition-colors ml-auto"></div>
@@ -335,11 +354,14 @@ export const Dashboard: React.FC = () => {
       <div
         className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${isMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
-        onClick={() => setIsMenuOpen(false)}
+        onPointerDown={(e) => { e.stopPropagation(); setIsMenuOpen(false); }}
       />
 
       {/* SLIDE-OUT MENU PANEL — isolate prevents stacking context bleed */}
-      <div className={`fixed top-0 right-0 w-[320px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 isolate transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div
+        className={`fixed top-0 right-0 w-[320px] h-full bg-zinc-950 border-l border-zinc-800 shadow-2xl z-50 isolate transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        style={{ willChange: 'transform' }}
+      >
         <div className="p-6 h-full flex flex-col">
           <div className="flex justify-between items-center mb-8 border-b border-zinc-900 pb-4">
             <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Command Menu</h2>
