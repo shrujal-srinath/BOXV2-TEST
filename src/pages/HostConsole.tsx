@@ -287,6 +287,36 @@ export const HostConsole: React.FC = () => {
     // Subscribe — stable channel, latest handler via ref inside the hook
     const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHwSignal);
 
+    // ── Feed live state back to ESP32 display ─────────────────────────────────────
+    // Fires whenever scores, fouls, possession, or clock changes.
+    // ESP32 listens for 'feedback' event on the same hw-{gameCode} channel.
+    const sendToHardwareRef = useRef(sendToHardware);
+    useEffect(() => { sendToHardwareRef.current = sendToHardware; }, [sendToHardware]);
+
+    useEffect(() => {
+        if (!hwDeviceId || !gameCode) return;
+
+        sendToHardwareRef.current({
+            scoreA: state.scoreA,
+            scoreB: state.scoreB,
+            foulsA: state.foulsA,
+            foulsB: state.foulsB,
+            minutes: timer.minutes,
+            seconds: timer.seconds,
+            shotClock: timer.shotClock,
+            period: timer.period,
+            gameRunning: timer.gameRunning,
+            possession: state.possession,
+        });
+    }, [
+        state.scoreA, state.scoreB,
+        state.foulsA, state.foulsB,
+        state.possession,
+        timer.minutes, timer.seconds,
+        timer.shotClock, timer.period,
+        timer.gameRunning,
+    ]);
+
     // ── WRAP web score buttons to record action history ────────────────────────────
     const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {
         updateScore(team, points);
