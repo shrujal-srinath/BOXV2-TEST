@@ -1,60 +1,28 @@
 // src/hooks/useSupabaseBroadcast.ts
-//
-// v3.0 — COMPLETE REWRITE
-//
-// ROOT CAUSE FIXES:
-//   [FIX-1] Host was calling supabase.channel(`clock-${gameCode}`).send() directly.
-//           This creates an UNSUBSCRIBED channel — Supabase silently drops the message.
-//           Now uses supabaseBroadcastService which holds a properly SUBSCRIBED channel.
-//
-//   [FIX-2] Spectator had no local interpolation — only updated on each 300ms broadcast
-//           causing clock to skip/freeze visually between packets.
-//           Now spectator runs its own local rAF loop, anchored to the last received
-//           startedAt epoch, so it interpolates smoothly between broadcasts.
-//
-//   [FIX-3] Spectator subscribed to `clock-${gameCode}` but host never published there.
-//           Both sides now use `game:${gameCode}` via subscribeToGameBroadcast.
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-    broadcastClockTick,
-    broadcastClockStart,
-    broadcastClockStop,
-    broadcastShotClockReset,
-    broadcastPeriodChange,
-    subscribeToGameBroadcast,
+    broadcastClockTick, broadcastClockStart, broadcastClockStop,
+    broadcastShotClockReset, broadcastPeriodChange, subscribeToGameBroadcast,
     type BroadcastClockState,
 } from '../services/supabaseBroadcastService';
-
-// NOTE: broadcastClockTick etc. call activeChannels.get(`game:${gameCode}`) internally.
-// For the HOST, activeChannels is only populated when someone calls subscribeToGameBroadcast
-// or getSharedChannel. We initialise it by subscribing with empty callbacks on mount —
-// this creates the channel and increments refCount, enabling all broadcast sends.
+import { HostWebRTCManager, SpectatorWebRTCManager } from '../services/webrtcSync';
 
 interface UseSupabaseBroadcastProps {
     gameCode: string;
     isHost: boolean;
-    periodDuration: number;      // minutes, e.g. 10
-    shotClockDuration: number;   // seconds, e.g. 24
+    periodDuration: number;
+    shotClockDuration: number;
 }
 
 export const useSupabaseBroadcast = ({
-    gameCode,
-    isHost,
-    periodDuration,
-    shotClockDuration,
+    gameCode, isHost, periodDuration, shotClockDuration,
 }: UseSupabaseBroadcastProps) => {
 
-    // ─── Shared display state (both host & spectator expose these) ────────
     const [gameRunning, setGameRunning] = useState(false);
     const [period, setPeriod] = useState(1);
-
-    // Time stored in pure milliseconds for precise arithmetic
     const [gameTimeMs, setGameTimeMs] = useState(periodDuration * 60_000);
     const [shotClockMs, setShotClockMs] = useState(shotClockDuration * 1_000);
 
-    // Epoch anchors — capture the "wall clock" moment the timer was started
-    // so elapsed = Date.now() - startedAtEpoch without accumulating drift
     const gameStartEpochRef = useRef<number | null>(null);
     const shotStartEpochRef = useRef<number | null>(null);
     const gameStartMsRef = useRef<number>(periodDuration * 60_000);
@@ -62,28 +30,31 @@ export const useSupabaseBroadcast = ({
 
     const rafRef = useRef<number | null>(null);
     const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const rtcHostRef = useRef<HostWebRTCManager | null>(null);
 
-    // ── Ensure shared channel is initialised (critical for host broadcasts) ─────
-    // broadcastClockTick/Start/Stop look up activeChannels.get(`game:${gameCode}`) internally.
-    // The channel only exists in activeChannels if subscribeToGameBroadcast has been called.
-    // Calling with empty callbacks creates + subscribes the channel on both host and spectator.
+    // ─── INITIALIZE WEBRTC ───────────────────────────────────────────────────
     useEffect(() => {
         if (!gameCode) return;
-        const unsub = subscribeToGameBroadcast(gameCode, {}); // boots the channel
+        if (isHost) {
+            rtcHostRef.current = new HostWebRTCManager(gameCode);
+            return () => rtcHostRef.current?.cleanup();
+        }
+    }, [isHost, gameCode]);
+
+    // ── Ensures shared channel is initialised ────────────────────────────────
+    useEffect(() => {
+        if (!gameCode) return;
+        const unsub = subscribeToGameBroadcast(gameCode, {});
         return unsub;
     }, [gameCode]);
 
     // =========================================================================
     // HOST SIDE
     // =========================================================================
-
-    // ── Local epoch-based timer loop (host only) ─────────────────────────────
     const runHostLoop = useCallback(() => {
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
         const step = () => {
             if (gameStartEpochRef.current === null) return;
-
             const now = Date.now();
             const elapsedGame = now - gameStartEpochRef.current;
             const nextGame = Math.max(0, gameStartMsRef.current - elapsedGame);
@@ -93,70 +64,77 @@ export const useSupabaseBroadcast = ({
                 const elapsedShot = now - shotStartEpochRef.current;
                 const nextShot = Math.max(0, shotStartMsRef.current - elapsedShot);
                 setShotClockMs(nextShot);
-
-                if (nextShot <= 0) {
-                    shotStartEpochRef.current = null;
-                }
+                if (nextShot <= 0) shotStartEpochRef.current = null;
             }
 
             if (nextGame <= 0) {
                 gameStartEpochRef.current = null;
                 setGameRunning(false);
-                return; // stop loop
+                return;
             }
-
             rafRef.current = requestAnimationFrame(step);
         };
-
         rafRef.current = requestAnimationFrame(step);
     }, []);
 
     const stopHostLoop = useCallback(() => {
-        if (rafRef.current) {
-            cancelAnimationFrame(rafRef.current);
-            rafRef.current = null;
-        }
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
     }, []);
 
-    // ── Broadcast tick to spectators every 200ms ──────────────────────────────
+    // ── Broadcast tick every 1000ms ──────────────────────────────────────────
     useEffect(() => {
-        if (!isHost || !gameCode) return;
-        if (!gameRunning) return;
+        if (!isHost || !gameCode || !gameRunning) return;
 
         tickIntervalRef.current = setInterval(() => {
-            const mins = Math.floor(gameTimeMs / 60_000);
-            const secs = Math.floor((gameTimeMs % 60_000) / 1_000);
-            const tenths = Math.floor((gameTimeMs % 1_000) / 100);
-            const shot = Math.ceil(shotClockMs / 1_000);
-            broadcastClockTick(gameCode, mins, secs, tenths, shot);
-        }, 200);
+            // FIX: Calculate true time from epochs, completely independent of React state.
+            // 1. Prevents "frozen time" if the Host tab is backgrounded.
+            // 2. We removed gameTimeMs from the dependency array below so the interval 
+            //    isn't destroyed and recreated 60 times a second.
+            let broadcastGameMs = 0;
+            let broadcastShotMs = 0;
 
-        return () => {
-            if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, gameCode, gameRunning]); // intentionally excludes gameTimeMs/shotClockMs
+            if (gameStartEpochRef.current !== null) {
+                const elapsedGame = Date.now() - gameStartEpochRef.current;
+                broadcastGameMs = Math.max(0, gameStartMsRef.current - elapsedGame);
+            } else {
+                broadcastGameMs = gameStartMsRef.current;
+            }
+
+            if (shotStartEpochRef.current !== null) {
+                const elapsedShot = Date.now() - shotStartEpochRef.current;
+                broadcastShotMs = Math.max(0, shotStartMsRef.current - elapsedShot);
+            } else {
+                broadcastShotMs = shotStartMsRef.current;
+            }
+
+            const mins = Math.floor(broadcastGameMs / 60_000);
+            const secs = Math.floor((broadcastGameMs % 60_000) / 1_000);
+            const tenths = Math.floor((broadcastGameMs % 1_000) / 100);
+            const shot = Math.ceil(broadcastShotMs / 1_000);
+
+            if (rtcHostRef.current) {
+                rtcHostRef.current.broadcast(JSON.stringify({
+                    type: 'clock_tick', payload: { minutes: mins, seconds: secs, tenths, shotClock: shot }
+                }));
+            }
+            broadcastClockTick(gameCode, mins, secs, tenths, shot);
+        }, 1000);
+
+        return () => { if (tickIntervalRef.current) clearInterval(tickIntervalRef.current); };
+    }, [isHost, gameCode, gameRunning]); // <-- CRITICAL FIX: Removed dynamic dependencies
 
     // =========================================================================
     // SPECTATOR SIDE
     // =========================================================================
-
-    // Last received broadcast state — spectator interpolates from this
     const lastSyncRef = useRef<{
-        gameRunning: boolean;
-        gameTimeMs: number;
-        shotClockMs: number;
-        period: number;
-        receivedAt: number;
-        startedAt: number | null;
-        shotStartedAt: number | null;
+        gameRunning: boolean; gameTimeMs: number; shotClockMs: number;
+        period: number; receivedAt: number; startedAt: number | null; shotStartedAt: number | null;
     } | null>(null);
 
+    // ── Local Interpolation Loop with STALE STATE PROTECTION ─────────────────
     useEffect(() => {
         if (isHost || !gameCode) return;
-
-        // Local interpolation loop — runs at ~60fps
-        // Between broadcasts we compute elapsed from startedAt epoch
         const loop = () => {
             const sync = lastSyncRef.current;
             if (!sync) {
@@ -165,212 +143,140 @@ export const useSupabaseBroadcast = ({
             }
 
             if (sync.gameRunning && sync.startedAt !== null) {
-                const elapsed = Date.now() - sync.startedAt;
-                const nextGame = Math.max(0, sync.gameTimeMs - elapsed +
-                    (Date.now() - sync.receivedAt)); // compensate for broadcast delay
+                const now = Date.now();
 
-                // Recalculate from true epoch anchor
-                const anchoredGame = Math.max(0, sync.gameTimeMs - (Date.now() - sync.startedAt) + (sync.receivedAt - sync.startedAt));
+                // STALE STATE PROTECTION: Increased from 3000ms to 8000ms
+                // This gives the host a massive buffer if the browser throttles 
+                // its background timers aggressively when tabs are switched.
+                if (now - sync.receivedAt > 8000) {
+                    rafRef.current = requestAnimationFrame(loop);
+                    return;
+                }
+
+                const anchoredGame = Math.max(0, sync.gameTimeMs - (now - sync.startedAt) + (sync.receivedAt - sync.startedAt));
                 setGameTimeMs(anchoredGame);
 
                 if (sync.shotStartedAt !== null) {
-                    const elapsedShot = Date.now() - sync.shotStartedAt;
+                    const elapsedShot = now - sync.shotStartedAt;
                     const nextShot = Math.max(0, sync.shotClockMs - elapsedShot + (sync.receivedAt - sync.shotStartedAt));
                     setShotClockMs(Math.max(0, nextShot));
                 }
             }
-
             rafRef.current = requestAnimationFrame(loop);
         };
-
         rafRef.current = requestAnimationFrame(loop);
-        return () => {
-            if (rafRef.current) cancelAnimationFrame(rafRef.current);
-        };
+        return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
     }, [isHost, gameCode]);
 
-    // Subscribe to broadcast events from host
+    // ── Unified State Handlers for both WebRTC and Supabase ──────────────────
+    const handleTick = useCallback((payload: any) => {
+        const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
+        const newShotMs = payload.shotClock * 1_000;
+        if (lastSyncRef.current && lastSyncRef.current.startedAt !== null) {
+            lastSyncRef.current = {
+                ...lastSyncRef.current, gameTimeMs: newGameMs, shotClockMs: newShotMs,
+                receivedAt: Date.now(), startedAt: Date.now(), shotStartedAt: Date.now(),
+            };
+        } else {
+            setGameTimeMs(newGameMs);
+            setShotClockMs(newShotMs);
+        }
+    }, []);
+
+    const handleStart = useCallback((payload: any) => {
+        const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
+        const newShotMs = payload.shotClock * 1_000;
+        const now = Date.now();
+        lastSyncRef.current = {
+            gameRunning: true, gameTimeMs: newGameMs, shotClockMs: newShotMs, period: payload.period,
+            receivedAt: now, startedAt: payload.startedAt ?? now, shotStartedAt: payload.shotClockStartedAt ?? now,
+        };
+        setGameRunning(true); setPeriod(payload.period);
+        setGameTimeMs(newGameMs); setShotClockMs(newShotMs);
+    }, []);
+
+    const handleStop = useCallback((payload: any) => {
+        const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
+        const newShotMs = payload.shotClock * 1_000;
+        lastSyncRef.current = {
+            gameRunning: false, gameTimeMs: newGameMs, shotClockMs: newShotMs, period: payload.period,
+            receivedAt: Date.now(), startedAt: null, shotStartedAt: null,
+        };
+        setGameRunning(false); setPeriod(payload.period);
+        setGameTimeMs(newGameMs); setShotClockMs(newShotMs);
+    }, []);
+
+    // ── Subscribe to incoming signals ────────────────────────────────────────
     useEffect(() => {
         if (isHost || !gameCode) return;
 
+        // 1. WebRTC Receiver
+        const rtc = new SpectatorWebRTCManager(gameCode, (msg) => {
+            try {
+                const data = JSON.parse(msg);
+                if (data.type === 'clock_tick') handleTick(data.payload);
+                else if (data.type === 'clock_start') handleStart(data.payload);
+                else if (data.type === 'clock_stop') handleStop(data.payload);
+            } catch (e) { }
+        });
+
+        // 2. Supabase Fallback Receiver
         const unsub = subscribeToGameBroadcast(gameCode, {
-            onClockTick: (payload) => {
-                // clock_tick gives us current display values — use as fallback if no epoch
-                const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
-                const newShotMs = payload.shotClock * 1_000;
-
-                if (lastSyncRef.current && lastSyncRef.current.startedAt !== null) {
-                    // We have epoch data — update the sync anchor so interpolation stays accurate
-                    lastSyncRef.current = {
-                        ...lastSyncRef.current,
-                        gameTimeMs: newGameMs,
-                        shotClockMs: newShotMs,
-                        receivedAt: Date.now(),
-                        // Recalibrate startedAt as if clock started right now counting from current value
-                        startedAt: Date.now(),
-                        shotStartedAt: Date.now(),
-                    };
-                } else {
-                    // No epoch — fallback: set directly
-                    setGameTimeMs(newGameMs);
-                    setShotClockMs(newShotMs);
-                }
-            },
-
-            onClockStart: (payload) => {
-                const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
-                const newShotMs = payload.shotClock * 1_000;
-                const now = Date.now();
-
-                lastSyncRef.current = {
-                    gameRunning: true,
-                    gameTimeMs: newGameMs,
-                    shotClockMs: newShotMs,
-                    period: payload.period,
-                    receivedAt: now,
-                    startedAt: payload.startedAt ?? now,
-                    shotStartedAt: payload.shotClockStartedAt ?? now,
-                };
-
-                setGameRunning(true);
-                setPeriod(payload.period);
-                setGameTimeMs(newGameMs);
-                setShotClockMs(newShotMs);
-            },
-
-            onClockStop: (payload) => {
-                const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
-                const newShotMs = payload.shotClock * 1_000;
-
-                lastSyncRef.current = {
-                    gameRunning: false,
-                    gameTimeMs: newGameMs,
-                    shotClockMs: newShotMs,
-                    period: payload.period,
-                    receivedAt: Date.now(),
-                    startedAt: null,
-                    shotStartedAt: null,
-                };
-
-                setGameRunning(false);
-                setGameTimeMs(newGameMs);
-                setShotClockMs(newShotMs);
-                setPeriod(payload.period);
-            },
-
+            onClockTick: handleTick,
+            onClockStart: handleStart,
+            onClockStop: handleStop,
             onShotClockReset: (payload) => {
                 const newShotMs = payload.shotClock * 1_000;
                 setShotClockMs(newShotMs);
-
                 if (lastSyncRef.current) {
                     lastSyncRef.current = {
-                        ...lastSyncRef.current,
-                        shotClockMs: newShotMs,
-                        shotStartedAt: payload.shotClockRunning ? Date.now() : null,
-                        receivedAt: Date.now(),
+                        ...lastSyncRef.current, shotClockMs: newShotMs,
+                        shotStartedAt: payload.shotClockRunning ? Date.now() : null, receivedAt: Date.now(),
                     };
                 }
             },
-
-            onPeriodChange: (payload) => {
-                const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
-                const newShotMs = payload.shotClock * 1_000;
-
-                lastSyncRef.current = {
-                    gameRunning: false,
-                    gameTimeMs: newGameMs,
-                    shotClockMs: newShotMs,
-                    period: payload.period,
-                    receivedAt: Date.now(),
-                    startedAt: null,
-                    shotStartedAt: null,
-                };
-
-                setPeriod(payload.period);
-                setGameRunning(false);
-                setGameTimeMs(newGameMs);
-                setShotClockMs(newShotMs);
-            },
-
-            onClockEdit: (payload) => {
-                const newGameMs = payload.minutes * 60_000 + payload.seconds * 1_000 + payload.tenths * 100;
-                const newShotMs = payload.shotClock * 1_000;
-
-                if (lastSyncRef.current) {
-                    lastSyncRef.current = {
-                        ...lastSyncRef.current,
-                        gameTimeMs: newGameMs,
-                        shotClockMs: newShotMs,
-                        receivedAt: Date.now(),
-                        startedAt: lastSyncRef.current.gameRunning ? Date.now() : null,
-                        shotStartedAt: lastSyncRef.current.gameRunning ? Date.now() : null,
-                    };
-                }
-                setGameTimeMs(newGameMs);
-                setShotClockMs(newShotMs);
-            },
+            onPeriodChange: handleStop,
+            onClockEdit: handleTick,
         });
 
-        return unsub;
-    }, [isHost, gameCode]);
+        return () => { rtc.cleanup(); unsub(); };
+    }, [isHost, gameCode, handleTick, handleStart, handleStop]);
 
     // =========================================================================
     // HOST ACTIONS
     // =========================================================================
-
     const toggleClock = useCallback(() => {
         if (!isHost || !gameCode) return;
-
         if (gameRunning) {
-            // STOP
             stopHostLoop();
             const now = Date.now();
-            // Compute final time from epoch
-            let finalGameMs = gameTimeMs;
-            let finalShotMs = shotClockMs;
-            if (gameStartEpochRef.current !== null) {
-                finalGameMs = Math.max(0, gameStartMsRef.current - (now - gameStartEpochRef.current));
-            }
-            if (shotStartEpochRef.current !== null) {
-                finalShotMs = Math.max(0, shotStartMsRef.current - (now - shotStartEpochRef.current));
-            }
-            gameStartEpochRef.current = null;
-            shotStartEpochRef.current = null;
-            setGameTimeMs(finalGameMs);
-            setShotClockMs(finalShotMs);
-            setGameRunning(false);
+            let finalGameMs = gameTimeMs; let finalShotMs = shotClockMs;
+            if (gameStartEpochRef.current !== null) finalGameMs = Math.max(0, gameStartMsRef.current - (now - gameStartEpochRef.current));
+            if (shotStartEpochRef.current !== null) finalShotMs = Math.max(0, shotStartMsRef.current - (now - shotStartEpochRef.current));
+            gameStartEpochRef.current = null; shotStartEpochRef.current = null;
+            setGameTimeMs(finalGameMs); setShotClockMs(finalShotMs); setGameRunning(false);
 
-            const mins = Math.floor(finalGameMs / 60_000);
-            const secs = Math.floor((finalGameMs % 60_000) / 1_000);
-            const tenths = Math.floor((finalGameMs % 1_000) / 100);
-            const shot = Math.ceil(finalShotMs / 1_000);
             const state: BroadcastClockState = {
                 gameRunning: false, shotClockRunning: false,
-                minutes: mins, seconds: secs, tenths, shotClock: shot,
+                minutes: Math.floor(finalGameMs / 60_000), seconds: Math.floor((finalGameMs % 60_000) / 1_000),
+                tenths: Math.floor((finalGameMs % 1_000) / 100), shotClock: Math.ceil(finalShotMs / 1_000),
                 period, startedAt: null, shotClockStartedAt: null,
             };
+            if (rtcHostRef.current) rtcHostRef.current.broadcast(JSON.stringify({ type: 'clock_stop', payload: state }));
             broadcastClockStop(gameCode, state);
         } else {
-            // START
             const now = Date.now();
-            gameStartEpochRef.current = now;
-            shotStartEpochRef.current = now;
-            gameStartMsRef.current = gameTimeMs;
-            shotStartMsRef.current = shotClockMs;
-            setGameRunning(true);
-            runHostLoop();
+            gameStartEpochRef.current = now; shotStartEpochRef.current = now;
+            gameStartMsRef.current = gameTimeMs; shotStartMsRef.current = shotClockMs;
+            setGameRunning(true); runHostLoop();
 
-            const mins = Math.floor(gameTimeMs / 60_000);
-            const secs = Math.floor((gameTimeMs % 60_000) / 1_000);
-            const tenths = Math.floor((gameTimeMs % 1_000) / 100);
-            const shot = Math.ceil(shotClockMs / 1_000);
             const state: BroadcastClockState = {
                 gameRunning: true, shotClockRunning: true,
-                minutes: mins, seconds: secs, tenths, shotClock: shot,
-                period,
-                startedAt: now,
-                shotClockStartedAt: now,
+                minutes: Math.floor(gameTimeMs / 60_000), seconds: Math.floor((gameTimeMs % 60_000) / 1_000),
+                tenths: Math.floor((gameTimeMs % 1_000) / 100), shotClock: Math.ceil(shotClockMs / 1_000),
+                period, startedAt: now, shotClockStartedAt: now,
             };
+            if (rtcHostRef.current) rtcHostRef.current.broadcast(JSON.stringify({ type: 'clock_start', payload: state }));
             broadcastClockStart(gameCode, state);
         }
     }, [isHost, gameCode, gameRunning, gameTimeMs, shotClockMs, period, runHostLoop, stopHostLoop]);
@@ -379,105 +285,60 @@ export const useSupabaseBroadcast = ({
         if (!isHost || !gameCode || !gameRunning) return;
         stopHostLoop();
         const now = Date.now();
-        let finalGameMs = gameTimeMs;
-        let finalShotMs = shotClockMs;
-        if (gameStartEpochRef.current !== null) {
-            finalGameMs = Math.max(0, gameStartMsRef.current - (now - gameStartEpochRef.current));
-        }
-        if (shotStartEpochRef.current !== null) {
-            finalShotMs = Math.max(0, shotStartMsRef.current - (now - shotStartEpochRef.current));
-        }
-        gameStartEpochRef.current = null;
-        shotStartEpochRef.current = null;
-        setGameTimeMs(finalGameMs);
-        setShotClockMs(finalShotMs);
-        setGameRunning(false);
+        let finalGameMs = gameTimeMs; let finalShotMs = shotClockMs;
+        if (gameStartEpochRef.current !== null) finalGameMs = Math.max(0, gameStartMsRef.current - (now - gameStartEpochRef.current));
+        if (shotStartEpochRef.current !== null) finalShotMs = Math.max(0, shotStartMsRef.current - (now - shotStartEpochRef.current));
+        gameStartEpochRef.current = null; shotStartEpochRef.current = null;
+        setGameTimeMs(finalGameMs); setShotClockMs(finalShotMs); setGameRunning(false);
 
-        const mins = Math.floor(finalGameMs / 60_000);
-        const secs = Math.floor((finalGameMs % 60_000) / 1_000);
-        const tenths = Math.floor((finalGameMs % 1_000) / 100);
-        const shot = Math.ceil(finalShotMs / 1_000);
-        broadcastClockStop(gameCode, {
+        const state: BroadcastClockState = {
             gameRunning: false, shotClockRunning: false,
-            minutes: mins, seconds: secs, tenths, shotClock: shot,
+            minutes: Math.floor(finalGameMs / 60_000), seconds: Math.floor((finalGameMs % 60_000) / 1_000),
+            tenths: Math.floor((finalGameMs % 1_000) / 100), shotClock: Math.ceil(finalShotMs / 1_000),
             period, startedAt: null, shotClockStartedAt: null,
-        });
+        };
+        if (rtcHostRef.current) rtcHostRef.current.broadcast(JSON.stringify({ type: 'clock_stop', payload: state }));
+        broadcastClockStop(gameCode, state);
     }, [isHost, gameCode, gameRunning, gameTimeMs, shotClockMs, period, stopHostLoop]);
 
     const resetShotClock24 = useCallback(() => {
         if (!isHost || !gameCode) return;
         const newMs = 24_000;
-        setShotClockMs(newMs);
-        shotStartMsRef.current = newMs;
-        if (gameRunning) {
-            shotStartEpochRef.current = Date.now();
-        }
+        setShotClockMs(newMs); shotStartMsRef.current = newMs;
+        if (gameRunning) shotStartEpochRef.current = Date.now();
         broadcastShotClockReset(gameCode, 24, gameRunning);
     }, [isHost, gameCode, gameRunning]);
 
     const resetShotClock14 = useCallback(() => {
         if (!isHost || !gameCode) return;
         const newMs = 14_000;
-        setShotClockMs(newMs);
-        shotStartMsRef.current = newMs;
-        if (gameRunning) {
-            shotStartEpochRef.current = Date.now();
-        }
+        setShotClockMs(newMs); shotStartMsRef.current = newMs;
+        if (gameRunning) shotStartEpochRef.current = Date.now();
         broadcastShotClockReset(gameCode, 14, gameRunning);
     }, [isHost, gameCode, gameRunning]);
 
     const nextPeriod = useCallback(() => {
         if (!isHost || !gameCode) return;
         stopHostLoop();
-        gameStartEpochRef.current = null;
-        shotStartEpochRef.current = null;
-        const newPeriod = period + 1;
-        const newGameMs = periodDuration * 60_000;
-        const newShotMs = shotClockDuration * 1_000;
-        setPeriod(newPeriod);
-        setGameRunning(false);
-        setGameTimeMs(newGameMs);
-        setShotClockMs(newShotMs);
-        gameStartMsRef.current = newGameMs;
-        shotStartMsRef.current = newShotMs;
+        gameStartEpochRef.current = null; shotStartEpochRef.current = null;
+        const newPeriod = period + 1; const newGameMs = periodDuration * 60_000; const newShotMs = shotClockDuration * 1_000;
+        setPeriod(newPeriod); setGameRunning(false); setGameTimeMs(newGameMs); setShotClockMs(newShotMs);
+        gameStartMsRef.current = newGameMs; shotStartMsRef.current = newShotMs;
 
-        broadcastPeriodChange(gameCode, newPeriod, {
-            gameRunning: false, shotClockRunning: false,
-            minutes: Math.floor(newGameMs / 60_000),
-            seconds: 0, tenths: 0,
-            shotClock: shotClockDuration,
-            period: newPeriod,
+        const state: BroadcastClockState = {
+            gameRunning: false, shotClockRunning: false, minutes: Math.floor(newGameMs / 60_000),
+            seconds: 0, tenths: 0, shotClock: shotClockDuration, period: newPeriod,
             startedAt: null, shotClockStartedAt: null,
-        });
+        };
+        if (rtcHostRef.current) rtcHostRef.current.broadcast(JSON.stringify({ type: 'clock_stop', payload: state }));
+        broadcastPeriodChange(gameCode, newPeriod, state);
     }, [isHost, gameCode, period, periodDuration, shotClockDuration, stopHostLoop]);
 
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            stopHostLoop();
-            if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-        };
-    }, [stopHostLoop]);
-
-    // ─── FIBA DISPLAY FORMATTING ─────────────────────────────────────────────
-    const minutes = Math.floor(gameTimeMs / 60_000);
-    const seconds = Math.floor((gameTimeMs % 60_000) / 1_000);
-    const tenths = Math.floor((gameTimeMs % 1_000) / 100);
-
-    // FIBA: shot clock shows ceiling (23.9s → 24, 0.1s → 1)
-    const displayShotClock = Math.ceil(shotClockMs / 1_000);
+    useEffect(() => { return () => { stopHostLoop(); if (tickIntervalRef.current) clearInterval(tickIntervalRef.current); }; }, [stopHostLoop]);
 
     return {
-        minutes,
-        seconds,
-        tenths,
-        shotClock: displayShotClock,
-        period,
-        gameRunning,
-        toggleClock,
-        stopClock,
-        resetShotClock24,
-        resetShotClock14,
-        nextPeriod,
+        minutes: Math.floor(gameTimeMs / 60_000), seconds: Math.floor((gameTimeMs % 60_000) / 1_000), tenths: Math.floor((gameTimeMs % 1_000) / 100),
+        shotClock: Math.ceil(shotClockMs / 1_000), period, gameRunning,
+        toggleClock, stopClock, resetShotClock24, resetShotClock14, nextPeriod,
     };
 };

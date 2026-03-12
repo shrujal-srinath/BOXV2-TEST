@@ -1024,7 +1024,27 @@ const WipeOverlay = memo(({ visible }: { visible: boolean }) => (
 // ═══════════════════════════════════════════════════════════════════════════════
 export const TvKiosk: React.FC = () => {
     const [searchParams] = useSearchParams();
-    const tvCode = (searchParams.get('code') || 'BOX1').toUpperCase();
+    
+    // Auto-Provisioning: Generate a permanent unique code if none exists
+    const [tvCode] = useState(() => {
+        const urlCode = searchParams.get('code')?.toUpperCase();
+        if (urlCode && urlCode.length === 4) {
+            localStorage.setItem('tv_kiosk_code', urlCode);
+            return urlCode;
+        }
+        
+        const saved = localStorage.getItem('tv_kiosk_code');
+        if (saved) return saved;
+        
+        // Generate a random 4-char code (omitting confusing chars like O/0, I/1)
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let newCode = '';
+        for (let i = 0; i < 4; i++) {
+            newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        localStorage.setItem('tv_kiosk_code', newCode);
+        return newCode;
+    });
 
     // ── Asset Preloading (Idea C) ──────────────────────────────────────────
     useEffect(() => {
