@@ -179,7 +179,7 @@ export const Dashboard: React.FC = () => {
 
               {/* Header */}
               <div className="flex justify-between items-start mb-4 pl-2">
-                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sportId || g.sport || 'BASKETBALL'}</div>
+                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-black px-2 py-1 rounded">{g.sport || 'BASKETBALL'}</div>
                 <div className={`w-2 h-2 rounded-full animate-pulse ${isMyGames ? 'bg-red-500' : 'bg-blue-500'}`}></div>
               </div>
 

@@ -49,6 +49,7 @@ export interface GameSettings {
   periodDuration: number;
   shotClockDuration: number;
   periodType: 'quarter' | 'half';
+  periods?: number;
   courtNumber?: string;
   tournamentId?: string;
   fixtureId?: string; // Links game back to its bracket fixture
@@ -67,6 +68,7 @@ export interface BasketballGame {
   code: string;
   hostId: string;
   sport: string;
+  sportId?: string;
   status: 'live' | 'completed' | 'archived';
   gameType: 'local' | 'online';
   createdAt: number;

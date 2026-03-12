@@ -148,7 +148,6 @@ export const createLocalGame = (
     hostId: 'local-user',
     code: gameId,
     gameType: 'local',
-    sportId: 'basketball', // <-- Added to fix TS Error
     sport: 'basketball',
     status: 'live',
     settings: {
