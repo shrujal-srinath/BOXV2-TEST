@@ -127,8 +127,9 @@ const CSS = `
 .v8-red-box {
   width: clamp(140px, 25vw, 480px); height: clamp(80px, 15vw, 280px);
   background: var(--red); display: flex; align-items: center; justify-content: center;
-  transform-origin: left center; transform: scaleX(0) scaleY(0.05); overflow: hidden;
+  transform-origin: left center; transform: translate3d(0,0,0) scaleX(0) scaleY(0.05); overflow: hidden;
   box-shadow: 0 0 clamp(40px, 8vw, 140px) rgba(220,38,38,0.5); border-radius: 2px;
+  will-change: transform;
 }
 .v8-red-box.animate { animation: v8-box-grow 0.7s var(--v8-expo) forwards; }
 .v8-red-box.flood { transform-origin: center center; animation: v8-flood 0.4s var(--v8-snap) forwards; }
@@ -222,11 +223,12 @@ const CSS = `
   font-family: 'Barlow', sans-serif; font-weight: 600; font-size: clamp(10px, 1.5vw, 26px);
   letter-spacing: 0.45em; color: rgba(250,250,249,0.7); text-transform: uppercase;
   opacity: 0; z-index: 20; white-space: nowrap;
+  will-change: transform, opacity;
 }
 .v8-subtitle.animate { animation: v8-sub-in 0.7s 0.4s var(--v8-expo) forwards; }
 @keyframes v8-sub-in {
-  0% { opacity: 0; transform: translate(-50%, calc(clamp(80px, 15vw, 280px) / 2 + clamp(20px, 3.5vw, 70px) + 20px)); filter: blur(6px); }
-  100% { opacity: 1; transform: translate(-50%, calc(clamp(80px, 15vw, 280px) / 2 + clamp(20px, 3.5vw, 70px))); filter: blur(0); }
+  0% { opacity: 0; transform: translate3d(-50%, calc(clamp(80px, 15vw, 280px) / 2 + clamp(20px, 3.5vw, 70px) + 20px), 0); }
+  100% { opacity: 1; transform: translate3d(-50%, calc(clamp(80px, 15vw, 280px) / 2 + clamp(20px, 3.5vw, 70px)), 0); }
 }
 
 .v8-dot {
@@ -269,8 +271,8 @@ const CSS = `
 
 /* Content fade rise */
 @keyframes id-rise {
-  from { opacity: 0; transform: translateY(clamp(12px,1.5vw,24px)); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translate3d(0, clamp(12px,1.5vw,24px), 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
 /* Code card entrance */
@@ -281,8 +283,8 @@ const CSS = `
 
 /* QR materialise */
 @keyframes id-qr-in {
-  from { opacity: 0; transform: scale(0.88); filter: blur(12px); }
-  to   { opacity: 1; transform: scale(1); filter: blur(0); }
+  from { opacity: 0; transform: scale(0.88) translate3d(0,0,0); } /* No blur */
+  to   { opacity: 1; transform: scale(1) translate3d(0,0,0); }
 }
 
 /* QR ring pulse */
@@ -1023,6 +1025,22 @@ const WipeOverlay = memo(({ visible }: { visible: boolean }) => (
 export const TvKiosk: React.FC = () => {
     const [searchParams] = useSearchParams();
     const tvCode = (searchParams.get('code') || 'BOX1').toUpperCase();
+
+    // ── Asset Preloading (Idea C) ──────────────────────────────────────────
+    useEffect(() => {
+        const preloadAssets = [
+            '/sports/basketball.png',
+            '/scanlines.svg',
+            // Add any other heavy logos or custom sports textures here
+        ];
+        
+        // Eagerly cache assets into the browser's disk memory so switching 
+        // to SpectatorView doesn't cause a black flash while downloading.
+        preloadAssets.forEach(src => {
+            const img = new Image();
+            img.src = src;
+        });
+    }, []);
 
     const [splashDone, setSplashDone] = useState(false);
     const [gameCode, setGameCode] = useState<string | null>(null);

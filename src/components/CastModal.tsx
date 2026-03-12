@@ -324,8 +324,9 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
 
     // ── Boot ─────────────────────────────────────────────────────────────────
     useEffect(() => {
+        let isMounted = true; // ✅ Prevents interval leak if unmounted instantly
+
         const boot = async () => {
-            // Check if already casting this game
             const { data } = await supabase
                 .from('tv_displays')
                 .select('*')
@@ -333,29 +334,29 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                 .eq('status', 'casting')
                 .limit(1);
 
+            if (!isMounted) return; // ✅ Check before continuing
+
             const rich = await loadDisplays();
 
             if (data && data.length > 0) {
                 const code = data[0].tv_code.toUpperCase();
-                setActiveCast(code);
-                setCard(code);
-                setInputCode(code);
-                setPhase('casting');
+                setActiveCast(code); setCard(code); setInputCode(code); setPhase('casting');
             } else {
-                // Auto-select single online idle screen
                 const available = rich.filter(d => d.online && !d.castingOther);
                 if (available.length === 1) {
-                    setCard(available[0].tv_code);
-                    setInputCode(available[0].tv_code);
+                    setCard(available[0].tv_code); setInputCode(available[0].tv_code);
                 }
                 setPhase('idle');
             }
 
-            refreshRef.current = setInterval(loadDisplays, 12_000);
+            if (isMounted) {
+                refreshRef.current = setInterval(loadDisplays, 12_000); // ✅ Safely set
+            }
         };
 
         boot();
         return () => {
+            isMounted = false; // ✅ Signal cleanup
             if (refreshRef.current) clearInterval(refreshRef.current);
             subsRef.current.forEach(u => u());
             subsRef.current.clear();
