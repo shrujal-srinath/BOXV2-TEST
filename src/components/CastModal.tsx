@@ -46,11 +46,12 @@ interface RichDisplay extends TvDisplay {
     castingOther: boolean;
 }
 
-const ONLINE_MS = 20_000;
+const ONLINE_MS = 35_000; // Increased tolerance for heavy clock skew
 
 const enrich = (d: TvDisplay, gc: string): RichDisplay => ({
     ...d,
-    online: Date.now() - d.last_seen < ONLINE_MS,
+    // FIX: Math.abs() protects against the Pi being ahead OR behind the laptop
+    online: Math.abs(Date.now() - d.last_seen) < ONLINE_MS, 
     castingThis: d.status === 'casting' && d.game_code?.toUpperCase() === gc.toUpperCase(),
     castingOther: d.status === 'casting' && d.game_code?.toUpperCase() !== gc.toUpperCase(),
 });
@@ -312,6 +313,8 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
         rich.forEach(d => {
             if (subsRef.current.has(d.tv_code)) return;
             const unsub = subscribeTvStatus(d.tv_code, updated => {
+                // FIX: Trust the realtime packet arrival time, completely bypassing Pi clock skew
+                updated.last_seen = Date.now(); 
                 setDisplays(prev =>
                     prev.map(p => p.tv_code === updated.tv_code ? enrich(updated, gcRef.current) : p)
                 );

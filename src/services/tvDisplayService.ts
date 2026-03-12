@@ -185,6 +185,7 @@ export const validateTvCode = async (
 
     if (error || !data) return { valid: false, message: `No screen found with code "${tvCode.toUpperCase()}".` };
     const display = data as TvDisplay;
-    if (Date.now() - display.last_seen > 20000) return { valid: false, message: `Screen "${tvCode.toUpperCase()}" is offline.` };
+    // FIX: Apply the same absolute skew protection here
+    if (Math.abs(Date.now() - display.last_seen) > 35000) return { valid: false, message: `Screen "${tvCode.toUpperCase()}" is offline.` };
     return { valid: true, message: 'Screen found.', display };
 };
