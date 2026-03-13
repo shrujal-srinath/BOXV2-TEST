@@ -414,9 +414,11 @@ export const HostConsole: React.FC = () => {
 
     const handleTimeout = (e: React.MouseEvent | null, team: 'A' | 'B') => {
         e?.stopPropagation();
+        if (timer.gameRunning) {
+            timer.stopClock(); // FIBA: Auto-stop the clock on timeout
+        }
         recordAction({ type: 'timeout', team, value: -1, timestamp: Date.now() });
         updateTimeouts(team, -1);
-        if (timer.gameRunning) timer.stopClock();
     };
 
     const handleResetShot = (e: React.MouseEvent | null, val: number) => {

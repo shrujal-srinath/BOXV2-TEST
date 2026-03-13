@@ -48,15 +48,13 @@ export function useGameEngine<TState extends BaseGameState, TAction, TRules>(
     const hydratedKeyRef = useRef<string>('');
 
     useEffect(() => {
-        if (!gameId) return;
+        if (!gameId || !initialGame || !initialGame.state) return;
 
-        // A "real" game object from the DB will always have .code populated.
-        // The fallback object in HostConsole (`dbGame || { rules, state }`) does NOT.
-        const isRealDbGame = !!(initialGame as any).code;
-        if (!isRealDbGame) return;
-
-        // Unique key: gameId + serialised state. Changes when DB delivers fresh data.
+        // The fallback empty state has period: 1 and all 0s.
+        // A real DB state update will have the actual scores.
         const hydrationKey = `${gameId}:${JSON.stringify(initialGame.state)}`;
+
+        // If the state hasn't fundamentally changed, skip re-hydrating.
         if (hydratedKeyRef.current === hydrationKey) return;
 
         hydratedKeyRef.current = hydrationKey;
