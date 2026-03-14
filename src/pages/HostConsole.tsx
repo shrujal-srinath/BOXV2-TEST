@@ -22,7 +22,7 @@ import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { usePersistEngine } from '../hooks/usePersistEngine';
 
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
-import { subscribeToControlMode, subscribeToDeviceHeartbeat, unpairHandheldDevice, setControlMode, HW_SESSION_KEY, type ControlMode } from '../services/handheldService';
+import { useHardware } from '../contexts/HardwareContext';
 import { CastModal } from '../components/CastModal';
 import { stopAllCastsForGame } from '../services/tvDisplayService';
 import { supabase } from '../services/supabase';
@@ -84,7 +84,6 @@ export const HostConsole: React.FC = () => {
     const [showBackConfirm, setShowBackConfirm] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
-    const [deviceOnline, setDeviceOnline] = useState(false);
 
     const [castingActive, setCastingActive] = useState(false);
     useEffect(() => {
@@ -152,43 +151,21 @@ export const HostConsole: React.FC = () => {
     });
 
     // ── Hardware Control Mode ─────────────────────────────────────────────────────
-    const [hwMode, setHwMode] = useState<'web' | 'hardware'>('web');
-    const hwDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
-
-    useEffect(() => {
-        if (!hwDeviceId) return;
-        const unsub = subscribeToDeviceHeartbeat(hwDeviceId, (isOnline) => {
-            setDeviceOnline(isOnline);
-        });
-        return unsub;
-    }, [hwDeviceId]);
+    const { deviceId: hwDeviceId, isConnected: deviceOnline, controlMode: hwMode, setMode, unpair } = useHardware();
 
     const handleDisconnectDevice = async () => {
         if (hwDeviceId) {
-            // Wait for unpair, then clear session and reload to clean the UI
-            await unpairHandheldDevice(hwDeviceId, '');
-            sessionStorage.removeItem(HW_SESSION_KEY);
+            await unpair(game?.hostId || '');
             window.location.reload();
         }
     };
-
-    // Subscribe to control mode changes in real time
-    useEffect(() => {
-        if (!hwDeviceId) return;
-        const unsub = subscribeToControlMode(hwDeviceId, (mode) => {
-            setHwMode(mode);
-            console.log('[HW Mode]', mode);
-        });
-        return unsub;
-    }, [hwDeviceId]);
 
     // Web buttons locked when ESP32 has exclusive control
     const isWebLocked = hwMode === 'hardware' && !!hwDeviceId;
 
     const handleModeSwitch = async (mode: 'web' | 'hardware') => {
         if (!hwDeviceId || hwMode === mode) return;
-        setHwMode(mode); // Optimistic UI update for instant feedback
-        await setControlMode(hwDeviceId, mode);
+        await setMode(mode, game?.teamA?.name, game?.teamB?.name);
     };
 
     // Refs to avoid hoisting issues within the useCallback hook

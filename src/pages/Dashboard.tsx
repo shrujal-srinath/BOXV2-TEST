@@ -9,7 +9,7 @@ import type { User } from '@supabase/supabase-js';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { ConnectControllerModal } from '../components/ConnectControllerModal';
-import { useHardwareBridge } from '../hooks/useHardwareBridge';
+import { useHardware } from '../contexts/HardwareContext';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -32,7 +32,8 @@ export const Dashboard: React.FC = () => {
   const [controllerLinked, setControllerLinked] = useState(!!sessionStorage.getItem('BOX_HANDHELD_ID'));
 
   // --- HARDWARE BRIDGE STATUS ---
-  const { isConnected, transport } = useHardwareBridge();
+  const { isConnected } = useHardware();
+  const transport = isConnected ? 'supabase' : 'none';
 
   const [showInstallCard, setShowInstallCard] = useState(() => {
     return localStorage.getItem('box_dismiss_install') !== 'true';

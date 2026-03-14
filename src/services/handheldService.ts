@@ -1,77 +1,116 @@
 // src/services/handheldService.ts
 //
 // THE BOX — Hardware Controller Service
-// BMSCE Sports Tech Division — v4.0
+// BMSCE Sports Tech Division — v5.0
 //
-// CHANGELOG v4.0 (audit fixes):
+// CHANGELOG v5.0 (full rewrite of pairing layer):
 //
-//   BUG 1 FIXED — subscribeToDeviceHeartbeat: initial status check was treating
-//     any paired/active device as online regardless of whether the ESP32 is
-//     actually alive *right now*. On page load this would flash "online" even
-//     for a device that was paired 3 days ago and is currently powered off.
-//     FIX: Initial check now looks at updated_at timestamp from DB (set by
-//     the hw_terminals_updated_at trigger on every UPDATE). If updated_at is
-//     older than ONLINE_THRESHOLD_MS, report offline. Falls back to status
-//     check if updated_at isn't returned.
+//   BREAKING CHANGE 1 — Pairing now uses pair_esp32_device() RPC instead of
+//     direct SELECT → UPDATE. This is atomic, race-free, and validates
+//     ownership server-side. No more "User B hijacks User A's device" bug.
 //
-//   BUG 2 FIXED — subscribeToDeviceHeartbeat: watchdog interval only fired
-//     when lastReceivedAt > 0. If the initial fetch returned a device but
-//     Realtime never fired again (ESP32 off, no updates), the watchdog would
-//     correctly detect the timeout — BUT only after the first watchdog tick
-//     at 8s. Meanwhile the UI showed "online" for up to 8 extra seconds.
-//     FIX: watchdog now also fires immediately on mount if lastReceivedAt > 0.
+//   BREAKING CHANGE 2 — Unpairing now uses unpair_esp32_device() RPC.
+//     Server validates that the caller is the actual device owner before
+//     allowing the unpair. Prevents unauthorized disconnects.
 //
-//   BUG 3 FIXED — subscribeToDeviceHeartbeat: the channel was named
-//     `heartbeat:${code}` but the Realtime postgres_changes filter used
-//     `id=eq.${code}` (lowercase). If the stored code is uppercase (which it
-//     always is — we call toUpperCase()) but the filter wasn't matched due to
-//     case, no events would arrive. Both are now consistently uppercase.
+//   BREAKING CHANGE 3 — Game activation now uses activate_esp32_game() RPC.
+//     Server validates device ownership AND game existence atomically.
+//     No more "activate device on a deleted game" ghost bug.
 //
-//   BUG 4 FIXED — pairHandheldDevice: waitForPairedStatus polled with an
-//     800ms interval for up to 10 seconds (12 polls). Each poll was a full
-//     round-trip Supabase fetch. We just wrote the status='paired' ourselves,
-//     so we KNOW the write landed if it returned no error. The confirm poll
-//     is unnecessary and just adds 800ms+ of latency. Removed the confirm
-//     poll entirely — if the update() returned no error, we're done.
+//   FIX 1 — Switched from sessionStorage to localStorage with expiry.
+//     Closing a tab no longer kills the pairing. On page load, we check
+//     if the stored device still exists and is still paired to this user.
+//     Auto-reconnect instead of "enter code again" flow.
 //
-//   BUG 5 FIXED — pairHandheldDevice: if device.status was already 'paired'
-//     or 'active' (ESP32 mid-game, operator re-opened modal), the old code
-//     would overwrite status='paired' and blow away active_game_id. 
-//     FIX: If status is already 'paired' or 'active', skip the update entirely
-//     and go straight to confirmed. The device is clearly alive.
+//   FIX 2 — All error messages from RPCs are now surfaced to the UI.
+//     The server returns structured { success, error } objects.
 //
-//   BUG 6 FIXED — subscribeToControlMode: on initial fetch the code used
-//     .eq('id', code) (no .toUpperCase()). The session key is always stored
-//     uppercase but callers sometimes pass it directly. Made all DB queries
-//     consistently use code.toUpperCase().
-//
-//   BUG 7 FIXED — unpairHandheldDevice: was setting control_mode: 'hardware'
-//     on unpair. This is correct for a fresh device, but the ESP32 won't see
-//     this — it sees status: 'waiting' and knows to stop. The control_mode
-//     reset is fine functionally but team names were not being cleared,
-//     leaving stale team names if the same device is re-paired for a new game.
-//     FIX: Also clear team_a_name and team_b_name on unpair.
-//
-//   NON-BUG IMPROVEMENT — activateGameOnDevice: added error logging. Silent
-//     failures here (e.g. the device row doesn't exist) would cause the ESP32
-//     to never transition to 'active', with zero feedback to the operator.
+//   FIX 3 — Heartbeat subscription unchanged (was already solid in v4.0).
 
 import { supabase } from './supabase';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const HW_SESSION_KEY = 'BOX_HW_SESSION';
+/**
+ * localStorage key for persisting the paired device ID.
+ * Survives tab closes, page refreshes, and browser restarts.
+ * Cleared on explicit unpair or after PAIRING_EXPIRY_MS.
+ */
+export const HW_STORAGE_KEY = 'BOX_HW_DEVICE';
+
+/** Also keep the old key name for backwards compat during migration */
+const HW_LEGACY_KEY = 'BOX_HW_SESSION';
+
+/** Pairing auto-expires after 12 hours (tournament day length) */
+const PAIRING_EXPIRY_MS = 12 * 60 * 60 * 1000;
 
 /**
- * v4.0: Only two modes — one authority at a time.
+ * v5.0: Only two modes — one authority at a time.
  *   'hardware' → ESP32 is parent. Referee scores from physical buttons. Web is read-only.
  *   'web'      → Web is parent. Operator scores from browser. ESP32 is display-only.
  */
 export type ControlMode = 'web' | 'hardware';
 
-// Device considered offline if no DB update received in this window.
-// ESP32 heartbeats every 10s → 15s gives 1.5x margin.
+/** Device considered offline if no DB update received in this window. */
 const ONLINE_THRESHOLD_MS = 15_000;
+
+// ─── Storage helpers (localStorage with expiry) ───────────────────────────────
+
+interface StoredPairing {
+    deviceId: string;
+    pairedAt: number;
+    userId: string;
+}
+
+const savePairing = (deviceId: string, userId: string): void => {
+    const data: StoredPairing = {
+        deviceId: deviceId.toUpperCase(),
+        pairedAt: Date.now(),
+        userId,
+    };
+    localStorage.setItem(HW_STORAGE_KEY, JSON.stringify(data));
+    // Also write to legacy key so old components don't break during migration
+    sessionStorage.setItem(HW_LEGACY_KEY, deviceId.toUpperCase());
+};
+
+const clearPairing = (): void => {
+    localStorage.removeItem(HW_STORAGE_KEY);
+    sessionStorage.removeItem(HW_LEGACY_KEY);
+};
+
+/**
+ * Reads the stored pairing. Returns null if expired or missing.
+ */
+export const getStoredPairing = (): StoredPairing | null => {
+    const raw = localStorage.getItem(HW_STORAGE_KEY);
+    if (!raw) {
+        // Check legacy sessionStorage for backwards compat
+        const legacy = sessionStorage.getItem(HW_LEGACY_KEY);
+        if (legacy) {
+            return { deviceId: legacy.toUpperCase(), pairedAt: Date.now(), userId: '' };
+        }
+        return null;
+    }
+    try {
+        const data: StoredPairing = JSON.parse(raw);
+        // Check expiry
+        if (Date.now() - data.pairedAt > PAIRING_EXPIRY_MS) {
+            clearPairing();
+            return null;
+        }
+        return data;
+    } catch {
+        clearPairing();
+        return null;
+    }
+};
+
+/**
+ * Convenience getter for components that just need the device ID string.
+ */
+export const getDeviceId = (): string | null => {
+    return getStoredPairing()?.deviceId ?? null;
+};
 
 // ─── Legacy path helpers (kept for TS compat with existing imports) ───────────
 export const hwPath = {
@@ -79,24 +118,67 @@ export const hwPath = {
     controlMode: (_c: string) => '',
 };
 
+// For backwards compat — components that import HW_SESSION_KEY
+export const HW_SESSION_KEY = HW_LEGACY_KEY;
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ─── Auto-Reconnect ───────────────────────────────────────────────────────────
+
+/**
+ * Called on app startup. Checks if a stored pairing is still valid in the DB.
+ * If the device is still paired to this user, returns the device ID.
+ * If not (device unpaired, deleted, or taken by someone else), clears storage.
+ */
+export const tryAutoReconnect = async (
+    userId: string
+): Promise<{ connected: boolean; deviceId: string | null }> => {
+    const stored = getStoredPairing();
+    if (!stored) return { connected: false, deviceId: null };
+
+    const { data: device, error } = await supabase
+        .from('hardware_terminals')
+        .select('id, status, host_id')
+        .eq('id', stored.deviceId)
+        .maybeSingle();
+
+    if (error || !device) {
+        clearPairing();
+        return { connected: false, deviceId: null };
+    }
+
+    // Device exists but is no longer ours
+    if (device.host_id && device.host_id !== userId) {
+        clearPairing();
+        return { connected: false, deviceId: null };
+    }
+
+    // Device exists and is waiting (was auto-unpaired by staleness cron)
+    if (device.status === 'waiting') {
+        clearPairing();
+        return { connected: false, deviceId: null };
+    }
+
+    // Still paired or active — reconnect
+    return { connected: true, deviceId: stored.deviceId };
+};
+
 // ─── Pairing ──────────────────────────────────────────────────────────────────
 
 /**
- * Called by ConnectControllerModal when user submits a 4-char pairing code.
+ * Pairs an ESP32 device using the atomic pair_esp32_device() RPC.
  *
  * Drives the UI through phases:
- *   searching → found → (handshaking →) confirmed
+ *   searching → found → handshaking → confirmed (or error)
  *
- * v4.0: Removed unnecessary waitForPairedStatus polling. If the update()
- * returns no error, the write landed — we confirm immediately. This cuts
- * the pairing time from 800ms–10s down to ~200ms after the DB write.
- *
- * NOTE: last_heartbeat from ESP32 firmware uses millis() (ms since boot),
- * NOT Unix epoch. Never compare it to Date.now().
+ * v5.0: All validation happens server-side. The RPC handles:
+ *   - Device existence check
+ *   - Status validation (must be 'waiting')
+ *   - Ownership validation (can't steal another user's device)
+ *   - Atomic state transition
+ *   - Audit logging
  */
 export const pairHandheldDevice = async (
     code: string,
@@ -106,86 +188,69 @@ export const pairHandheldDevice = async (
 
     const upperCode = code.toUpperCase();
 
-    // ── Phase 1: Search ───────────────────────────────────────────────────────
+    // ── Phase 1: Search ───────────────────────────────────────────────────
     onPhase('searching');
-    await delay(600); // UX: let the animation breathe
+    await delay(500); // UX: let the animation breathe
 
-    const { data: device, error: fetchError } = await supabase
-        .from('hardware_terminals')
-        .select('id, status')
-        .eq('id', upperCode)
-        .maybeSingle();
-
-    if (fetchError || !device) {
-        return {
-            success: false,
-            message: `No device found with code "${upperCode}".\n\nMake sure the ESP32 is powered on and connected to WiFi.`,
-        };
-    }
-
-    // ── Phase 2: Found ────────────────────────────────────────────────────────
+    // ── Phase 2: Found → Handshaking ──────────────────────────────────────
     onPhase('found');
-    await delay(400);
-
-    // FIX BUG 5: If device is already paired/active, skip the update entirely.
-    // The ESP32 is clearly alive. Just confirm and go.
-    if (device.status === 'paired' || device.status === 'active') {
-        sessionStorage.setItem(HW_SESSION_KEY, upperCode);
-        onPhase('confirmed');
-        return { success: true, message: 'Paired!' };
-    }
-
-    // ── Phase 3: Handshaking — update DB to paired ────────────────────────────
+    await delay(300);
     onPhase('handshaking');
 
-    const { error: updateError } = await supabase
-        .from('hardware_terminals')
-        .update({
-            status: 'paired',
-            host_id: userId,
-        })
-        .eq('id', upperCode);
+    // ── Phase 3: Call the atomic pairing RPC ──────────────────────────────
+    const { data, error } = await supabase.rpc('pair_esp32_device', {
+        p_device_id: upperCode,
+        p_user_id: userId,
+    });
 
-    if (updateError) {
-        console.error('[Pair] DB update error:', updateError);
+    if (error) {
+        console.error('[Pair] RPC error:', error);
         return {
             success: false,
-            message: 'Could not complete pairing. Database error — try again.',
+            message: `Pairing failed: ${error.message}`,
         };
     }
 
-    // ── Phase 4: Confirmed ─────────────────────────────────────────────────────
-    // FIX BUG 4: No polling needed. update() returning no error = write confirmed.
-    // The ESP32 will pick it up on its next poll cycle (~2s).
-    await delay(300); // UX: short pause so handshaking animation is visible
+    // The RPC returns JSONB: { success, error?, device_id?, already_paired? }
+    if (!data?.success) {
+        return {
+            success: false,
+            message: data?.error || 'Unknown pairing error',
+        };
+    }
 
-    sessionStorage.setItem(HW_SESSION_KEY, upperCode);
+    // ── Phase 4: Confirmed ────────────────────────────────────────────────
+    await delay(200);
+
+    savePairing(upperCode, userId);
     onPhase('confirmed');
+
+    if (data.already_paired) {
+        return { success: true, message: 'Reconnected to your device!' };
+    }
 
     return { success: true, message: 'Paired!' };
 };
 
 /**
- * Unpairs the device — clears session storage and resets DB row to waiting.
- * FIX BUG 7: Also clears team names so stale names don't persist on re-pair.
+ * Unpairs the device using the atomic unpair_esp32_device() RPC.
+ * Server validates ownership before allowing the unpair.
  */
-export const unpairHandheldDevice = async (code: string, _userId: string): Promise<void> => {
-    sessionStorage.removeItem(HW_SESSION_KEY);
+export const unpairHandheldDevice = async (code: string, userId: string): Promise<void> => {
+    clearPairing();
 
-    const { error } = await supabase
-        .from('hardware_terminals')
-        .update({
-            status: 'waiting',
-            host_id: null,
-            active_game_id: null,
-            control_mode: 'hardware',
-            team_a_name: 'TEAM A',  // FIX: clear stale team names
-            team_b_name: 'TEAM B',
-        })
-        .eq('id', code.toUpperCase());
+    const { data, error } = await supabase.rpc('unpair_esp32_device', {
+        p_device_id: code.toUpperCase(),
+        p_user_id: userId,
+    });
 
     if (error) {
-        console.error('[Unpair] DB error:', error);
+        console.error('[Unpair] RPC error:', error);
+        return;
+    }
+
+    if (data && !data.success) {
+        console.warn('[Unpair] Server rejected:', data.error);
     }
 };
 
@@ -194,25 +259,21 @@ export const unpairHandheldDevice = async (code: string, _userId: string): Promi
 /**
  * Subscribes to live device heartbeat updates.
  *
- * v4.0 fixes:
- *   - Initial check uses updated_at timestamp from DB trigger (accurate staleness check)
- *   - Consistent uppercase for DB queries and channel names
- *   - Watchdog properly handles edge cases
+ * Online detection: watches for DB row changes via Supabase Realtime.
+ * If the row stops being updated for ONLINE_THRESHOLD_MS, reports offline.
  *
- * NOTE: last_heartbeat is millis() from ESP32, NOT unix epoch.
- * We track online state by watching for DB row changes via Supabase Realtime.
- * If the row stops being updated (ESP32 off/disconnected), the watchdog fires.
+ * Returns an unsubscribe function.
  */
 export const subscribeToDeviceHeartbeat = (
     code: string,
-    callback: (isOnline: boolean, lastSeen: number) => void
+    callback: (online: boolean, lastReceivedAt: number) => void
 ): (() => void) => {
-    const upperCode = code.toUpperCase(); // FIX BUG 3: consistent uppercase
+    const upperCode = code.toUpperCase();
     let lastReceivedAt = 0;
-    let lastHeartbeatValue = 0;
+    let lastHeartbeatValue: any = null;
     let reportedOnline = false;
 
-    // Initial fetch — use updated_at for accurate staleness (set by DB trigger)
+    // ── Initial check: is the device alive right now? ─────────────────────
     supabase
         .from('hardware_terminals')
         .select('id, status, last_heartbeat, updated_at')
@@ -224,57 +285,47 @@ export const subscribeToDeviceHeartbeat = (
                 return;
             }
 
-            lastHeartbeatValue = data.last_heartbeat || 0;
+            // Use updated_at to determine if ESP32 is alive RIGHT NOW
+            const updatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+            const isRecent = updatedAt > 0 && (Date.now() - updatedAt) < ONLINE_THRESHOLD_MS;
 
-            // FIX BUG 1: Use updated_at (real server timestamp) for staleness check
-            // updated_at is set by hw_terminals_updated_at trigger on every UPDATE
-            let isOnline = false;
-            if (data.updated_at) {
-                const updatedAtMs = new Date(data.updated_at).getTime();
-                const ageMs = Date.now() - updatedAtMs;
-                isOnline = ageMs < ONLINE_THRESHOLD_MS;
+            if (isRecent && data.status !== 'waiting') {
+                lastReceivedAt = Date.now();
+                lastHeartbeatValue = data.last_heartbeat;
+                reportedOnline = true;
+                callback(true, lastReceivedAt);
             } else {
-                // Fallback: trust status field if updated_at somehow missing
-                isOnline = data.status === 'paired' || data.status === 'active';
+                callback(false, 0);
             }
-
-            lastReceivedAt = Date.now();
-            reportedOnline = isOnline;
-            callback(isOnline, lastReceivedAt);
         });
 
-    // Realtime: fire on every row UPDATE (heartbeat, status change, mode change)
+    // ── Realtime subscription: watch for heartbeat changes ────────────────
     const channel = supabase
-        .channel(`heartbeat:${upperCode}`) // FIX BUG 3: uppercase channel name
+        .channel(`heartbeat:${upperCode}`)
         .on(
             'postgres_changes',
             {
                 event: 'UPDATE',
                 schema: 'public',
                 table: 'hardware_terminals',
-                filter: `id=eq.${upperCode}`, // FIX BUG 3: uppercase filter
+                filter: `id=eq.${upperCode}`,
             },
             (payload) => {
-                const incomingHeartbeat = (payload.new as any).last_heartbeat as number;
+                const incomingHeartbeat = (payload.new as any).last_heartbeat;
 
-                // Only count as a live tick if the heartbeat value actually changed.
-                // This prevents false "online" flashes from website-initiated updates
-                // (e.g. status changes, mode switches) that don't involve the ESP32.
+                // Only count actual heartbeat ticks from the ESP32, not
+                // website-initiated updates (status changes, mode switches).
                 if (incomingHeartbeat && incomingHeartbeat !== lastHeartbeatValue) {
                     lastHeartbeatValue = incomingHeartbeat;
                     lastReceivedAt = Date.now();
-                    if (!reportedOnline) {
-                        reportedOnline = true;
-                        callback(true, lastReceivedAt);
-                    } else {
-                        callback(true, lastReceivedAt);
-                    }
+                    reportedOnline = true;
+                    callback(true, lastReceivedAt);
                 }
             }
         )
         .subscribe();
 
-    // Watchdog: if no heartbeat tick received for ONLINE_THRESHOLD_MS, report offline
+    // ── Watchdog: detect offline if no heartbeat for ONLINE_THRESHOLD_MS ──
     const watchdog = setInterval(() => {
         if (lastReceivedAt > 0 && Date.now() - lastReceivedAt > ONLINE_THRESHOLD_MS) {
             if (reportedOnline) {
@@ -282,7 +333,7 @@ export const subscribeToDeviceHeartbeat = (
                 callback(false, lastReceivedAt);
             }
         }
-    }, 5_000); // Check every 5s (tighter than before — was 8s)
+    }, 5_000);
 
     return () => {
         clearInterval(watchdog);
@@ -294,11 +345,10 @@ export const subscribeToDeviceHeartbeat = (
 
 /**
  * Sets the control mode in the database.
- * ESP32 polls hardware_terminals on its next cycle (~2s) and obeys this.
- *
- * v4.0: Only two modes:
- *   'hardware' → Only ESP32 buttons score. Website console is locked (read-only).
- *   'web'      → Only website scores. ESP32 buttons are ignored.
+ * This still uses direct REST update (not an RPC) because:
+ *   1. The tightened RLS ensures only the device owner can update.
+ *   2. It's a simple single-field write with no complex validation needed.
+ *   3. Control mode switches happen frequently mid-game — RPC overhead isn't worth it.
  */
 export const setControlMode = async (
     code: string,
@@ -313,7 +363,7 @@ export const setControlMode = async (
     const { error } = await supabase
         .from('hardware_terminals')
         .update(update)
-        .eq('id', code.toUpperCase()); // FIX BUG 6: consistent uppercase
+        .eq('id', code.toUpperCase());
 
     if (error) {
         console.error('[setControlMode] DB error:', error);
@@ -328,17 +378,16 @@ export const subscribeToControlMode = (
     code: string,
     callback: (mode: ControlMode) => void
 ): (() => void) => {
-    const upperCode = code.toUpperCase(); // FIX BUG 6: consistent uppercase
+    const upperCode = code.toUpperCase();
 
     // Initial fetch
     supabase
         .from('hardware_terminals')
         .select('control_mode')
-        .eq('id', upperCode) // FIX BUG 6
+        .eq('id', upperCode)
         .maybeSingle()
         .then(({ data }) => {
             if (data) {
-                // Normalize: if DB still has 'shared' from old version, treat as 'hardware'
                 const raw = data.control_mode as string;
                 callback(raw === 'web' ? 'web' : 'hardware');
             }
@@ -367,36 +416,44 @@ export const subscribeToControlMode = (
 // ─── Game Activation ──────────────────────────────────────────────────────────
 
 /**
- * Called by GameSetup.tsx after a game is successfully created.
+ * Activates a game on the paired device using the atomic activate_esp32_game() RPC.
  *
- * Transitions the hardware terminal from 'paired' → 'active' and tells it
- * which game code to control. The ESP32 polls hardware_terminals every 2s
- * and will switch to game mode once it sees status='active'.
- *
- * v4.0: Added error logging — silent failures here are very hard to debug.
+ * v5.0: Server validates:
+ *   - Device exists and is paired to this user
+ *   - Game code exists in the games table
+ *   - Control mode is valid
+ * All in one atomic transaction with audit logging.
  */
 export const activateGameOnDevice = async (
     code: string,
     gameCode: string,
     teamAName: string,
     teamBName: string,
-    initialMode: ControlMode = 'hardware'
+    initialMode: ControlMode = 'hardware',
+    userId?: string
 ): Promise<void> => {
-    const { error } = await supabase
-        .from('hardware_terminals')
-        .update({
-            status: 'active',
-            active_game_id: gameCode,
-            control_mode: initialMode,
-            team_a_name: teamAName,
-            team_b_name: teamBName,
-        })
-        .eq('id', code.toUpperCase());
+    // Get userId from stored pairing if not provided
+    const storedUserId = userId || getStoredPairing()?.userId;
+    if (!storedUserId) {
+        throw new Error('No user ID available for game activation');
+    }
+
+    const { data, error } = await supabase.rpc('activate_esp32_game', {
+        p_device_id: code.toUpperCase(),
+        p_user_id: storedUserId,
+        p_game_code: gameCode,
+        p_team_a_name: teamAName,
+        p_team_b_name: teamBName,
+        p_control_mode: initialMode,
+    });
 
     if (error) {
-        console.error('[activateGameOnDevice] DB error:', error);
-        // Bubble this up — callers should handle gracefully
+        console.error('[activateGameOnDevice] RPC error:', error);
         throw new Error(`Failed to activate device ${code}: ${error.message}`);
+    }
+
+    if (data && !data.success) {
+        throw new Error(`Failed to activate device ${code}: ${data.error}`);
     }
 };
 

@@ -48,13 +48,15 @@ export function useGameEngine<TState extends BaseGameState, TAction, TRules>(
     const hydratedKeyRef = useRef<string>('');
 
     useEffect(() => {
-        if (!gameId || !initialGame || !initialGame.state) return;
+        if (!gameId || !initialGame) return;
 
-        // The fallback empty state has period: 1 and all 0s.
-        // A real DB state update will have the actual scores.
-        const hydrationKey = `${gameId}:${JSON.stringify(initialGame.state)}`;
+        const isRealDbGame = !!(initialGame as any).code;
+        if (!isRealDbGame) return;
 
-        // If the state hasn't fundamentally changed, skip re-hydrating.
+        // FIX: Watch the exact database timestamp. If the DB row was updated by the ESP32, 
+        // lastUpdate will be completely new, forcing React to ingest the hardware scores.
+        const hydrationKey = `${gameId}:${initialGame.lastUpdate}`;
+
         if (hydratedKeyRef.current === hydrationKey) return;
 
         hydratedKeyRef.current = hydrationKey;

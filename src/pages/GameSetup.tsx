@@ -4,8 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { initializeNewGame } from '../services/supabaseGameService';
 import { subscribeToAuth } from '../services/authService';
 import { SplashScreen } from '../components/SplashScreen';
-import { useHardwareBridge } from '../hooks/useHardwareBridge';
-import { activateGameOnDevice, HW_SESSION_KEY } from '../services/handheldService';
+import { useHardware } from '../contexts/HardwareContext';
 import type { Player } from '../types';
 import type { User } from '@supabase/supabase-js';
 
@@ -58,8 +57,7 @@ export const GameSetup: React.FC = () => {
   const numberInputRef = useRef<HTMLInputElement>(null);
 
   // --- HARDWARE BRIDGE INTEGRATION ---
-  // FIXED: Removed updateScreen (deprecated)
-  const { isConnected, controlMode, setAuthority } = useHardwareBridge();
+  const { isConnected, controlMode, setMode: setAuthority, activateGame, deviceId } = useHardware();
 
   // Optimistic UI state for instant feedback
   const [localHwMode, setLocalHwMode] = useState<'web' | 'hardware'>('hardware');
@@ -75,11 +73,11 @@ export const GameSetup: React.FC = () => {
 
   // Control whether we are using the controller for this game
   // Defaults to true if connected, but user can toggle it off
-  const [useHardware, setUseHardware] = useState(isConnected);
+  const [isHardwareEnabled, setIsHardwareEnabled] = useState(isConnected);
 
   // Auto-enable if connection comes online while on this page
   useEffect(() => {
-    if (isConnected) setUseHardware(true);
+    if (isConnected) setIsHardwareEnabled(true);
   }, [isConnected]);
 
   // --- EFFECT: Load User State ---
@@ -196,17 +194,14 @@ export const GameSetup: React.FC = () => {
       setLaunchedGameCode(gameCode);
 
       // ── Hardware activation ───────────────────────────────────────────────────
-      // If a controller is paired, notify it the game has started and
-      // transfer control to hardware mode.
-      const pairedDeviceId = sessionStorage.getItem(HW_SESSION_KEY);
-      if (pairedDeviceId && useHardware) {
+      if (deviceId && isHardwareEnabled) {
         try {
-          await activateGameOnDevice(
-            pairedDeviceId,
+          await activateGame(
             gameCode,
             teamAName || 'TEAM A',
             teamBName || 'TEAM B',
             localHwMode,
+            currentUser.id
           );
           console.log('[GameSetup] Hardware controller activated for game', gameCode);
         } catch (err) {
@@ -316,10 +311,10 @@ export const GameSetup: React.FC = () => {
                         </div>
 
                         <button
-                          onClick={() => setUseHardware(!useHardware)}
-                          className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${useHardware ? 'bg-green-600 text-black border-green-600' : 'text-zinc-500 border-zinc-700'}`}
+                          onClick={() => setIsHardwareEnabled(!isHardwareEnabled)}
+                          className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${isHardwareEnabled ? 'bg-green-600 text-black border-green-600' : 'text-zinc-500 border-zinc-700'}`}
                         >
-                          {useHardware ? 'ENABLED' : 'DISABLED'}
+                          {isHardwareEnabled ? 'ENABLED' : 'DISABLED'}
                         </button>
                       </div>
 

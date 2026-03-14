@@ -1,12 +1,6 @@
 // src/components/ConnectControllerModal.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-    pairHandheldDevice,
-    unpairHandheldDevice,
-    subscribeToDeviceHeartbeat,
-    HW_SESSION_KEY,
-} from '../services/handheldService';
-import { useHardwareBridge } from '../hooks/useHardwareBridge';
+import { useHardware } from '../contexts/HardwareContext';
 
 interface ConnectControllerModalProps {
     userId: string;
@@ -98,28 +92,22 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
     const [lastSeen, setLastSeen] = useState(0);
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const heartbeatUnsubRef = useRef<(() => void) | null>(null);
-    const { transport } = useHardwareBridge();
+    const { pair, unpair: unpairDevice, isConnected: contextOnline, lastSeenAt: contextLastSeen, deviceId } = useHardware();
+    const transport = contextOnline ? 'supabase' : 'none';
 
     // ── On mount: restore if already paired this session ─────────────────────
     useEffect(() => {
-        const stored = sessionStorage.getItem(HW_SESSION_KEY);
-        if (stored) {
-            setPairedCode(stored);
-            setDigits(stored.split(''));
+        if (deviceId) {
+            setPairedCode(deviceId);
+            setDigits(deviceId.split(''));
             setPhase('confirmed');
-            startHeartbeatWatch(stored);
         }
-        return () => { heartbeatUnsubRef.current?.(); };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [deviceId]);
 
-    const startHeartbeatWatch = useCallback((code: string) => {
-        heartbeatUnsubRef.current?.();
-        heartbeatUnsubRef.current = subscribeToDeviceHeartbeat(code, (online, ts) => {
-            setDeviceOnline(online);
-            setLastSeen(ts);
-        });
-    }, []);
+    useEffect(() => {
+        setDeviceOnline(contextOnline);
+        setLastSeen(contextLastSeen);
+    }, [contextOnline, contextLastSeen]);
 
     // ── Digit input ───────────────────────────────────────────────────────────
     const handleDigitChange = (index: number, value: string) => {
@@ -159,7 +147,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
         setErrorMsg('');
 
-        const result = await pairHandheldDevice(code, userId, (handshakePhase) => {
+        const result = await pair(code, userId, (handshakePhase) => {
             // Map internal phases to modal phases
             const map: Record<string, ModalPhase> = {
                 searching: 'searching',
@@ -179,14 +167,12 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
         setPairedCode(code);
         setPhase('confirmed');
-        startHeartbeatWatch(code);
         onSuccess(code);
     };
 
     // ── Unpair ────────────────────────────────────────────────────────────────
     const handleUnpair = async () => {
-        heartbeatUnsubRef.current?.();
-        if (pairedCode) await unpairHandheldDevice(pairedCode, userId);
+        if (pairedCode) await unpairDevice(userId);
         setPhase('input');
         setDigits(['', '', '', '']);
         setPairedCode('');
