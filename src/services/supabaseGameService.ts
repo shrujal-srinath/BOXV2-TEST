@@ -29,7 +29,25 @@ const normalizeGameData = (data: any): BasketballGame => {
 // GAME CREATION (replaces Firestore setDoc)
 // ============================================
 
-const generateGameCode = (): string => Math.floor(100000 + Math.random() * 900000).toString();
+// Charset excludes O, 0, I, 1, S, 5 — visually ambiguous on small displays/ESP32 LCD
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRTUVWXYZ2346789';
+
+const generateGameCode = async (): Promise<string> => {
+    const chars = CODE_CHARS;
+    while (true) {
+        let code = '';
+        for (let i = 0; i < 4; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        // Uniqueness check — retries on collision (astronomically rare but correct)
+        const { data } = await supabase
+            .from('games')
+            .select('code')
+            .eq('code', code)
+            .maybeSingle();
+        if (!data) return code;
+    }
+};
 
 const createDefaultPlayer = (id: string): Player => ({
     id, name: '', number: '', position: '',
@@ -60,7 +78,7 @@ export const initializeNewGame = async (
     sport: string,
     hostId: string
 ): Promise<string> => {
-    const gameCode = generateGameCode();
+    const gameCode = await generateGameCode();
 
     const initialGameState: GameState = {
         period: 1,

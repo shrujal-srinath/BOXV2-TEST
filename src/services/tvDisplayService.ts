@@ -23,18 +23,36 @@ export interface TvDisplay {
 
 /**
  * Called once on TvKiosk mount.
- * Upserts the TV row — creates if new, refreshes last_seen if exists.
- * Does NOT overwrite game_code or status if the row already exists and is casting.
+ * - If row exists: only updates last_seen. NEVER touches game_code or status.
+ * - If row is new: inserts with idle state.
+ * Returns current DB state so TvKiosk can immediately act on existing casts.
  */
-export const registerTvDisplay = async (tvCode: string): Promise<void> => {
+export const registerTvDisplay = async (
+    tvCode: string
+): Promise<{ game_code: string | null; status: TvStatus }> => {
     const upper = tvCode.toUpperCase();
+
+    const { data: existing } = await supabase
+        .from('tv_displays')
+        .select('game_code, status')
+        .eq('tv_code', upper)
+        .maybeSingle();
+
+    if (existing) {
+        // Row exists — heartbeat only, preserve cast state
+        await supabase
+            .from('tv_displays')
+            .update({ last_seen: Date.now() })
+            .eq('tv_code', upper);
+        return { game_code: existing.game_code, status: existing.status as TvStatus };
+    }
+
+    // New screen — create fresh
     const { error } = await supabase
         .from('tv_displays')
-        .upsert(
-            { tv_code: upper, status: 'idle', game_code: null, last_seen: Date.now() },
-            { onConflict: 'tv_code', ignoreDuplicates: false }
-        );
+        .insert({ tv_code: upper, status: 'idle', game_code: null, last_seen: Date.now() });
     if (error) console.error('[TvDisplay] Register failed:', error.message);
+    return { game_code: null, status: 'idle' };
 };
 
 /**
@@ -105,10 +123,6 @@ export const castGameToTv = async (
         return { success: false, message: 'Invalid screen code. Must be 4 characters.' };
     }
 
-    // Upsert the row — creates it if it doesn't exist yet.
-    // If the screen is already registered, this updates game_code + status.
-    // If the screen boots LATER (laptop, Pi cold-start), it will read this
-    // row in registerTvDisplay() and resume the cast automatically.
     const { error } = await supabase
         .from('tv_displays')
         .upsert(
@@ -116,7 +130,7 @@ export const castGameToTv = async (
                 tv_code: upper,
                 game_code: gameCode.toUpperCase(),
                 status: 'casting',
-                last_seen: Date.now(),   // treat "just cast" as a heartbeat
+                // last_seen intentionally omitted — Pi owns this field
             },
             { onConflict: 'tv_code', ignoreDuplicates: false }
         );

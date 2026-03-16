@@ -334,11 +334,39 @@ export const useSupabaseBroadcast = ({
         broadcastPeriodChange(gameCode, newPeriod, state);
     }, [isHost, gameCode, period, periodDuration, shotClockDuration, stopHostLoop]);
 
+    // ── Hardware override: ESP32 sends its authoritative clock state ──────
+    // When ESP32 is parent, the website doesn't run its own timer — it just
+    // renders whatever the ESP32 says. This prevents clock drift entirely.
+    const setFromHardware = useCallback((hw: {
+        minutes: number;
+        seconds: number;
+        shotClock: number;
+        period: number;
+        gameRunning: boolean;
+    }) => {
+        // Stop the host's own timer loop — ESP32 is driving the clock
+        stopHostLoop();
+        gameStartEpochRef.current = null;
+        shotStartEpochRef.current = null;
+
+        const newGameMs = hw.minutes * 60_000 + hw.seconds * 1_000;
+        const newShotMs = hw.shotClock * 1_000;
+
+        setGameTimeMs(newGameMs);
+        setShotClockMs(newShotMs);
+        setPeriod(hw.period);
+        setGameRunning(hw.gameRunning);
+
+        // Update refs so if web takes back control, it resumes from the right values
+        gameStartMsRef.current = newGameMs;
+        shotStartMsRef.current = newShotMs;
+    }, [stopHostLoop]);
+
     useEffect(() => { return () => { stopHostLoop(); if (tickIntervalRef.current) clearInterval(tickIntervalRef.current); }; }, [stopHostLoop]);
 
     return {
         minutes: Math.floor(gameTimeMs / 60_000), seconds: Math.floor((gameTimeMs % 60_000) / 1_000), tenths: Math.floor((gameTimeMs % 1_000) / 100),
         shotClock: Math.ceil(shotClockMs / 1_000), period, gameRunning,
-        toggleClock, stopClock, resetShotClock24, resetShotClock14, nextPeriod,
+        toggleClock, stopClock, resetShotClock24, resetShotClock14, nextPeriod, setFromHardware,
     };
 };

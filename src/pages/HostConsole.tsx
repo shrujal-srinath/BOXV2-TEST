@@ -99,6 +99,20 @@ export const HostConsole: React.FC = () => {
         return () => { supabase.removeChannel(channel); };
     }, [gameCode]);
 
+    useEffect(() => {
+        // Cleanup: stop casting when host leaves the console without ending the game
+        // This handles back navigation, tab close, and refresh
+        const cleanup = () => {
+            if (gameCode) stopAllCastsForGame(gameCode); // fire-and-forget
+        };
+
+        window.addEventListener('beforeunload', cleanup);
+        return () => {
+            window.removeEventListener('beforeunload', cleanup);
+            cleanup(); // also fires on React unmount (navigation)
+        };
+    }, [gameCode]);
+
     // --- 1. LIVE DB FETCH ---
     const [dbGame, setDbGame] = useState<any>(null);
     useEffect(() => {
@@ -223,21 +237,24 @@ export const HostConsole: React.FC = () => {
                 recordActionRef.current({ type: 'foul', team: 'B', value: 1, timestamp: Date.now() });
                 break;
 
-            // ── Clock ─────────────────────────────────────────────────────────────
+            // ── Clock signals: Only process if website is parent ──────────────────
+            // When ESP32 is parent, SCORE_STATE (sent every 1s) includes full clock
+            // state. Processing individual clock signals would double-process and
+            // cause flickering (signal starts timer → SCORE_STATE overrides 100ms later).
             case 'TOGGLE_CLOCK':
-                timer.toggleClock();
+                // In hardware mode: ignored — ESP32's SCORE_STATE handles clock
                 break;
             case 'RESET_SHOT_CLOCK_24':
             case 'RESET_CLOCK':
-                timer.resetShotClock24();
+                // In hardware mode: ignored
                 break;
             case 'RESET_SHOT_CLOCK_14':
-                timer.resetShotClock14();
+                // In hardware mode: ignored
                 break;
 
             // ── Game flow ─────────────────────────────────────────────────────────
             case 'NEXT_PERIOD':
-                timer.nextPeriod();
+                // In hardware mode: ignored
                 break;
             case 'TOGGLE_POSSESSION':
                 togglePossession();
@@ -248,18 +265,38 @@ export const HostConsole: React.FC = () => {
                 handleUndoRef.current();
                 break;
 
-            // ── Full state sync (sent after undo chain) ───────────────────────────
-            // When firmware sends SCORE_STATE it includes current scoreA/scoreB.
-            // We trust it and set directly (avoids double-counting).
+            // ── Full state sync from ESP32 (sent every 1s + after every button press)
+            // ESP32 is the source of truth — we render its state directly.
+            // This includes scores AND clock data so there's zero drift.
             case 'SCORE_STATE':
+                // Scores — set absolute values (avoid double-counting)
                 if (signal.scoreA !== undefined) updateScore('A', signal.scoreA - (game?.teamA?.score ?? 0));
                 if (signal.scoreB !== undefined) updateScore('B', signal.scoreB - (game?.teamB?.score ?? 0));
+
+                // Clock — directly override the timer display when ESP32 is parent.
+                // timer.setFromHardware() is a new function we need to add.
+                if (signal.minutes !== undefined && signal.seconds !== undefined) {
+                    timer.setFromHardware({
+                        minutes: signal.minutes,
+                        seconds: signal.seconds,
+                        shotClock: signal.shotClock ?? timer.shotClock,
+                        period: signal.period ?? timer.period,
+                        gameRunning: signal.gameRunning ?? timer.gameRunning,
+                    });
+                }
+
+                // Possession
+                if (signal.possession === 'A' || signal.possession === 'B') {
+                    if (signal.possession !== state.possession) {
+                        dispatch({ type: 'SET_POSSESSION', team: signal.possession });
+                    }
+                }
                 break;
 
             default:
                 console.log('[HW] Unknown action:', signal.action);
         }
-    }, [hwMode, updateScore, updateFouls, timer, togglePossession, game]);
+    }, [hwMode, updateScore, updateFouls, timer, togglePossession, game, dispatch, state.possession]);
 
     // Subscribe — stable channel, latest handler via ref inside the hook
     const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHwSignal);

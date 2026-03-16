@@ -1024,7 +1024,7 @@ const WipeOverlay = memo(({ visible }: { visible: boolean }) => (
 // ═══════════════════════════════════════════════════════════════════════════════
 export const TvKiosk: React.FC = () => {
     const [searchParams] = useSearchParams();
-    
+
     // Auto-Provisioning: Generate a permanent unique code if none exists
     const [tvCode] = useState(() => {
         const urlCode = searchParams.get('code')?.toUpperCase();
@@ -1032,10 +1032,10 @@ export const TvKiosk: React.FC = () => {
             localStorage.setItem('tv_kiosk_code', urlCode);
             return urlCode;
         }
-        
+
         const saved = localStorage.getItem('tv_kiosk_code');
         if (saved) return saved;
-        
+
         // Generate a random 4-char code (omitting confusing chars like O/0, I/1)
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let newCode = '';
@@ -1053,7 +1053,7 @@ export const TvKiosk: React.FC = () => {
             '/scanlines.svg',
             // Add any other heavy logos or custom sports textures here
         ];
-        
+
         // Eagerly cache assets into the browser's disk memory so switching 
         // to SpectatorView doesn't cause a black flash while downloading.
         preloadAssets.forEach(src => {
@@ -1101,18 +1101,28 @@ export const TvKiosk: React.FC = () => {
 
         const boot = async () => {
             try {
-                await registerTvDisplay(tvCode);
+                const current = await registerTvDisplay(tvCode);
                 setRegistered(true);
                 setOnline(true);
                 stopHB = startTvHeartbeat(tvCode);
+
+                // Subscribe BEFORE setting readyRef — ensures zero-gap coverage
                 unsub = subscribeTvDisplay(tvCode, (d: TvDisplay) => {
                     setOnline(true);
                     clearTimeout(offT);
                     offT = setTimeout(() => setOnline(false), 25_000);
                     handleUpdate(d.game_code ?? null);
                 });
+
                 offT = setTimeout(() => setOnline(false), 25_000);
+
+                // readyRef must be true BEFORE handleUpdate — handleUpdate guards on it
                 readyRef.current = true;
+
+                // Process existing DB state immediately — catches casts that happened
+                // before this page loaded (Realtime won't fire for those)
+                handleUpdate(current.game_code ?? null);
+
             } catch (err) {
                 console.warn('[TvKiosk] boot failed, retrying in 5s', err);
                 setTimeout(boot, 5000);
