@@ -1101,12 +1101,18 @@ export const TvKiosk: React.FC = () => {
 
         const boot = async () => {
             try {
+                // registerTvDisplay now returns current DB state instead of void.
+                // If the host already cast before this page loaded, current.game_code
+                // will be non-null and we jump straight to the game.
                 const current = await registerTvDisplay(tvCode);
                 setRegistered(true);
                 setOnline(true);
+
                 stopHB = startTvHeartbeat(tvCode);
 
-                // Subscribe BEFORE setting readyRef — ensures zero-gap coverage
+                // Subscribe FIRST before setting readyRef=true.
+                // This closes the window where a Realtime event could arrive
+                // between ready=true and the subscription being attached.
                 unsub = subscribeTvDisplay(tvCode, (d: TvDisplay) => {
                     setOnline(true);
                     clearTimeout(offT);
@@ -1116,11 +1122,13 @@ export const TvKiosk: React.FC = () => {
 
                 offT = setTimeout(() => setOnline(false), 25_000);
 
-                // readyRef must be true BEFORE handleUpdate — handleUpdate guards on it
+                // MUST set readyRef=true BEFORE calling handleUpdate —
+                // handleUpdate guards on readyRef at the top.
                 readyRef.current = true;
 
-                // Process existing DB state immediately — catches casts that happened
-                // before this page loaded (Realtime won't fire for those)
+                // Process current DB state immediately.
+                // Realtime only fires on CHANGES — if the cast was set before
+                // this page loaded, no event will ever fire for it.
                 handleUpdate(current.game_code ?? null);
 
             } catch (err) {
@@ -1128,7 +1136,9 @@ export const TvKiosk: React.FC = () => {
                 setTimeout(boot, 5000);
             }
         };
+
         boot();
+
         return () => {
             readyRef.current = false;
             stopHB?.();

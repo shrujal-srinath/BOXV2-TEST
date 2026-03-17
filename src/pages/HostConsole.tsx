@@ -63,6 +63,14 @@ const CONSOLE_CSS = `
     0%,100% { opacity:1; box-shadow:0 0 6px #22c55e; }
     50%      { opacity:0.3; box-shadow:0 0 2px #22c55e; }
 }
+@keyframes scoreFloat {
+    0%   { opacity:1; transform:translateY(0) scale(1); }
+    100% { opacity:0; transform:translateY(-36px) scale(1.2); }
+}
+@keyframes undoSlideIn {
+    from { opacity:0; transform:translateY(16px) scale(0.95); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+}
 `;
 
 export const HostConsole: React.FC = () => {
@@ -85,17 +93,23 @@ export const HostConsole: React.FC = () => {
     const [showSettings, setShowSettings] = useState(false);
     const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
 
-    const [castingActive, setCastingActive] = useState(false);
+    const [castingCount, setCastingCount] = useState(0);
+    const [undoToast, setUndoToast] = useState<{ label: string; id: number } | null>(null);
+    const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     useEffect(() => {
         if (!gameCode) return;
+        const fetchCount = () => {
+            supabase.from('tv_displays')
+                .select('tv_code', { count: 'exact' })
+                .eq('game_code', gameCode.toUpperCase())
+                .eq('status', 'casting')
+                .then(({ count }) => setCastingCount(count ?? 0));
+        };
+        fetchCount();
         const channel = supabase.channel(`cast_status_${gameCode}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tv_displays' }, () => {
-                supabase.from('tv_displays').select('tv_code').eq('game_code', gameCode.toUpperCase()).limit(1)
-                    .then(({ data }) => setCastingActive(!!data && data.length > 0));
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tv_displays' }, fetchCount)
             .subscribe();
-        supabase.from('tv_displays').select('tv_code').eq('game_code', gameCode.toUpperCase()).limit(1)
-            .then(({ data }) => setCastingActive(!!data && data.length > 0));
         return () => { supabase.removeChannel(channel); };
     }, [gameCode]);
 
@@ -299,7 +313,7 @@ export const HostConsole: React.FC = () => {
     }, [hwMode, updateScore, updateFouls, timer, togglePossession, game, dispatch, state.possession]);
 
     // Subscribe — stable channel, latest handler via ref inside the hook
-    const { sendToHardware } = useHardwareSignaling(gameCode || '', handleHwSignal);
+    const { sendToHardware } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
 
     // ── Feed live state back to ESP32 display ─────────────────────────────────────
     // Fires whenever scores, fouls, possession, or clock changes.
@@ -332,10 +346,18 @@ export const HostConsole: React.FC = () => {
     ]);
 
     // ── WRAP web score buttons to record action history ────────────────────────────
+    const showUndoToast = (label: string) => {
+        if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+        setUndoToast({ label, id: Date.now() });
+        undoToastTimerRef.current = setTimeout(() => setUndoToast(null), 8000);
+    };
+
     const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {
         updateScore(team, points);
         recordActionRef.current({ type: 'score', team, value: points, playerId, timestamp: Date.now() });
-    }, [updateScore]);
+        const teamName = team === 'A' ? game?.teamA?.name : game?.teamB?.name;
+        showUndoToast(`+${points} ${teamName ?? team}`);
+    }, [updateScore, game]);
 
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -388,6 +410,7 @@ export const HostConsole: React.FC = () => {
             recordActionRef.current({ type: 'foul', team, value: 1, timestamp: Date.now() });
             updateFouls(team, 1);
             if (timer.gameRunning) timer.stopClock();
+            showUndoToast(`Foul — ${team === 'A' ? game?.teamA?.name : game?.teamB?.name}`);
         } else {
             setPendingAction({ team, type: 'foul', value: 1 });
             setShowPlayerPopup(true);
@@ -404,6 +427,7 @@ export const HostConsole: React.FC = () => {
             recordAction({ type: 'foul', team, value, playerId: player.id, timestamp: Date.now() });
             updateFouls(team, 1);
             if (timer.gameRunning) timer.stopClock();
+            showUndoToast(`Foul — ${team === 'A' ? game?.teamA?.name : game?.teamB?.name}`);
         }
 
         setShowPlayerPopup(false);
@@ -420,6 +444,7 @@ export const HostConsole: React.FC = () => {
             recordAction({ type: 'foul', team, value, timestamp: Date.now() });
             updateFouls(team, 1);
             if (timer.gameRunning) timer.stopClock();
+            showUndoToast(`Foul — ${team === 'A' ? game?.teamA?.name : game?.teamB?.name}`);
         }
 
         setShowPlayerPopup(false);
@@ -543,13 +568,6 @@ export const HostConsole: React.FC = () => {
                     >
                         ←
                     </button>
-                    <button
-                        onClick={() => setShowSettings(true)}
-                        className="w-9 h-9 rounded-full bg-black border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors active:scale-95 text-sm"
-                        title="Settings"
-                    >
-                        ⚙️
-                    </button>
 
                     <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-md p-1 gap-1">
                         <div className="px-3 py-1 bg-black rounded text-zinc-400 text-xs font-mono font-bold tracking-wider select-all" title="Game Code">
@@ -587,24 +605,23 @@ export const HostConsole: React.FC = () => {
 
                     <button
                         onClick={() => setShowCastModal(true)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all active:scale-95"
                         style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            padding: '6px 14px',
-                            background: castingActive ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
-                            border: `1px solid ${castingActive ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                            borderRadius: 8, cursor: 'pointer',
-                            transition: 'all 0.2s',
+                            background: castingCount > 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${castingCount > 0 ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
                         }}
                     >
                         <div style={{
-                            width: 6, height: 6, borderRadius: '50%',
-                            background: castingActive ? '#22c55e' : 'rgba(255,255,255,0.3)',
-                            boxShadow: castingActive ? '0 0 6px #22c55e' : 'none',
-                            animation: castingActive ? 'cpPulse 2s infinite' : 'none',
+                            width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                            background: castingCount > 0 ? '#22c55e' : 'rgba(255,255,255,0.25)',
+                            boxShadow: castingCount > 0 ? '0 0 6px #22c55e' : 'none',
+                            animation: castingCount > 0 ? 'cpPulse 2s infinite' : 'none',
                         }} />
-                        <span style={{ fontSize: 10, fontWeight: 700, color: castingActive ? '#22c55e' : 'rgba(255,255,255,0.5)', letterSpacing: '0.2em', textTransform: 'uppercase', fontFamily: 'monospace' }}>
-                            {castingActive ? 'LIVE' : 'CAST'}
+                        <span className="text-[10px] font-bold uppercase tracking-widest"
+                            style={{ color: castingCount > 0 ? '#22c55e' : 'rgba(255,255,255,0.35)' }}>
+                            {castingCount > 0 ? `${castingCount} screen${castingCount > 1 ? 's' : ''} live` : 'Cast'}
                         </span>
+                        <span className="text-base leading-none" style={{ opacity: castingCount > 0 ? 0.8 : 0.4 }}>📺</span>
                     </button>
                 </div>
 
@@ -1047,24 +1064,78 @@ export const HostConsole: React.FC = () => {
                 </div>
             )}
 
+            {/* ── FLOATING UNDO TOAST ─────────────────────────────────────── */}
+            {undoToast && (
+                <div
+                    key={undoToast.id}
+                    className="fixed bottom-6 left-1/2 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl border border-zinc-700 bg-zinc-950 shadow-2xl"
+                    style={{
+                        transform: 'translateX(-50%)',
+                        animation: 'undoSlideIn 0.2s ease',
+                        minWidth: 220,
+                    }}
+                >
+                    <div className="flex-1 min-w-0">
+                        <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-zinc-500 mb-0.5">Last action</div>
+                        <div className="text-sm font-bold text-white truncate">{undoToast.label}</div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            handleUndoRef.current();
+                            setUndoToast(null);
+                            if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white text-black text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all active:scale-95 flex-shrink-0"
+                    >
+                        Undo
+                    </button>
+                    <button
+                        onClick={() => setUndoToast(null)}
+                        className="text-zinc-600 hover:text-zinc-400 transition-colors text-lg leading-none flex-shrink-0"
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
 
 // ─── Helper Components ────────────────────────────────────────────────────────
 
-const TactileBtn = ({ label, color, isLocked, onClick }: { label: string; color: string; isLocked?: boolean; onClick: (e: React.MouseEvent) => void }) => (
-    <button
-        onClick={onClick}
-        disabled={isLocked}
-        className={`h-full rounded border hover:border-zinc-500 transition-all relative overflow-hidden shadow-sm flex items-center justify-center
-            ${isLocked ? 'bg-zinc-950/50 border-zinc-800/50 opacity-50 cursor-not-allowed grayscale' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 active:scale-95 active:bg-white group'}`}
-        style={{ borderBottom: isLocked ? '1px solid #333' : `3px solid ${color}` }}
-    >
-        {isLocked && <span className="absolute top-1 right-1 text-[8px] opacity-50">🔒</span>}
-        <span className={`relative z-10 text-xl font-black italic ${isLocked ? 'text-zinc-600' : 'text-white group-active:text-black'}`}>{label}</span>
-    </button>
-);
+const TactileBtn = ({ label, color, isLocked, onClick }: { label: string; color: string; isLocked?: boolean; onClick: (e: React.MouseEvent) => void }) => {
+    const [popKey, setPopKey] = React.useState<number | null>(null);
+
+    const handleClick = (e: React.MouseEvent) => {
+        if (isLocked) return;
+        setPopKey(Date.now());
+        setTimeout(() => setPopKey(null), 700);
+        onClick(e);
+    };
+
+    return (
+        <button
+            onClick={handleClick}
+            disabled={isLocked}
+            className={`h-full rounded border hover:border-zinc-500 transition-all relative overflow-hidden shadow-sm flex items-center justify-center
+                ${isLocked ? 'bg-zinc-950/50 border-zinc-800/50 opacity-50 cursor-not-allowed grayscale' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 active:scale-95 active:bg-white group'}`}
+            style={{ borderBottom: isLocked ? '1px solid #333' : `3px solid ${color}` }}
+        >
+            {isLocked && <span className="absolute top-1 right-1 text-[8px] opacity-50">🔒</span>}
+            <span className={`relative z-10 text-xl font-black italic ${isLocked ? 'text-zinc-600' : 'text-white group-active:text-black'}`}>{label}</span>
+            {/* Score pop — floats up and fades on press */}
+            {popKey && (
+                <span
+                    key={popKey}
+                    className="absolute inset-x-0 top-1 text-center font-black text-green-400 pointer-events-none select-none"
+                    style={{ fontSize: 13, animation: 'scoreFloat 0.65s ease forwards', zIndex: 20 }}
+                >
+                    {label}
+                </span>
+            )}
+        </button>
+    );
+};
 
 const AdminBtn = ({ label, value, type, isLocked, onClick }: { label: string; value: number; type: 'danger' | 'warning'; isLocked?: boolean; onClick: (e: React.MouseEvent) => void }) => {
     const styles = {

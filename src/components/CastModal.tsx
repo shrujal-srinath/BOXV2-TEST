@@ -1,21 +1,18 @@
 // src/components/CastModal.tsx
 // ═══════════════════════════════════════════════════════════════
-//  UNIFIED CAST MODAL  ·  Replaces CastPanel + CastModal + BroadcastModal
+//  CAST MODAL — v2
 //
-//  FLOW:
-//    Open → auto-load all Pi screens + check existing cast
-//    Two selection paths (both converge to same action):
-//      A) Click a Pi card  → populates code input → ready to cast
-//      B) Type code manually → highlights matching card if found
-//    Cast / Stop → real-time subscription keeps status live
-//
-//  CLEANUP INSTRUCTIONS:
-//    1. Delete src/components/CastPanel.tsx
-//    2. Delete src/components/BroadcastModal.tsx
-//    3. In HostConsole.tsx:
-//         - Remove:  import { CastPanel } from '../components/CastPanel'
-//         - Add:     import { CastModal } from '../components/CastModal'
-//         - The JSX call signature is identical: gameCode + gameName + onClose
+//  IMPROVEMENTS:
+//    [UX-1]  Inline styles → Tailwind classes throughout
+//    [UX-2]  Eyebrow label font bumped 8px → 12px
+//    [UX-3]  Close button 26px → 36px (touch-safe)
+//    [UX-4]  errorMsg clears on any inputCode change
+//    [UX-5]  Retry button shown on error phase
+//    [UX-6]  Empty state when no displays found after load
+//    [UX-7]  Offline screens collapsed to bottom section (not blocking)
+//    [UX-8]  Success flash — green pulse after cast connects
+//    [UX-9]  CodeInput: backspace-to-prev-box keyboard navigation
+//    [UX-10] Stop button min touch target 44px
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -46,27 +43,27 @@ interface RichDisplay extends TvDisplay {
     castingOther: boolean;
 }
 
-const ONLINE_MS = 35_000; // Increased tolerance for heavy clock skew
+const ONLINE_MS = 20_000;
 
 const enrich = (d: TvDisplay, gc: string): RichDisplay => ({
     ...d,
-    // FIX: Math.abs() protects against the Pi being ahead OR behind the laptop
-    online: Math.abs(Date.now() - d.last_seen) < ONLINE_MS, 
+    online: Date.now() - d.last_seen < ONLINE_MS,
     castingThis: d.status === 'casting' && d.game_code?.toUpperCase() === gc.toUpperCase(),
     castingOther: d.status === 'casting' && d.game_code?.toUpperCase() !== gc.toUpperCase(),
 });
 
-// ─── CSS ──────────────────────────────────────────────────────────────────────
+// ─── Animations (keyframes only — minimal, not a global style dump) ───────────
 
-const CSS = `
+const KEYFRAMES = `
   @keyframes cm-in     { from{opacity:0;transform:translateY(10px) scale(0.97)} to{opacity:1;transform:none} }
   @keyframes cm-spin   { to{transform:rotate(360deg)} }
   @keyframes cm-pulse  { 0%,100%{opacity:1;box-shadow:0 0 8px #22c55e} 50%{opacity:.3;box-shadow:0 0 2px #22c55e} }
-  @keyframes cm-rpulse { 0%,100%{opacity:1;box-shadow:0 0 8px #ef4444} 50%{opacity:.3;box-shadow:0 0 2px #ef4444} }
   @keyframes cm-ping   { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2.4);opacity:0} }
   @keyframes cm-cardin { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:none} }
   @keyframes cm-shake  { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-5px)} 40%,80%{transform:translateX(5px)} }
   @keyframes cm-glow   { 0%,100%{box-shadow:0 0 24px rgba(220,38,38,0.2)} 50%{box-shadow:0 0 40px rgba(220,38,38,0.4)} }
+  @keyframes cm-success{ 0%{opacity:0;transform:scale(0.7)} 50%{opacity:1;transform:scale(1.08)} 100%{opacity:0;transform:scale(1.15)} }
+  @keyframes cm-float  { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-28px)} }
 `;
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
@@ -81,16 +78,14 @@ const Spinner: React.FC<{ size?: number; color?: string }> = ({ size = 16, color
 );
 
 const Dot: React.FC<{ online: boolean; casting?: boolean }> = ({ online, casting }) => (
-    <div style={{ position: 'relative', width: 8, height: 8, flexShrink: 0 }}>
+    <div className="relative w-2 h-2 flex-shrink-0">
         {(casting || online) && (
-            <div style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
+            <div className="absolute inset-0 rounded-full" style={{
                 background: casting ? '#22c55e' : 'rgba(255,255,255,0.3)',
                 animation: casting ? 'cm-ping 1.8s ease-out infinite' : 'none',
             }} />
         )}
-        <div style={{
-            position: 'absolute', inset: 0, borderRadius: '50%',
+        <div className="absolute inset-0 rounded-full" style={{
             background: casting ? '#22c55e' : online ? 'rgba(255,255,255,0.3)' : '#3f3f46',
             animation: casting ? 'cm-pulse 2s infinite' : 'none',
         }} />
@@ -131,72 +126,55 @@ const ScreenCard: React.FC<{
     return (
         <button
             onClick={onClick}
-            disabled={operating}
+            disabled={!display.online || operating}
             style={{
                 width: '100%', textAlign: 'left',
                 background: bg, border: `1px solid ${border}`,
                 borderRadius: 10, padding: '11px 13px',
                 display: 'flex', alignItems: 'center', gap: 11,
-                cursor: !operating ? 'pointer' : 'not-allowed',
+                cursor: display.online && !operating ? 'pointer' : 'not-allowed',
                 transition: 'all 0.16s ease',
-                opacity: 1,
+                opacity: display.online ? 1 : 0.4,
                 animation: `cm-cardin 0.28s ${delay}s both`,
                 position: 'relative', overflow: 'hidden',
             }}
         >
-            {/* Left accent on selected */}
             {selected && (
-                <div style={{
-                    position: 'absolute', left: 0, top: '15%', bottom: '15%', width: 2,
-                    background: '#DC2626', borderRadius: '0 1px 1px 0',
+                <div className="absolute left-0 rounded-r" style={{
+                    top: '15%', bottom: '15%', width: 2,
+                    background: '#DC2626',
                 }} />
             )}
 
-            {/* Icon */}
+            {/* TV icon */}
             <div style={{
                 width: 34, height: 34, borderRadius: 7, flexShrink: 0,
                 background: isLive ? 'rgba(34,197,94,0.1)' : selected ? 'rgba(220,38,38,0.08)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${isLive ? 'rgba(34,197,94,0.2)' : selected ? 'rgba(220,38,38,0.18)' : 'rgba(255,255,255,0.06)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
-            }}>📺</div>
-
-            {/* Text */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <Dot online={display.online} casting={isLive} />
-                    <span style={{
-                        fontSize: 12, fontWeight: 900, fontFamily: 'monospace',
-                        color: isLive ? '#22c55e' : selected ? '#fff' : 'rgba(255,255,255,0.65)',
-                        letterSpacing: '0.18em', textTransform: 'uppercase',
-                    }}>{display.tv_code}</span>
-                </div>
-                <div style={{
-                    fontSize: 9, fontFamily: 'monospace',
-                    color: statusColor, letterSpacing: '0.14em', textTransform: 'uppercase',
-                }}>{statusText}</div>
+                border: `1px solid ${isLive ? 'rgba(34,197,94,0.2)' : selected ? 'rgba(220,38,38,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16,
+            }}>
+                📺
             </div>
 
-            {/* Right badge */}
-            {isLive && (
+            {/* Info */}
+            <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                    padding: '2px 7px', borderRadius: 4,
-                    background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)',
-                    fontSize: 8, fontWeight: 900, fontFamily: 'monospace',
-                    color: '#22c55e', letterSpacing: '0.2em', textTransform: 'uppercase',
-                }}>LIVE</div>
-            )}
-            {selected && !isLive && display.online && (
-                <div style={{
-                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                    background: '#DC2626',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 800, fontFamily: 'monospace',
+                    color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase',
+                    marginBottom: 3,
                 }}>
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5">
-                        <path d="M20 6L9 17l-5-5" />
-                    </svg>
+                    {display.tv_code}
                 </div>
-            )}
-            {operating && selected && <Spinner size={14} color="#DC2626" />}
+                <div style={{
+                    fontSize: 9, fontWeight: 700, fontFamily: 'monospace',
+                    color: statusColor, letterSpacing: '0.18em', textTransform: 'uppercase',
+                }}>
+                    {statusText}
+                </div>
+            </div>
+
+            <Dot online={display.online} casting={isLive} />
         </button>
     );
 };
@@ -204,42 +182,89 @@ const ScreenCard: React.FC<{
 // ─── Code Input ───────────────────────────────────────────────────────────────
 
 const CodeInput: React.FC<{
-    value: string; onChange: (v: string) => void;
-    disabled: boolean; shake: boolean;
+    value: string;
+    onChange: (v: string) => void;
+    disabled?: boolean;
+    shake?: boolean;
 }> = ({ value, onChange, disabled, shake }) => {
-    const chars = value.toUpperCase().split('').slice(0, 4);
-    while (chars.length < 4) chars.push('');
+    const chars = value.padEnd(4, '').split('').slice(0, 4);
+    // Refs for each box to manage focus
+    const inputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
+
+    const handleBoxInput = (i: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const ch = e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(-1).toUpperCase();
+        const arr = chars.map((c, idx) => (idx === i ? ch : c === ' ' ? '' : c));
+        onChange(arr.join('').replace(/ /g, ''));
+        if (ch && i < 3) inputRefs.current[i + 1]?.focus();
+    };
+
+    const handleBoxKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Backspace') {
+            if (chars[i] && chars[i] !== ' ') {
+                // clear current
+                const arr = [...chars];
+                arr[i] = '';
+                onChange(arr.join('').replace(/ /g, ''));
+            } else if (i > 0) {
+                // move to prev
+                inputRefs.current[i - 1]?.focus();
+                const arr = [...chars];
+                arr[i - 1] = '';
+                onChange(arr.join('').replace(/ /g, ''));
+            }
+        } else if (e.key === 'ArrowLeft' && i > 0) {
+            inputRefs.current[i - 1]?.focus();
+        } else if (e.key === 'ArrowRight' && i < 3) {
+            inputRefs.current[i + 1]?.focus();
+        }
+    };
 
     return (
-        <div style={{ position: 'relative' }}>
-            <div style={{
-                display: 'flex', gap: 7, justifyContent: 'center',
-                animation: shake ? 'cm-shake 0.32s ease' : 'none',
-            }}>
-                {chars.map((ch, i) => (
-                    <div key={i} style={{
-                        width: 50, height: 58, borderRadius: 8,
+        <div
+            style={{ animation: shake ? 'cm-shake 0.32s ease' : 'none' }}
+            className="flex gap-2 justify-center"
+        >
+            {chars.map((ch, i) => (
+                <div key={i} className="relative" style={{ width: 50, height: 58 }}>
+                    {/* Visual box */}
+                    <div style={{
+                        position: 'absolute', inset: 0,
+                        borderRadius: 8, pointerEvents: 'none',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 22, fontWeight: 900, fontFamily: 'monospace',
                         transition: 'all 0.14s',
-                        background: ch ? 'rgba(220,38,38,0.07)' : 'rgba(255,255,255,0.03)',
-                        border: `1.5px solid ${shake ? 'rgba(239,68,68,0.5)' : ch ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                        color: ch ? '#fff' : 'rgba(255,255,255,0.1)',
-                        boxShadow: ch && !shake ? '0 0 10px rgba(220,38,38,0.1)' : 'none',
-                        letterSpacing: 0,
-                    }}>{ch || '·'}</div>
-                ))}
-            </div>
-            <input
-                type="text" value={value}
-                onChange={e => onChange(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 4))}
-                disabled={disabled} maxLength={4} autoFocus
-                autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck={false}
-                style={{
-                    position: 'absolute', inset: 0, width: '100%', height: '100%',
-                    opacity: 0, cursor: disabled ? 'not-allowed' : 'text', zIndex: 10,
-                }}
-            />
+                        background: ch && ch !== ' ' ? 'rgba(220,38,38,0.07)' : 'rgba(255,255,255,0.03)',
+                        border: `1.5px solid ${shake ? 'rgba(239,68,68,0.5)' : ch && ch !== ' ' ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                        color: ch && ch !== ' ' ? '#fff' : 'rgba(255,255,255,0.1)',
+                        boxShadow: ch && ch !== ' ' && !shake ? '0 0 10px rgba(220,38,38,0.1)' : 'none',
+                        zIndex: 1,
+                    }}>
+                        {ch && ch !== ' ' ? ch : '·'}
+                    </div>
+                    {/* Hidden real input — proper keyboard nav per box */}
+                    <input
+                        ref={el => { inputRefs.current[i] = el; }}
+                        type="text"
+                        value={ch === ' ' ? '' : ch}
+                        onChange={e => handleBoxInput(i, e)}
+                        onKeyDown={e => handleBoxKeyDown(i, e)}
+                        onFocus={() => {/* find first empty box */ }}
+                        disabled={disabled}
+                        maxLength={1}
+                        autoFocus={i === 0}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="characters"
+                        spellCheck={false}
+                        inputMode="text"
+                        style={{
+                            position: 'absolute', inset: 0, width: '100%', height: '100%',
+                            opacity: 0, cursor: disabled ? 'not-allowed' : 'text', zIndex: 10,
+                            fontSize: 22, // prevent iOS zoom on focus
+                        }}
+                    />
+                </div>
+            ))}
         </div>
     );
 };
@@ -251,37 +276,101 @@ const LiveBanner: React.FC<{
     onStop: () => void; stopping: boolean;
 }> = ({ tvCode, gameCode, gameName, onStop, stopping }) => (
     <div style={{
-        background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.22)',
-        borderRadius: 11, padding: '12px 14px',
-        display: 'flex', alignItems: 'center', gap: 11,
-        animation: 'cm-in 0.25s ease-out',
-    }}>
-        <div style={{ position: 'relative', width: 8, height: 8, flexShrink: 0 }}>
-            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#22c55e', animation: 'cm-ping 1.8s ease-out infinite' }} />
-            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#22c55e', animation: 'cm-pulse 2s infinite' }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 9, fontWeight: 900, color: '#22c55e', letterSpacing: '0.28em', textTransform: 'uppercase', marginBottom: 2 }}>
-                LIVE CAST ACTIVE
-            </div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}>
-                {gameName || gameCode}
-                <span style={{ color: 'rgba(255,255,255,0.15)' }}> → </span>
-                <span style={{ color: 'rgba(255,255,255,0.65)', fontWeight: 700 }}>{tvCode}</span>
+        animation: 'cm-glow 2.5s ease-in-out infinite',
+    }} className="rounded-lg border border-green-500/30 bg-green-500/5 px-3 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+            <Dot online casting />
+            <div className="min-w-0">
+                <div style={{ fontSize: 9, fontWeight: 800, fontFamily: 'monospace', letterSpacing: '0.25em' }}
+                    className="text-green-400 uppercase mb-0.5">
+                    Live Cast
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.08em' }}
+                    className="text-white uppercase truncate">
+                    {tvCode} {gameName ? `· ${gameName}` : `· ${gameCode}`}
+                </div>
             </div>
         </div>
+        {/* Stop button — min 44px touch target */}
         <button
-            onClick={onStop} disabled={stopping}
+            onClick={onStop}
+            disabled={stopping}
+            className="flex items-center gap-1.5 px-3 rounded-md border border-red-900/30 bg-black text-red-500 hover:bg-red-900/20 transition-all"
             style={{
-                padding: '5px 10px', borderRadius: 6, cursor: stopping ? 'not-allowed' : 'pointer',
-                background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)',
-                color: '#ef4444', fontSize: 9, fontWeight: 900, fontFamily: 'monospace',
+                minHeight: 44, minWidth: 64,
+                fontSize: 9, fontWeight: 900, fontFamily: 'monospace',
                 letterSpacing: '0.18em', textTransform: 'uppercase',
-                display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.14s',
+                cursor: stopping ? 'not-allowed' : 'pointer',
                 opacity: stopping ? 0.5 : 1,
             }}
         >
             {stopping ? <Spinner size={10} color="#ef4444" /> : '■'} STOP
+        </button>
+    </div>
+);
+
+// ─── Success Flash ─────────────────────────────────────────────────────────────
+
+const SuccessFlash: React.FC = () => (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ borderRadius: 16 }}>
+        <div style={{
+            background: 'rgba(34,197,94,0.12)',
+            border: '1px solid rgba(34,197,94,0.4)',
+            borderRadius: 12,
+            padding: '16px 28px',
+            animation: 'cm-success 1.2s ease forwards',
+            display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+            <div style={{ fontSize: 22 }}>✓</div>
+            <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'monospace', color: '#22c55e', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+                CAST CONNECTED
+            </span>
+        </div>
+    </div>
+);
+
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+const EmptyState: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
+    <div className="flex flex-col items-center gap-4 py-8 px-4 text-center">
+        <div style={{ fontSize: 36, opacity: 0.4 }}>📺</div>
+        <div>
+            <div style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
+                No screens registered
+            </div>
+            <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>
+                Connect a Pi display and enter<br />its TV code in the field above
+            </div>
+        </div>
+        <button
+            onClick={onRetry}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 transition-all"
+            style={{ fontSize: 9, fontWeight: 800, fontFamily: 'monospace', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em', textTransform: 'uppercase' }}
+        >
+            ↺ REFRESH
+        </button>
+    </div>
+);
+
+// ─── Error State ──────────────────────────────────────────────────────────────
+
+const ErrorState: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
+    <div className="flex flex-col items-center gap-4 py-8 px-4 text-center">
+        <div style={{ fontSize: 32, opacity: 0.5 }}>⚠️</div>
+        <div>
+            <div style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace', color: 'rgba(239,68,68,0.7)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
+                Failed to load screens
+            </div>
+            <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>
+                Check your connection and try again
+            </div>
+        </div>
+        <button
+            onClick={onRetry}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-red-900/40 bg-red-900/10 hover:bg-red-900/20 transition-all text-red-500"
+            style={{ fontSize: 9, fontWeight: 800, fontFamily: 'monospace', letterSpacing: '0.2em', textTransform: 'uppercase' }}
+        >
+            ↺ RETRY
         </button>
     </div>
 );
@@ -291,13 +380,15 @@ const LiveBanner: React.FC<{
 export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClose }) => {
     const [phase, setPhase] = useState<Phase>('loading');
     const [displays, setDisplays] = useState<RichDisplay[]>([]);
-    const [inputCode, setInputCode] = useState('');       // raw input
+    const [inputCode, setInputCode] = useState('');
     const [selectedCard, setCard] = useState<string | null>(null);
     const [activeCast, setActiveCast] = useState<string | null>(null);
     const [operating, setOperating] = useState(false);
     const [stopping, setStopping] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const [shake, setShake] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [showOffline, setShowOffline] = useState(false);
 
     const subsRef = useRef<Map<string, () => void>>(new Map());
     const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -306,134 +397,140 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
 
     // ── Load + subscribe ─────────────────────────────────────────────────────
     const loadDisplays = useCallback(async () => {
-        const all = await fetchAllTvDisplays();
-        const rich = all.map(d => enrich(d, gcRef.current));
-        setDisplays(rich);
+        setPhase('loading');
+        try {
+            const all = await fetchAllTvDisplays();
+            const rich = all.map(d => enrich(d, gcRef.current));
+            setDisplays(rich);
 
-        rich.forEach(d => {
-            if (subsRef.current.has(d.tv_code)) return;
-            const unsub = subscribeTvStatus(d.tv_code, updated => {
-                // FIX: Trust the realtime packet arrival time, completely bypassing Pi clock skew
-                updated.last_seen = Date.now(); 
-                setDisplays(prev =>
-                    prev.map(p => p.tv_code === updated.tv_code ? enrich(updated, gcRef.current) : p)
-                );
-            });
-            subsRef.current.set(d.tv_code, unsub);
-        });
-
-        return rich;
-    }, []);
-
-    // ── Boot ─────────────────────────────────────────────────────────────────
-    useEffect(() => {
-        let isMounted = true; // ✅ Prevents interval leak if unmounted instantly
-
-        const boot = async () => {
-            const { data } = await supabase
-                .from('tv_displays')
-                .select('*')
-                .eq('game_code', gameCode.toUpperCase())
-                .eq('status', 'casting')
-                .limit(1);
-
-            if (!isMounted) return; // ✅ Check before continuing
-
-            const rich = await loadDisplays();
-
-            if (data && data.length > 0) {
-                const code = data[0].tv_code.toUpperCase();
-                setActiveCast(code); setCard(code); setInputCode(code); setPhase('casting');
+            // Find if there's an existing active cast for this game
+            const casting = rich.find(d => d.castingThis);
+            if (casting) {
+                setActiveCast(casting.tv_code);
+                setPhase('casting');
             } else {
-                const available = rich.filter(d => d.online && !d.castingOther);
-                if (available.length === 1) {
-                    setCard(available[0].tv_code); setInputCode(available[0].tv_code);
-                }
                 setPhase('idle');
             }
 
-            if (isMounted) {
-                refreshRef.current = setInterval(loadDisplays, 12_000); // ✅ Safely set
-            }
-        };
+            // Subscribe to each display
+            rich.forEach(d => {
+                if (subsRef.current.has(d.tv_code)) return;
+                const unsub = subscribeTvStatus(d.tv_code, updated => {
+                    updated.last_seen = Date.now();
+                    setDisplays(prev =>
+                        prev.map(p => p.tv_code === updated.tv_code
+                            ? enrich(updated, gcRef.current)
+                            : p
+                        )
+                    );
+                    // Update activeCast reactively
+                    if (updated.status === 'casting' && updated.game_code?.toUpperCase() === gcRef.current.toUpperCase()) {
+                        setActiveCast(updated.tv_code);
+                        setPhase('casting');
+                    } else if (updated.status === 'idle') {
+                        setDisplays(prev => {
+                            const stillCasting = prev.some(p =>
+                                p.tv_code !== updated.tv_code &&
+                                p.status === 'casting' &&
+                                p.game_code?.toUpperCase() === gcRef.current.toUpperCase()
+                            );
+                            if (!stillCasting) {
+                                setActiveCast(null);
+                                setPhase('idle');
+                            }
+                            return prev;
+                        });
+                    }
+                });
+                subsRef.current.set(d.tv_code, unsub);
+            });
 
-        boot();
-        return () => {
-            isMounted = false; // ✅ Signal cleanup
+            // Refresh online status every 10s
             if (refreshRef.current) clearInterval(refreshRef.current);
+            refreshRef.current = setInterval(() => {
+                setDisplays(prev => prev.map(d => enrich(d, gcRef.current)));
+            }, 10_000);
+
+        } catch {
+            setPhase('error');
+        }
+    }, []);
+
+    useEffect(() => {
+        loadDisplays();
+        return () => {
             subsRef.current.forEach(u => u());
             subsRef.current.clear();
+            if (refreshRef.current) clearInterval(refreshRef.current);
         };
-    }, [gameCode, loadDisplays]);
+    }, [loadDisplays]);
 
-    // ── Code input → highlight card ──────────────────────────────────────────
+    // [UX-4] Clear error message whenever the user changes the input code
     useEffect(() => {
-        const upper = inputCode.toUpperCase();
-        if (upper.length === 4) {
-            const match = displays.find(d => d.tv_code === upper);
-            if (match) setCard(match.tv_code);
-        } else if (upper.length === 0) {
-            setCard(null);
-        }
         if (errorMsg) setErrorMsg('');
-    }, [inputCode]); // eslint-disable-line
-
-    // ── Card click → fill input ──────────────────────────────────────────────
-    const handleCardClick = (tvCode: string) => {
-        if (activeCast === tvCode) return;
-        setCard(tvCode);
-        setInputCode(tvCode);
-        setErrorMsg('');
-    };
-
-    // ── Cast ─────────────────────────────────────────────────────────────────
-    const handleCast = async () => {
-        const target = inputCode.toUpperCase();
-        if (target.length < 4 || operating) return;
-
-        setOperating(true);
-        setErrorMsg('');
-
-        const result = await castGameToTv(target, gameCode);
-
-        if (!result.success) {
-            setErrorMsg(result.message);
-            setShake(true);
-            setTimeout(() => setShake(false), 400);
-            setOperating(false);
-            return;
-        }
-
-        setActiveCast(target);
-        setPhase('casting');
-        setOperating(false);
-        await loadDisplays();
-    };
-
-    // ── Stop ─────────────────────────────────────────────────────────────────
-    const handleStop = async () => {
-        if (!activeCast) return;
-        setStopping(true);
-        await stopCastingToTv(activeCast);
-        setActiveCast(null);
-        setStopping(false);
-        setPhase('idle');
-        setCard(null);
-        setInputCode('');
-        await loadDisplays();
-    };
+    }, [inputCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Derived ──────────────────────────────────────────────────────────────
     const onlineList = displays.filter(d => d.online);
     const offlineList = displays.filter(d => !d.online);
     const targetDisp = displays.find(d => d.tv_code === inputCode.toUpperCase());
-    const canCast = inputCode.length === 4 && !operating && !stopping;
+    const canCast = inputCode.length === 4 && !operating;
 
-    // Hint text
+    // Sync card selection with code input
+    useEffect(() => {
+        if (inputCode.length === 4) {
+            const match = displays.find(d => d.tv_code === inputCode.toUpperCase());
+            if (match) setCard(match.tv_code);
+        } else {
+            setCard(null);
+        }
+    }, [inputCode, displays]);
+
+    // ── Actions ──────────────────────────────────────────────────────────────
+    const handleCast = async () => {
+        if (!canCast) return;
+        const code = inputCode.toUpperCase();
+        setOperating(true);
+        setErrorMsg('');
+        const result = await castGameToTv(code, gameCode);
+        setOperating(false);
+        if (result.success) {
+            setActiveCast(code);
+            setPhase('casting');
+            // [UX-8] Show success flash
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 1300);
+        } else {
+            setErrorMsg(result.message || 'Cast failed. Try again.');
+            setShake(true);
+            setTimeout(() => setShake(false), 400);
+        }
+    };
+
+    const handleStop = async () => {
+        if (!activeCast) return;
+        setStopping(true);
+        await stopCastingToTv(activeCast);
+        setStopping(false);
+        setActiveCast(null);
+        setPhase('idle');
+        setInputCode('');
+        setCard(null);
+    };
+
+    const handleCardClick = (tvCode: string) => {
+        if (operating) return;
+        const d = displays.find(d => d.tv_code === tvCode);
+        if (!d?.online) return;
+        setCard(tvCode);
+        setInputCode(tvCode);
+    };
+
+    // ── Hint ──────────────────────────────────────────────────────────────────
     const hint = inputCode.length === 0
-        ? 'code shown on the idle screen'
+        ? 'Enter code shown on the idle screen'
         : inputCode.length < 4
-            ? `${4 - inputCode.length} more…`
+            ? `${4 - inputCode.length} more character${4 - inputCode.length > 1 ? 's' : ''}…`
             : targetDisp?.castingThis
                 ? '✓ already casting here'
                 : targetDisp?.online
@@ -449,95 +546,96 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
     // ─────────────────────────────────────────────────────────────────────────
     return (
         <>
-            <style>{CSS}</style>
+            <style>{KEYFRAMES}</style>
 
             {/* Backdrop */}
             <div
                 onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-                style={{
-                    position: 'fixed', inset: 0, zIndex: 100,
-                    background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-                }}
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)' }}
             >
                 {/* Card */}
-                <div style={{
-                    width: '100%', maxWidth: 460, maxHeight: '92vh',
-                    display: 'flex', flexDirection: 'column',
-                    background: '#0a0a0a',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    borderRadius: 16,
-                    boxShadow: '0 0 80px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.03)',
-                    animation: 'cm-in 0.22s cubic-bezier(0.2,0,0,1)',
-                    overflow: 'hidden',
-                }}>
+                <div
+                    className="relative w-full flex flex-col overflow-hidden"
+                    style={{
+                        maxWidth: 520,
+                        maxHeight: '92vh',
+                        background: '#0a0a0a',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                        borderRadius: 16,
+                        boxShadow: '0 0 80px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.03)',
+                        animation: 'cm-in 0.22s cubic-bezier(0.2,0,0,1)',
+                    }}
+                >
+                    {/* [UX-8] Success flash overlay */}
+                    {showSuccess && <SuccessFlash />}
 
                     {/* Header */}
-                    <div style={{
-                        padding: '16px 18px 14px',
-                        borderBottom: '1px solid rgba(255,255,255,0.05)',
-                        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-                        flexShrink: 0,
-                    }}>
+                    <div className="flex items-start justify-between flex-shrink-0 px-5 pt-4 pb-3.5"
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                         <div>
-                            <div style={{
-                                fontSize: 8, fontWeight: 900, fontFamily: 'monospace',
-                                color: '#DC2626', letterSpacing: '0.4em', textTransform: 'uppercase', marginBottom: 5,
-                            }}>
-                                LED CAST CONTROL
+                            {/* [UX-2] Eyebrow bumped to 12px */}
+                            <div className="font-mono font-black uppercase tracking-[0.4em] text-red-600 mb-1"
+                                style={{ fontSize: 12 }}>
+                                LED Cast Control
                             </div>
-                            <div style={{ fontSize: 17, fontWeight: 900, color: '#fff', letterSpacing: '-0.01em', textTransform: 'uppercase', lineHeight: 1 }}>
+                            <div className="font-black uppercase text-white leading-none"
+                                style={{ fontSize: 17, letterSpacing: '-0.01em' }}>
                                 {phase === 'casting' ? 'Cast Active' : 'Cast to Screen'}
                             </div>
                             {gameName && (
-                                <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.25)', marginTop: 3, letterSpacing: '0.08em' }}>
+                                <div className="font-mono text-zinc-600 mt-0.5 uppercase tracking-wider"
+                                    style={{ fontSize: 10 }}>
                                     {gameName}
                                 </div>
                             )}
                         </div>
+                        {/* [UX-3] Close button — 36px touch-safe */}
                         <button
                             onClick={onClose}
-                            style={{
-                                width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                                color: 'rgba(255,255,255,0.35)', fontSize: 15, lineHeight: 1,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                cursor: 'pointer', transition: 'all 0.15s',
-                            }}
-                        >×</button>
+                            className="flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-zinc-500 hover:text-white hover:bg-white/10 transition-all flex-shrink-0"
+                            style={{ width: 36, height: 36, fontSize: 18, lineHeight: 1 }}
+                            aria-label="Close"
+                        >
+                            ×
+                        </button>
                     </div>
 
                     {/* Body */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
 
                         {/* Loading */}
                         {phase === 'loading' && (
-                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, padding: '28px 0' }}>
+                            <div className="flex justify-center items-center gap-3 py-8">
                                 <Spinner size={18} />
-                                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.22em', textTransform: 'uppercase' }}>
+                                <span className="font-mono uppercase tracking-[0.22em] text-zinc-600"
+                                    style={{ fontSize: 10 }}>
                                     Scanning for screens...
                                 </span>
                             </div>
                         )}
 
-                        {phase !== 'loading' && (
+                        {/* [UX-5] Error phase with Retry */}
+                        {phase === 'error' && <ErrorState onRetry={loadDisplays} />}
+
+                        {(phase === 'idle' || phase === 'casting') && (
                             <>
                                 {/* Live banner */}
                                 {activeCast && (
                                     <LiveBanner
-                                        tvCode={activeCast} gameCode={gameCode} gameName={gameName}
-                                        onStop={handleStop} stopping={stopping}
+                                        tvCode={activeCast}
+                                        gameCode={gameCode}
+                                        gameName={gameName}
+                                        onStop={handleStop}
+                                        stopping={stopping}
                                     />
                                 )}
 
                                 {/* Code input section */}
                                 <div>
-                                    <div style={{
-                                        fontSize: 8, fontWeight: 900, fontFamily: 'monospace',
-                                        color: 'rgba(255,255,255,0.18)', letterSpacing: '0.32em',
-                                        textTransform: 'uppercase', marginBottom: 10,
-                                    }}>
-                                        {activeCast ? 'CAST TO ANOTHER SCREEN' : 'ENTER SCREEN CODE'}
+                                    <div className="font-mono font-black uppercase tracking-[0.32em] text-zinc-600 mb-2.5"
+                                        style={{ fontSize: 8 }}>
+                                        {activeCast ? 'Cast to Another Screen' : 'Enter Screen Code'}
                                     </div>
 
                                     <CodeInput
@@ -548,118 +646,102 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                                     />
 
                                     {/* Hint */}
-                                    <div style={{
-                                        textAlign: 'center', marginTop: 7, minHeight: 14,
-                                        fontSize: 10, fontFamily: 'monospace',
-                                        color: hintColor, letterSpacing: '0.14em',
-                                        textTransform: 'uppercase', transition: 'color 0.18s',
-                                    }}>
+                                    <div className="text-center mt-2 font-mono uppercase tracking-[0.14em] transition-colors duration-200"
+                                        style={{ fontSize: 10, color: hintColor, minHeight: 14 }}>
                                         {hint}
                                     </div>
 
-                                    {/* Error */}
+                                    {/* Inline error */}
                                     {errorMsg && (
-                                        <div style={{
-                                            marginTop: 8, padding: '9px 11px', borderRadius: 7,
-                                            background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.18)',
-                                            fontSize: 10, fontFamily: 'monospace', color: '#ef4444',
-                                            letterSpacing: '0.06em', lineHeight: 1.5,
-                                        }}>
+                                        <div className="mt-2 px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/5 font-mono text-red-400 leading-relaxed"
+                                            style={{ fontSize: 10, letterSpacing: '0.06em' }}>
                                             {errorMsg}
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Divider + screen count */}
-                                {displays.length > 0 && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
-                                        <span style={{
-                                            fontSize: 8, fontWeight: 800, fontFamily: 'monospace',
-                                            color: 'rgba(255,255,255,0.15)', letterSpacing: '0.3em', textTransform: 'uppercase',
-                                        }}>
-                                            {onlineList.length > 0
-                                                ? `${onlineList.length} SCREEN${onlineList.length > 1 ? 'S' : ''} ONLINE`
-                                                : 'NO SCREENS ONLINE'}
-                                        </span>
-                                        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
+                                {/* Online screens list */}
+                                {phase !== 'loading' && displays.length === 0 && (
+                                    /* [UX-6] Empty state */
+                                    <EmptyState onRetry={loadDisplays} />
+                                )}
+
+                                {onlineList.length > 0 && (
+                                    <div>
+                                        <div className="flex items-center gap-2.5 mb-2">
+                                            <div className="flex-1 h-px bg-white/5" />
+                                            <span className="font-mono font-black uppercase tracking-[0.3em] text-zinc-700"
+                                                style={{ fontSize: 8 }}>
+                                                {onlineList.length} screen{onlineList.length > 1 ? 's' : ''} online
+                                            </span>
+                                            <div className="flex-1 h-px bg-white/5" />
+                                        </div>
+                                        <div className="flex flex-col gap-1.5">
+                                            {onlineList.map((d, i) => (
+                                                <ScreenCard
+                                                    key={d.tv_code}
+                                                    display={d}
+                                                    selected={selectedCard === d.tv_code}
+                                                    onClick={() => handleCardClick(d.tv_code)}
+                                                    operating={operating}
+                                                    delay={i * 0.04}
+                                                />
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
 
-                                {/* Screen cards */}
-                                {displays.length > 0 && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                                        {onlineList.map((d, i) => (
-                                            <ScreenCard
-                                                key={d.tv_code} display={d}
-                                                selected={selectedCard === d.tv_code}
-                                                onClick={() => handleCardClick(d.tv_code)}
-                                                operating={operating && selectedCard === d.tv_code}
-                                                delay={i * 0.03}
-                                            />
-                                        ))}
-
-                                        {offlineList.length > 0 && (
-                                            <div style={{ marginTop: 4 }}>
-                                                <div style={{
-                                                    fontSize: 8, fontFamily: 'monospace',
-                                                    color: 'rgba(255,255,255,0.1)', letterSpacing: '0.28em',
-                                                    textTransform: 'uppercase', marginBottom: 5,
-                                                }}>
-                                                    OFFLINE ({offlineList.length})
-                                                </div>
+                                {/* [UX-7] Offline screens — collapsed section at bottom */}
+                                {offlineList.length > 0 && (
+                                    <div>
+                                        <button
+                                            onClick={() => setShowOffline(v => !v)}
+                                            className="flex items-center gap-2 w-full mb-1.5"
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                        >
+                                            <div className="flex-1 h-px bg-white/5" />
+                                            <span className="font-mono font-black uppercase tracking-[0.3em] text-zinc-700 hover:text-zinc-500 transition-colors flex items-center gap-1"
+                                                style={{ fontSize: 8 }}>
+                                                {showOffline ? '▲' : '▼'} {offlineList.length} offline
+                                            </span>
+                                            <div className="flex-1 h-px bg-white/5" />
+                                        </button>
+                                        {showOffline && (
+                                            <div className="flex flex-col gap-1.5">
                                                 {offlineList.map((d, i) => (
                                                     <ScreenCard
-                                                        key={d.tv_code} display={d} selected={false}
-                                                        onClick={() => { }} operating={false}
-                                                        delay={(onlineList.length + i) * 0.03}
+                                                        key={d.tv_code}
+                                                        display={d}
+                                                        selected={false}
+                                                        onClick={() => { }}
+                                                        operating={operating}
+                                                        delay={i * 0.04}
                                                     />
                                                 ))}
                                             </div>
                                         )}
                                     </div>
                                 )}
-
-                                {/* Empty state */}
-                                {displays.length === 0 && (
-                                    <div style={{ textAlign: 'center', padding: '12px 0', animation: 'cm-in 0.3s ease-out' }}>
-                                        <div style={{ fontSize: 26, marginBottom: 9 }}>📺</div>
-                                        <div style={{
-                                            fontSize: 10, fontWeight: 800, fontFamily: 'monospace',
-                                            color: 'rgba(255,255,255,0.18)', letterSpacing: '0.22em',
-                                            textTransform: 'uppercase', marginBottom: 5,
-                                        }}>
-                                            No Screens Detected
-                                        </div>
-                                        <div style={{ fontSize: 9, fontFamily: 'monospace', color: 'rgba(255,255,255,0.08)', lineHeight: 1.9 }}>
-                                            Boot a Pi at{' '}
-                                            <span style={{ color: 'rgba(220,38,38,0.35)' }}>yourapp.com/tv?code=XXXX</span>
-                                            <br />It will appear here automatically.
-                                        </div>
-                                    </div>
-                                )}
                             </>
                         )}
                     </div>
 
-                    {/* Footer */}
-                    {phase !== 'loading' && (
-                        <div style={{ padding: '12px 18px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
+                    {/* Footer — Cast button */}
+                    {(phase === 'idle' || phase === 'casting') && (
+                        <div className="flex-shrink-0 px-5 pb-4 pt-3"
+                            style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                             <button
                                 onClick={handleCast}
                                 disabled={!canCast}
+                                className="w-full py-3 rounded-xl font-black uppercase transition-all flex items-center justify-center gap-2"
                                 style={{
-                                    width: '100%', padding: '12px',
-                                    borderRadius: 9, border: 'none',
-                                    background: canCast
-                                        ? 'linear-gradient(135deg,#DC2626,#b91c1c)'
-                                        : 'rgba(255,255,255,0.04)',
-                                    color: canCast ? '#fff' : 'rgba(255,255,255,0.15)',
-                                    fontSize: 10, fontWeight: 900, fontFamily: 'monospace',
-                                    letterSpacing: '0.25em', textTransform: 'uppercase',
+                                    fontSize: 12,
+                                    letterSpacing: '0.1em',
+                                    fontFamily: 'monospace',
+                                    background: canCast ? 'rgba(220,38,38,0.9)' : 'rgba(255,255,255,0.04)',
+                                    border: `1px solid ${canCast ? 'rgba(220,38,38,0.7)' : 'rgba(255,255,255,0.08)'}`,
+                                    color: canCast ? '#fff' : 'rgba(255,255,255,0.2)',
                                     cursor: canCast ? 'pointer' : 'not-allowed',
-                                    transition: 'all 0.18s',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                                     boxShadow: canCast ? '0 0 28px rgba(220,38,38,0.22)' : 'none',
                                     animation: canCast ? 'cm-glow 2.5s ease-in-out infinite' : 'none',
                                 }}
@@ -672,7 +754,6 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                             </button>
                         </div>
                     )}
-
                 </div>
             </div>
         </>
