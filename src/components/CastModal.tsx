@@ -21,7 +21,9 @@ import {
     castGameToTv,
     stopCastingToTv,
     subscribeTvStatus,
+    openCastChannel,
     type TvDisplay,
+    type CastChannel,
 } from '../services/tvDisplayService';
 import { supabase } from '../services/supabase';
 
@@ -391,6 +393,7 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
     const [showOffline, setShowOffline] = useState(false);
 
     const subsRef = useRef<Map<string, () => void>>(new Map());
+    const bcastRef = useRef<Map<string, CastChannel>>(new Map());
     const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const gcRef = useRef(gameCode);
     gcRef.current = gameCode;
@@ -412,9 +415,17 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                 setPhase('idle');
             }
 
-            // Subscribe to each display
+            // Subscribe to each display — Postgres Changes (backup, ~200–1500ms)
+            // AND Broadcast channel (instant, ~50ms)
             rich.forEach(d => {
                 if (subsRef.current.has(d.tv_code)) return;
+
+                // Open broadcast channel NOW so it's SUBSCRIBED by the time user clicks Cast
+                if (!bcastRef.current.has(d.tv_code)) {
+                    const bch = openCastChannel(d.tv_code);
+                    bcastRef.current.set(d.tv_code, bch);
+                }
+
                 const unsub = subscribeTvStatus(d.tv_code, updated => {
                     updated.last_seen = Date.now();
                     setDisplays(prev =>
@@ -461,6 +472,8 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
         return () => {
             subsRef.current.forEach(u => u());
             subsRef.current.clear();
+            bcastRef.current.forEach(ch => ch.unsub());
+            bcastRef.current.clear();
             if (refreshRef.current) clearInterval(refreshRef.current);
         };
     }, [loadDisplays]);
@@ -492,14 +505,36 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
         const code = inputCode.toUpperCase();
         setOperating(true);
         setErrorMsg('');
+
+        // DB write — source of truth (game IS in DB when this resolves)
         const result = await castGameToTv(code, gameCode);
         setOperating(false);
+
         if (result.success) {
+            // [OPTIMISTIC UPDATE] Don't wait for Realtime echo — update immediately
+            setDisplays(prev => prev.map(d =>
+                d.tv_code === code
+                    ? { ...d, status: 'casting' as const, game_code: gameCode, castingThis: true, castingOther: false }
+                    : d
+            ));
             setActiveCast(code);
             setPhase('casting');
             // [UX-8] Show success flash
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 1300);
+
+            // [BROADCAST] Send instant signal to Pi AFTER DB write succeeds
+            // Game is guaranteed in DB — no race condition
+            const bch = bcastRef.current.get(code);
+            if (bch) {
+                bch.send('cast', gameCode);
+            } else {
+                // TV was manually typed (not in list) — open a temp channel
+                const tempCh = openCastChannel(code);
+                bcastRef.current.set(code, tempCh);
+                // Small delay to allow SUBSCRIBED before send (queued internally anyway)
+                setTimeout(() => tempCh.send('cast', gameCode), 100);
+            }
         } else {
             setErrorMsg(result.message || 'Cast failed. Try again.');
             setShake(true);
@@ -510,8 +545,20 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
     const handleStop = async () => {
         if (!activeCast) return;
         setStopping(true);
+
+        // Send stop broadcast immediately (before DB write, Pi should stop ASAP)
+        const bch = bcastRef.current.get(activeCast);
+        if (bch) bch.send('stop');
+
         await stopCastingToTv(activeCast);
         setStopping(false);
+
+        // Optimistic update
+        setDisplays(prev => prev.map(d =>
+            d.tv_code === activeCast
+                ? { ...d, status: 'idle' as const, game_code: null, castingThis: false }
+                : d
+        ));
         setActiveCast(null);
         setPhase('idle');
         setInputCode('');
@@ -660,9 +707,8 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                                     )}
                                 </div>
 
-                                {/* Online screens list */}
-                                {phase !== 'loading' && displays.length === 0 && (
-                                    /* [UX-6] Empty state */
+                                {/* [UX-6] Empty state — only shown when idle/casting with no displays */}
+                                {displays.length === 0 && (
                                     <EmptyState onRetry={loadDisplays} />
                                 )}
 

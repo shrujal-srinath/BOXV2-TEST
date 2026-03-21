@@ -141,19 +141,27 @@ export const subscribeToGame = (
         return () => { };
     }
 
-    // Initial fetch — game is stored in the `data` JSONB column
-    supabase
-        .from('games')
-        .select('data')
-        .eq('code', code)
-        .single()
-        .then(({ data, error }) => {
-            if (error || !data) {
-                callback(null);
+    // Initial fetch with retry — handles brief race between broadcast delivery
+    // and DB propagation to REST endpoint (very rare but possible on slow networks).
+    const fetchWithRetry = async (attemptsLeft: number): Promise<void> => {
+        const { data, error } = await supabase
+            .from('games')
+            .select('data')
+            .eq('code', code)
+            .single();
+
+        if (error || !data) {
+            if (attemptsLeft > 1) {
+                // Wait 600ms then retry (gives DB write time to propagate)
+                setTimeout(() => fetchWithRetry(attemptsLeft - 1), 600);
             } else {
-                callback(normalizeGameData(data.data));
+                callback(null); // Give up after 3 attempts (~1.8s total)
             }
-        });
+        } else {
+            callback(normalizeGameData(data.data));
+        }
+    };
+    fetchWithRetry(3);
 
     // Realtime subscription for updates
     const channelName = `game-sub:${code}`;

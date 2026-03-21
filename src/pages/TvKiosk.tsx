@@ -22,8 +22,10 @@ import React, {
 import { useSearchParams } from 'react-router-dom';
 import {
     registerTvDisplay, startTvHeartbeat, subscribeTvDisplay,
+    subscribeCastSignal, pingSupabase,
     type TvDisplay,
 } from '../services/tvDisplayService';
+import { supabase } from '../services/supabase';
 import { SpectatorView } from './SpectatorView';
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
@@ -1083,14 +1085,17 @@ export const TvKiosk: React.FC = () => {
         setOnline(true);
 
         if (nc && !showGameRef.current) {
+            // Mount game code IMMEDIATELY so SpectatorView begins fetching during the wipe
+            setGameCode(nc);
             setTrans(true);
-            setTimeout(() => { setGameCode(nc); setShowGame(true); setTrans(false); }, 500);
+            setTimeout(() => { setShowGame(true); setTrans(false); }, 150);
         } else if (!nc && showGameRef.current) {
             setTrans(true);
-            setTimeout(() => { setShowGame(false); setGameCode(null); setTrans(false); }, 700);
+            setTimeout(() => { setShowGame(false); setGameCode(null); setTrans(false); }, 350);
         } else if (nc && showGameRef.current) {
+            setGameCode(nc); // update code immediately
             setTrans(true);
-            setTimeout(() => { setGameCode(nc); setTrans(false); }, 350);
+            setTimeout(() => { setTrans(false); }, 150);
         }
     }, []);
 
@@ -1113,23 +1118,55 @@ export const TvKiosk: React.FC = () => {
                 // Subscribe FIRST before setting readyRef=true.
                 // This closes the window where a Realtime event could arrive
                 // between ready=true and the subscription being attached.
-                unsub = subscribeTvDisplay(tvCode, (d: TvDisplay) => {
-                    setOnline(true);
-                    clearTimeout(offT);
-                    offT = setTimeout(() => setOnline(false), 25_000);
-                    handleUpdate(d.game_code ?? null);
-                });
+                unsub = subscribeTvDisplay(
+                    tvCode,
+                    (d: TvDisplay) => {
+                        setOnline(true);
+                        clearTimeout(offT);
+                        offT = setTimeout(() => setOnline(false), 25_000);
+                        handleUpdate(d.game_code ?? null);
+                    },
+                    // onDisconnect callback — verify actual connectivity
+                    async () => {
+                        const connected = await pingSupabase();
+                        if (connected) {
+                            // Internet is fine, just Realtime WebSocket dropped
+                            // Keep online=true, channel auto-reconnects
+                            setOnline(true);
+                        } else {
+                            setOnline(false);
+                        }
+                    }
+                );
+
+                // [NEW] Subscribe to instant broadcast signal (fast path)
+                const unsubBcast = subscribeCastSignal(
+                    tvCode,
+                    (gameCode) => {
+                        setOnline(true);
+                        clearTimeout(offT);
+                        offT = setTimeout(() => setOnline(false), 25_000);
+                        handleUpdate(gameCode);
+                    },
+                    () => {
+                        // stop broadcast received
+                        handleUpdate(null);
+                    }
+                );
 
                 offT = setTimeout(() => setOnline(false), 25_000);
 
-                // MUST set readyRef=true BEFORE calling handleUpdate —
-                // handleUpdate guards on readyRef at the top.
                 readyRef.current = true;
 
                 // Process current DB state immediately.
-                // Realtime only fires on CHANGES — if the cast was set before
-                // this page loaded, no event will ever fire for it.
                 handleUpdate(current.game_code ?? null);
+
+                // Cleanup both subscriptions
+                const origUnsub = unsub;
+                unsub = () => {
+                    origUnsub?.();
+                    unsubBcast();
+                };
 
             } catch (err) {
                 console.warn('[TvKiosk] boot failed, retrying in 5s', err);
@@ -1139,11 +1176,31 @@ export const TvKiosk: React.FC = () => {
 
         boot();
 
+        // [FALLBACK POLL] If a Realtime event is ever missed, this catches it.
+        // Fires every 30s — negligible load, high safety net value.
+        const pollInterval = setInterval(async () => {
+            if (!readyRef.current) return;
+            try {
+                const { data } = await supabase
+                    .from('tv_displays')
+                    .select('game_code, status')
+                    .eq('tv_code', tvCode.toUpperCase())
+                    .maybeSingle();
+                if (data) {
+                    const expectedCode = data.status === 'casting' ? (data.game_code ?? null) : null;
+                    handleUpdate(expectedCode);
+                }
+            } catch {
+                // Ignore poll errors — Realtime is primary
+            }
+        }, 30_000);
+
         return () => {
             readyRef.current = false;
             stopHB?.();
             unsub?.();
             clearTimeout(offT);
+            clearInterval(pollInterval);
         };
     }, [tvCode]); // eslint-disable-line
 
