@@ -28,6 +28,10 @@ import { stopAllCastsForGame } from '../services/tvDisplayService';
 import { supabase } from '../services/supabase';
 import type { Player } from '../types';
 
+import { AdvancedModeLayout } from '../components/shotchart/AdvancedModeLayout';
+import { createShotEvent, createGameAction, subscribeToShots } from '../services/shotService';
+import type { ShotEvent, ShotType, ShotZoneId, ShotAttribute, GameActionType } from '../components/shotchart/types/shotTypes';
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 const Icons = {
@@ -358,6 +362,74 @@ export const HostConsole: React.FC = () => {
         const teamName = team === 'A' ? game?.teamA?.name : game?.teamB?.name;
         showUndoToast(`+${points} ${teamName ?? team}`);
     }, [updateScore, game]);
+
+    // ── ADVANCED SHOT CHART STATE & HANDLERS ────────────────────────────────
+    const [isAdvancedMode, setIsAdvancedMode] = useState(false);
+    const [gameShotEvents, setGameShotEvents] = useState<ShotEvent[]>([]);
+
+    useEffect(() => {
+        if (dbGame?.settings?.gameMode === 'advanced') {
+            setIsAdvancedMode(true);
+        }
+    }, [dbGame]);
+
+    useEffect(() => {
+        if (!gameCode || !isAdvancedMode) return;
+        const unsub = subscribeToShots(gameCode, setGameShotEvents);
+        return unsub;
+    }, [gameCode, isAdvancedMode]);
+
+    const handleShotRecorded = useCallback(async (shot: {
+        teamSide: 'A' | 'B';
+        playerId: string | null;
+        points: 1 | 2 | 3;
+        made: boolean;
+        shotType: ShotType;
+        x: number | null;
+        y: number | null;
+        zone: ShotZoneId;
+        attributes: ShotAttribute[];
+    }) => {
+        if (!gameCode) return;
+        await createShotEvent({
+            gameCode,
+            playerId: shot.playerId,
+            teamSide: shot.teamSide,
+            x: shot.x,
+            y: shot.y,
+            zone: shot.zone,
+            made: shot.made,
+            points: shot.points,
+            shotType: shot.shotType,
+            period: timer.period,
+            gameClockSec: timer.minutes * 60 + timer.seconds,
+            attributes: shot.attributes,
+        });
+    }, [gameCode, timer]);
+
+    const handleAdvancedSecondaryAction = useCallback(async (
+        team: 'A' | 'B',
+        action: GameActionType
+    ) => {
+        if (!gameCode) return;
+
+        if (action === 'foul') {
+            updateFouls(team, 1);
+            if (timer.gameRunning) timer.stopClock();
+        } else if (action === 'timeout') {
+            updateTimeouts(team, -1);
+            if (timer.gameRunning) timer.stopClock();
+        }
+
+        await createGameAction({
+            gameCode,
+            playerId: null,
+            teamSide: team,
+            actionType: action,
+            period: timer.period,
+            gameClockSec: timer.minutes * 60 + timer.seconds,
+        });
+    }, [gameCode, timer, updateFouls, updateTimeouts]);
 
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -785,130 +857,150 @@ export const HostConsole: React.FC = () => {
             </div>
 
             {/* ── PRO CONTROL DECK ──────────────────────────────────────────── */}
-            <div className="relative">
-                <div className="bg-zinc-950 border-t-4 border-zinc-900 p-4 shrink-0 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
-                    <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 h-full pt-2">
+            {isAdvancedMode ? (
+                <div className="bg-zinc-950 border-t-2 border-zinc-900 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
+                    <AdvancedModeLayout
+                        teamAName={game.teamA.name}
+                        teamAColor={game.teamA.color}
+                        teamAPlayers={game.teamA.players || []}
+                        teamBName={game.teamB.name}
+                        teamBColor={game.teamB.color}
+                        teamBPlayers={game.teamB.players || []}
+                        onScoreChange={(team, pts) => handleWebScore(team, pts)}
+                        onShotRecorded={handleShotRecorded}
+                        onSecondaryAction={handleAdvancedSecondaryAction}
+                        existingShots={gameShotEvents}
+                        period={timer.period}
+                        gameClockSec={timer.minutes * 60 + timer.seconds}
+                        gameRunning={timer.gameRunning}
+                    />
+                </div>
+            ) : (
+                <div className="relative">
+                    <div className="bg-zinc-950 border-t-4 border-zinc-900 p-4 shrink-0 shadow-[0_-20px_50px_rgba(0,0,0,0.6)] relative z-40">
+                        <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 h-full pt-2">
 
-                        {/* TEAM A CONTROLS */}
-                        <div className="col-span-3 flex flex-col gap-2">
-                            <div className="flex justify-between items-center pb-1 border-b border-zinc-800">
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate pl-2">
-                                    {game.teamA.name}
-                                </span>
+                            {/* TEAM A CONTROLS */}
+                            <div className="col-span-3 flex flex-col gap-2">
+                                <div className="flex justify-between items-center pb-1 border-b border-zinc-800">
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate pl-2">
+                                        {game.teamA.name}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-1 h-16">
+                                    <TactileBtn label="+1" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 1); }} />
+                                    <TactileBtn label="+2" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 2); }} />
+                                    <TactileBtn label="+3" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 3); }} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-1">
+                                    <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'A'); }} />
+                                    <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'A'); }} />
+                                </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-1 h-16">
-                                <TactileBtn label="+1" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 1); }} />
-                                <TactileBtn label="+2" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 2); }} />
-                                <TactileBtn label="+3" color={game.teamA.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'A', 3); }} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-1">
-                                <AdminBtn label="FOUL" value={game.teamA.fouls} type="danger" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'A'); }} />
-                                <AdminBtn label="TIMEOUT" value={game.teamA.timeouts} type="warning" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'A'); }} />
-                            </div>
-                        </div>
 
-                        {/* CENTER CONSOLE */}
-                        <div className="col-span-6 bg-zinc-900/50 rounded-xl border border-zinc-800 p-2 flex flex-col gap-2">
-                            {hwDeviceId && (
-                                <div className="bg-black border border-zinc-800 rounded-lg p-1 flex items-center justify-between mb-2 shadow-inner">
-                                    <div className="flex items-center gap-2 pl-2">
-                                        <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${hwMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
-                                        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Input Source</span>
+                            {/* CENTER CONSOLE */}
+                            <div className="col-span-6 bg-zinc-900/50 rounded-xl border border-zinc-800 p-2 flex flex-col gap-2">
+                                {hwDeviceId && (
+                                    <div className="bg-black border border-zinc-800 rounded-lg p-1 flex items-center justify-between mb-2 shadow-inner">
+                                        <div className="flex items-center gap-2 pl-2">
+                                            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${hwMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
+                                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Input Source</span>
+                                        </div>
+                                        <div className="flex bg-zinc-900 border border-zinc-800 rounded p-0.5">
+                                            <button
+                                                onClick={() => handleModeSwitch('hardware')}
+                                                className={`px-4 py-1.5 text-[10px] font-black uppercase rounded transition-all flex items-center gap-1.5
+                                                    ${hwMode === 'hardware' ? 'bg-green-600 text-white shadow-[0_0_10px_rgba(22,163,74,0.3)]' : 'text-zinc-600 hover:text-zinc-400'}`}
+                                            >
+                                                ESP32 Controller
+                                            </button>
+                                            <button
+                                                onClick={() => handleModeSwitch('web')}
+                                                className={`px-4 py-1.5 text-[10px] font-black uppercase rounded transition-all flex items-center gap-1.5
+                                                    ${hwMode === 'web' ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.3)]' : 'text-zinc-600 hover:text-zinc-400'}`}
+                                            >
+                                                Web Console
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="flex bg-zinc-900 border border-zinc-800 rounded p-0.5">
+                                )}
+                                <div className="flex-1 grid grid-cols-12 gap-2">
+                                    <div className="col-span-5 flex flex-col gap-1">
                                         <button
-                                            onClick={() => handleModeSwitch('hardware')}
-                                            className={`px-4 py-1.5 text-[10px] font-black uppercase rounded transition-all flex items-center gap-1.5
-                                                ${hwMode === 'hardware' ? 'bg-green-600 text-white shadow-[0_0_10px_rgba(22,163,74,0.3)]' : 'text-zinc-600 hover:text-zinc-400'}`}
+                                            onClick={(e) => { if (!isWebLocked) handleTimerToggle(e); }}
+                                            className={`flex-1 rounded border-2 transition-all flex flex-col items-center justify-center active:scale-95 shadow-lg ${timer.gameRunning
+                                                ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
+                                                : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
+                                                }`}
                                         >
-                                            ESP32 Controller
+                                            <span className="text-2xl font-black uppercase italic tracking-wider">
+                                                {timer.gameRunning ? 'STOP' : 'START'}
+                                            </span>
                                         </button>
                                         <button
-                                            onClick={() => handleModeSwitch('web')}
-                                            className={`px-4 py-1.5 text-[10px] font-black uppercase rounded transition-all flex items-center gap-1.5
-                                                ${hwMode === 'web' ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.3)]' : 'text-zinc-600 hover:text-zinc-400'}`}
+                                            onClick={() => { if (!isWebLocked) handleUndo(); }}
+                                            disabled={actionHistory.length === 0}
+                                            className="h-8 bg-black border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 disabled:opacity-30 disabled:cursor-not-allowed rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1"
                                         >
-                                            Web Console
+                                            <Icons.Undo />
+                                            UNDO {actionHistory.length > 0 && `(${actionHistory.length})`}
+                                        </button>
+                                    </div>
+                                    <div className="col-span-3 flex flex-col gap-1 border-x border-zinc-800 px-2">
+                                        <button
+                                            onClick={(e) => { if (!isWebLocked) handleResetShot(e, 24); }}
+                                            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
+                                        >
+                                            24
+                                        </button>
+                                        <button
+                                            onClick={(e) => { if (!isWebLocked) handleResetShot(e, 14); }}
+                                            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
+                                        >
+                                            14
+                                        </button>
+                                    </div>
+                                    <div className="col-span-4 flex flex-col gap-1">
+                                        <button
+                                            onClick={(e) => { if (!isWebLocked) handleTogglePossession(e); }}
+                                            className="flex-1 bg-black border border-zinc-700 rounded flex items-center justify-center gap-2 hover:border-white transition-all group active:scale-95"
+                                        >
+                                            <span className={`text-xl ${game.gameState.possession === 'A' ? 'text-white' : 'text-zinc-800'}`}>◀</span>
+                                            <span className="text-[10px] font-bold text-zinc-500 group-hover:text-white">POSS</span>
+                                            <span className={`text-xl ${game.gameState.possession === 'B' ? 'text-white' : 'text-zinc-800'}`}>▶</span>
+                                        </button>
+                                        <button
+                                            onClick={() => playSound('horn')}
+                                            className="h-8 bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400 rounded text-[9px] font-black uppercase tracking-widest active:scale-95 flex items-center justify-center gap-2"
+                                        >
+                                            SIREN 🔊
                                         </button>
                                     </div>
                                 </div>
-                            )}
-                            <div className="flex-1 grid grid-cols-12 gap-2">
-                                <div className="col-span-5 flex flex-col gap-1">
-                                    <button
-                                        onClick={(e) => { if (!isWebLocked) handleTimerToggle(e); }}
-                                        className={`flex-1 rounded border-2 transition-all flex flex-col items-center justify-center active:scale-95 shadow-lg ${timer.gameRunning
-                                            ? 'bg-red-900/20 border-red-600/50 hover:bg-red-900/40 text-red-500'
-                                            : 'bg-green-900/20 border-green-600/50 hover:bg-green-900/40 text-green-500'
-                                            }`}
-                                    >
-                                        <span className="text-2xl font-black uppercase italic tracking-wider">
-                                            {timer.gameRunning ? 'STOP' : 'START'}
-                                        </span>
-                                    </button>
-                                    <button
-                                        onClick={() => { if (!isWebLocked) handleUndo(); }}
-                                        disabled={actionHistory.length === 0}
-                                        className="h-8 bg-black border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 disabled:opacity-30 disabled:cursor-not-allowed rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1"
-                                    >
-                                        <Icons.Undo />
-                                        UNDO {actionHistory.length > 0 && `(${actionHistory.length})`}
-                                    </button>
-                                </div>
-                                <div className="col-span-3 flex flex-col gap-1 border-x border-zinc-800 px-2">
-                                    <button
-                                        onClick={(e) => { if (!isWebLocked) handleResetShot(e, 24); }}
-                                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
-                                    >
-                                        24
-                                    </button>
-                                    <button
-                                        onClick={(e) => { if (!isWebLocked) handleResetShot(e, 14); }}
-                                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 rounded font-black text-xl shadow-md active:scale-95"
-                                    >
-                                        14
-                                    </button>
-                                </div>
-                                <div className="col-span-4 flex flex-col gap-1">
-                                    <button
-                                        onClick={(e) => { if (!isWebLocked) handleTogglePossession(e); }}
-                                        className="flex-1 bg-black border border-zinc-700 rounded flex items-center justify-center gap-2 hover:border-white transition-all group active:scale-95"
-                                    >
-                                        <span className={`text-xl ${game.gameState.possession === 'A' ? 'text-white' : 'text-zinc-800'}`}>◀</span>
-                                        <span className="text-[10px] font-bold text-zinc-500 group-hover:text-white">POSS</span>
-                                        <span className={`text-xl ${game.gameState.possession === 'B' ? 'text-white' : 'text-zinc-800'}`}>▶</span>
-                                    </button>
-                                    <button
-                                        onClick={() => playSound('horn')}
-                                        className="h-8 bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400 rounded text-[9px] font-black uppercase tracking-widest active:scale-95 flex items-center justify-center gap-2"
-                                    >
-                                        SIREN 🔊
-                                    </button>
-                                </div>
                             </div>
-                        </div>
 
-                        {/* TEAM B CONTROLS */}
-                        <div className="col-span-3 flex flex-col gap-2">
-                            <div className="flex justify-between items-center pb-1 border-b border-zinc-800 flex-row-reverse">
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate">
-                                    {game.teamB.name}
-                                </span>
+                            {/* TEAM B CONTROLS */}
+                            <div className="col-span-3 flex flex-col gap-2">
+                                <div className="flex justify-between items-center pb-1 border-b border-zinc-800 flex-row-reverse">
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate">
+                                        {game.teamB.name}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-1 h-16">
+                                    <TactileBtn label="+3" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 3); }} />
+                                    <TactileBtn label="+2" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 2); }} />
+                                    <TactileBtn label="+1" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 1); }} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-1">
+                                    <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'B'); }} />
+                                    <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'B'); }} />
+                                </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-1 h-16">
-                                <TactileBtn label="+3" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 3); }} />
-                                <TactileBtn label="+2" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 2); }} />
-                                <TactileBtn label="+1" color={game.teamB.color} isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleScoreWithPlayer(e, 'B', 1); }} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-1">
-                                <AdminBtn label="TIMEOUT" value={game.teamB.timeouts} type="warning" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleTimeout(e, 'B'); }} />
-                                <AdminBtn label="FOUL" value={game.teamB.fouls} type="danger" isLocked={isWebLocked} onClick={(e: React.MouseEvent) => { if (!isWebLocked) handleFoulWithPlayer(e, 'B'); }} />
-                            </div>
-                        </div>
 
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* ── HELP MODAL ────────────────────────────────────────────────── */}
             {showHelp && (

@@ -29,6 +29,7 @@ import { Dashboard } from './pages/Dashboard';
 import { GameSetup } from './pages/GameSetup';
 import { HostConsole } from './pages/HostConsole';
 import { SpectatorView } from './pages/SpectatorView';
+import { ShotChartView } from './pages/ShotChartView';
 import { TvKiosk } from './pages/TvKiosk';
 import { WallView } from './pages/WallView';
 import { TournamentDashboard } from './pages/TournamentDashboard';
@@ -94,6 +95,7 @@ function App() {
               ══════════════════════════════════════════════ */}
             <Route path="/" element={<RootRedirect />} />
             <Route path="/watch/:gameCode" element={<SpectatorView />} />
+            <Route path="/game/:code/shots" element={<ShotChartView />} />
             <Route path="/tv" element={<TvKiosk />} />
             <Route path="/wall" element={<WallView />} />
 

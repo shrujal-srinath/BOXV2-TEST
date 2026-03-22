@@ -42,34 +42,52 @@ export const usePersistEngine = (
     const prevStateRef = useRef<string>('');
 
     // Persist to Supabase Postgres (debounced)
+    // IMPORTANT: We do a fresh read → merge → write to avoid overwriting
+    // changes made by ESP32 hardware or other tabs since dbGame was last fetched.
     const persist = useCallback(async () => {
-        if (!gameCode || !dbGame || !enabled) return;
+        if (!gameCode || !enabled) return;
 
-        const snapshot = {
-            ...dbGame,
+        // Step 1: Read the CURRENT row from DB (not the stale closure copy)
+        const { data: row, error: readErr } = await supabase
+            .from('games')
+            .select('data')
+            .eq('code', gameCode)
+            .single();
+
+        if (readErr || !row) {
+            console.error('[usePersistEngine] Fresh read failed:', readErr?.message);
+            return;
+        }
+
+        const freshData = row.data as any;
+
+        // Step 2: Merge ONLY the fields the engine owns
+        const merged = {
+            ...freshData,
             teamA: {
-                ...dbGame.teamA,
+                ...freshData.teamA,
                 score: engineState.scoreA,
                 fouls: engineState.foulsA,
                 timeouts: engineState.timeoutsA,
             },
             teamB: {
-                ...dbGame.teamB,
+                ...freshData.teamB,
                 score: engineState.scoreB,
                 fouls: engineState.foulsB,
                 timeouts: engineState.timeoutsB,
             },
             gameState: {
-                ...dbGame.gameState,
+                ...freshData.gameState,
                 possession: engineState.possession,
             },
             lastUpdate: Date.now(),
         };
 
+        // Step 3: Write merged snapshot
         const { error } = await supabase
             .from('games')
             .update({
-                data: snapshot,
+                data: merged,
                 lastUpdate: Date.now(),
             })
             .eq('code', gameCode);
@@ -79,7 +97,7 @@ export const usePersistEngine = (
         } else {
             console.debug('[usePersistEngine] Synced →', engineState.scoreA, '-', engineState.scoreB);
         }
-    }, [gameCode, dbGame, engineState, enabled]);
+    }, [gameCode, engineState, enabled]);
 
     // Broadcast score update instantly (no debounce — spectators need this NOW)
     const broadcastNow = useCallback(() => {
@@ -97,7 +115,7 @@ export const usePersistEngine = (
     }, [gameCode, engineState, enabled]);
 
     useEffect(() => {
-        if (!enabled || !gameCode || !dbGame) return;
+        if (!enabled || !gameCode) return;
 
         const stateKey = JSON.stringify(engineState);
         if (stateKey === prevStateRef.current) return;
@@ -113,5 +131,5 @@ export const usePersistEngine = (
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
         };
-    }, [engineState, enabled, gameCode, dbGame, persist, broadcastNow]);
+    }, [engineState, enabled, gameCode, persist, broadcastNow]);
 };

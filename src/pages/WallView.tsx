@@ -1,9 +1,10 @@
 // src/pages/WallView.tsx
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { subscribeToGame } from '../services/supabaseGameService';
+import { subscribeToGame, toGenericGame } from '../services/supabaseGameService';
 import { SPORT_REGISTRY, isSportSupported } from '../sports/registry';
 import { Game } from '../core/types/Game';
+import type { GameContext } from '../core/types/Manifest';
 
 // ─── DYNAMIC COURT CARD ──────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ const DynamicCourtCard = ({ gameCode }: { gameCode: string }) => {
         if (!gameCode) return;
         const unsub = subscribeToGame(gameCode, (data) => {
             // Mapping incoming database row to our generic Game type
-            if (data) setGame(data as unknown as Game<any, any>);
+            if (data) setGame(toGenericGame(data as any));
         });
         return unsub;
     }, [gameCode]);
@@ -23,23 +24,32 @@ const DynamicCourtCard = ({ gameCode }: { gameCode: string }) => {
     if (!game) return <div className="bg-zinc-900/50 animate-pulse rounded-lg h-64"></div>;
 
     // 2. Identify the sport and find its manifest
-    if (!isSportSupported(game.sportId)) {
+    const resolvedSportId = game.sportId || (game as any).sport || 'basketball';
+    if (!isSportSupported(resolvedSportId)) {
         return (
             <div className="bg-zinc-900 border border-red-900/50 p-4 rounded-lg h-64 flex items-center justify-center text-red-500 text-xs text-center">
-                UNSUPPORTED SPORT: {game.sportId}
+                UNSUPPORTED SPORT: {resolvedSportId}
             </div>
         );
     }
 
-    const manifest = SPORT_REGISTRY[game.sportId];
+    const manifest = SPORT_REGISTRY[resolvedSportId];
     const WallCard = manifest.components.WallCard;
+
+    // Build GameContext from the generic Game object
+    const context: GameContext = {
+        gameCode: game.code,
+        teamA: game.teamA,
+        teamB: game.teamB,
+        sportLabel: manifest.label,
+    };
 
     // 3. Render the Sport-Specific Wall Display
     return (
         <div className="bg-black border border-zinc-800 rounded-lg overflow-hidden flex flex-col shadow-2xl relative group">
             {/* Wrapper to maintain consistent card styling around diverse sport UIs */}
             <div className="p-1">
-                <WallCard state={game.state} />
+                <WallCard state={game.state} context={context} />
             </div>
 
             {/* Universal Overlay: Team Names (Reliable metadata) */}

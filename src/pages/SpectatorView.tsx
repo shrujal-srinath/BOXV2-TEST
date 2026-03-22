@@ -6,13 +6,14 @@
 // same pattern already used for the clock. Zero UI changes.
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { subscribeToGame } from '../services/supabaseGameService';
 import { getLocalGame } from '../services/localGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { subscribeToGameBroadcast } from '../services/supabaseBroadcastService';
 import { type BasketballGame } from '../types';
 import { SPORT_REGISTRY, isSportSupported } from '../sports/registry';
+import type { GameContext } from '../core/types/Manifest';
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
 
@@ -619,6 +620,17 @@ const CenterPanel: React.FC<{ game: BasketballGame }> = ({ game }) => {
       >
         {game.settings?.gameName || 'BASKETBALL'}
       </div>
+
+      {/* Shot Chart Link for completed games */}
+      {game?.status === 'completed' && (
+        <Link
+          to={`/game/${game.code}/shots`}
+          className="text-yellow-500 text-[10px] md:text-xs font-bold uppercase tracking-widest mt-2 hover:text-yellow-400 transition-colors"
+          style={{ fontFamily: '"Oswald", sans-serif' }}
+        >
+          View Shot Chart →
+        </Link>
+      )}
     </div>
   );
 };
@@ -1038,13 +1050,21 @@ export const SpectatorView: React.FC<SpectatorViewProps> = ({ gameCode: propGame
   if (error || !activeGame) return (<><GlobalStyles /><ErrorScreen message={error || 'Game unavailable'} /></>);
 
   // --- BEGIN MULTI-SPORT INTERCEPTOR ---
-  const currentSport = activeGame.sport || 'basketball';
+  const currentSport = activeGame.sportId || activeGame.sport || 'basketball';
 
   if (currentSport !== 'basketball' && isSportSupported(currentSport)) {
     const DynamicSportView = SPORT_REGISTRY[currentSport].components.SpectatorView;
     return (
       <div style={{ width: '100vw', height: '100vh', background: '#000000', overflow: 'hidden' }}>
-        <DynamicSportView state={(activeGame as any).state || (activeGame as any).gameState} />
+        <DynamicSportView
+          state={(activeGame as any).state || (activeGame as any).gameState}
+          context={{
+            gameCode: activeGame.code,
+            teamA: { name: activeGame.teamA.name, color: activeGame.teamA.color || '#DC2626', score: activeGame.teamA.score },
+            teamB: { name: activeGame.teamB.name, color: activeGame.teamB.color || '#2563EB', score: activeGame.teamB.score },
+            sportLabel: SPORT_REGISTRY[currentSport]?.label || currentSport,
+          }}
+        />
       </div>
     );
   }

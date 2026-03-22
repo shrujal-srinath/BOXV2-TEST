@@ -32,6 +32,7 @@ export const GameSetup: React.FC = () => {
   const [editTarget, setEditTarget] = useState<'game' | 'shot' | null>(null);
   const [tempTimeValue, setTempTimeValue] = useState(0);
   const [trackStats, setTrackStats] = useState(true);
+  const [advancedStats, setAdvancedStats] = useState(false);
   const [gameName, setGameName] = useState("");
   const [periodType, setPeriodType] = useState<'quarter' | 'half'>('quarter');
   const [periodDuration, setPeriodDuration] = useState(10);
@@ -182,7 +183,8 @@ export const GameSetup: React.FC = () => {
           gameName: gameName.trim() || "LIVE MATCH",
           periodDuration,
           shotClockDuration: shotClockEnabled ? shotClockDuration : 0,
-          periodType
+          periodType,
+          gameMode: advancedStats ? 'advanced' : trackStats ? 'stats' : 'quick',
         },
         { name: teamAName || "TEAM A", color: teamAColor, players: trackStats ? rosterA : [] },
         { name: teamBName || "TEAM B", color: teamBColor, players: trackStats ? rosterB : [] },
@@ -345,25 +347,33 @@ export const GameSetup: React.FC = () => {
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Operation Mode</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Standard Timer Button */}
-                      <button onClick={() => setTrackStats(false)} className={`group relative p-5 rounded-xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${!trackStats ? 'bg-zinc-900 border-white shadow-[0_0_25px_rgba(255,255,255,0.1)]' : 'bg-black border-zinc-800 opacity-60 hover:opacity-100 hover:border-zinc-600'}`}>
-                        <div className="flex justify-between items-start mb-2">
-                          <div className={`text-3xl mb-3 transition-all ${!trackStats ? 'grayscale-0' : 'grayscale group-hover:grayscale-0'}`}>⏱</div>
-                          {!trackStats && <div className="w-2 h-2 bg-white rounded-full animate-pulse" />}
-                        </div>
-                        <div className="text-sm font-black uppercase text-white mb-1">Standard Timer</div>
-                        <div className="text-[10px] text-zinc-500 font-bold leading-relaxed">Scoreboard only. No individual player tracking.</div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <button
+                        onClick={() => { setTrackStats(false); setAdvancedStats(false); }}
+                        className={`p-4 rounded-xl text-left border transition-all ${!trackStats ? 'border-white bg-white/5' : 'border-zinc-800'
+                          }`}
+                      >
+                        <div className="text-2xl mb-2 {`!trackStats ? '' : 'grayscale opacity-50'`}">⏱️</div>
+                        <div className="text-sm font-black uppercase tracking-wider text-white">Quick</div>
+                        <div className="text-[10px] text-zinc-500 mt-1">Score only</div>
                       </button>
-
-                      {/* Pro Stats Button */}
-                      <button onClick={() => setTrackStats(true)} className={`group relative p-5 rounded-xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${trackStats ? 'bg-zinc-900 border-red-500 shadow-[0_0_25px_rgba(220,38,38,0.2)]' : 'bg-black border-zinc-800 opacity-60 hover:opacity-100 hover:border-zinc-600'}`}>
-                        <div className="flex justify-between items-start mb-2">
-                          <div className={`text-3xl mb-3 transition-all ${trackStats ? 'grayscale-0' : 'grayscale group-hover:grayscale-0'}`}>📊</div>
-                          {trackStats && <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
-                        </div>
-                        <div className="text-sm font-black uppercase text-white mb-1">Pro Stats</div>
-                        <div className="text-[10px] text-zinc-500 font-bold leading-relaxed">Full roster management. Track points, fouls & logs.</div>
+                      <button
+                        onClick={() => { setTrackStats(true); setAdvancedStats(false); }}
+                        className={`p-4 rounded-xl text-left border transition-all ${trackStats && !advancedStats ? 'border-red-500 bg-red-500/5' : 'border-zinc-800'
+                          }`}
+                      >
+                        <div className="text-2xl mb-2 {`trackStats && !advancedStats ? '' : 'grayscale opacity-50'`}">📊</div>
+                        <div className="text-sm font-black uppercase tracking-wider text-white">Stats</div>
+                        <div className="text-[10px] text-zinc-500 mt-1">+ Players</div>
+                      </button>
+                      <button
+                        onClick={() => { setTrackStats(true); setAdvancedStats(true); }}
+                        className={`p-4 rounded-xl text-left border transition-all ${advancedStats ? 'border-yellow-500 bg-yellow-500/5' : 'border-zinc-800'
+                          }`}
+                      >
+                        <div className="text-2xl mb-2 {`advancedStats ? '' : 'grayscale opacity-50'`}">🎯</div>
+                        <div className="text-sm font-black uppercase tracking-wider text-yellow-500">Advanced</div>
+                        <div className="text-[10px] text-zinc-500 mt-1">+ Shot chart</div>
                       </button>
                     </div>
                   </div>

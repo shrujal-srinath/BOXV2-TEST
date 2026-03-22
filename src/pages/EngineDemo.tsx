@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useGameEngine } from '../core/engine/useGameEngine';
 import { SPORT_REGISTRY } from '../sports/registry';
 import { Game } from '../core/types/Game';
+import type { GameContext } from '../core/types/Manifest';
 
 export default function EngineDemo() {
     // 1. Load the requested Sport Plugin (Dynamic)
@@ -37,6 +38,13 @@ export default function EngineDemo() {
     // 4. Extract the strictly-typed UI components from the plugin
     const { TabletController, WallCard } = manifest.components;
 
+    const demoContext: GameContext = {
+        gameCode: mockGame.code,
+        teamA: mockGame.teamA,
+        teamB: mockGame.teamB,
+        sportLabel: manifest.label,
+    };
+
     return (
         <div className="min-h-screen bg-black text-white p-8 font-sans">
             <div className="max-w-6xl mx-auto space-y-8">
@@ -63,6 +71,7 @@ export default function EngineDemo() {
                                 dispatch={dispatch}
                                 isOffline={isOffline}
                                 syncQueueCount={0}
+                                context={demoContext}
                             />
                         </div>
                     </div>
@@ -73,7 +82,7 @@ export default function EngineDemo() {
                             STADIUM WALL DISPLAY (LISTENER)
                         </div>
                         <div className="flex-1 flex items-center justify-center p-4">
-                            <WallCard state={state} />
+                            <WallCard state={state} context={demoContext} />
                         </div>
                     </div>
                 </div>

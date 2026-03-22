@@ -29,7 +29,7 @@ export interface LocalGameMetadata {
   createdAt: number;             // Timestamp
   lastModified: number;          // Timestamp
   synced: boolean;               // Has been uploaded to cloud
-  cloudId: string | null;        // Firebase game code (if synced)
+  cloudId: string | null;        // Supabase game code (if synced)
   game: BasketballGame;          // Full game data
 }
 
@@ -148,6 +148,7 @@ export const createLocalGame = (
     hostId: 'local-user',
     code: gameId,
     gameType: 'local',
+    sportId: 'basketball',
     sport: 'basketball',
     status: 'live',
     settings: {

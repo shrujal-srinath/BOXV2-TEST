@@ -48,15 +48,15 @@ export const useBasketballGame = (
       periodType: 'quarter',
       periods: 4,
     },
-    sportId: 'basketball', // <-- Added to fix TS Error
-    sport: 'basketball',
+    sportId: 'basketball',
+    sport: 'basketball',  // @deprecated — legacy alias for sportId
     status: 'live',
     createdAt: Date.now(),
     lastUpdate: Date.now(),
     gameType,
   });
 
-  // Subscribe to Firestore for durable state (scores, fouls, rosters)
+  // Subscribe to Supabase for durable state (scores, fouls, rosters)
   useEffect(() => {
     if (!code) return;
     const unsubscribe = subscribeToGame(code, (updatedGame) => {
@@ -70,103 +70,54 @@ export const useBasketballGame = (
 
   // ─── Score ────────────────────────────────────────────────────────────────
 
-  const updateScore = useCallback(async (team: 'A' | 'B', points: number) => {
+  // NOTE: For online games, usePersistEngine is the SOLE owner of DB writes.
+  // This function only updates local React state. The persist engine detects the
+  // state change and handles both broadcasting and DB persistence.
+  // recordGameEvent is called separately from HostConsole for the audit trail.
+  const updateScore = useCallback((team: 'A' | 'B', points: number) => {
     const teamKey = team === 'A' ? 'teamA' : 'teamB';
     const newScore = Math.max(0, game[teamKey].score + points);
-    const updatedGame = { ...game, [teamKey]: { ...game[teamKey], score: newScore } };
-
-    if (gameType === 'local') {
-      setGame(updatedGame);
-      return;
-    }
-
-
-    const { data: { user } } = await supabase.auth.getUser();
-    await recordGameEvent({
-      gameCode: code,
-      eventType: team === 'A' ? 'SCORE_A' : 'SCORE_B',
-      team,
-      amount: points,
-      period: game.gameState.period,
-      actorId: user?.id,
-      actorType: 'web',
-      gameSnapshot: updatedGame
-    });
-  }, [code, game, gameType]);
+    setGame(prev => ({ ...prev, [teamKey]: { ...prev[teamKey], score: newScore } }));
+  }, [game]);
 
   // ─── Fouls ────────────────────────────────────────────────────────────────
 
-  const updateFouls = useCallback(async (team: 'A' | 'B', increment = 1) => {
+  const updateFouls = useCallback((team: 'A' | 'B', increment = 1) => {
     const teamKey = team === 'A' ? 'teamA' : 'teamB';
-    const newFouls = Math.max(0, game[teamKey].fouls + increment);
-    const newFoulsThisQ = Math.max(0, game[teamKey].foulsThisQuarter + increment);
-    const updatedGame = { ...game, [teamKey]: { ...game[teamKey], fouls: newFouls, foulsThisQuarter: newFoulsThisQ } };
-
-    if (gameType === 'local') {
-      setGame(updatedGame);
-      return;
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    await recordGameEvent({
-      gameCode: code,
-      eventType: team === 'A' ? 'FOUL_A' : 'FOUL_B',
-      team,
-      amount: increment,
-      period: game.gameState.period,
-      actorId: user?.id,
-      actorType: 'web',
-      gameSnapshot: updatedGame
-    });
-  }, [code, game, gameType]);
+    setGame(prev => ({
+      ...prev,
+      [teamKey]: {
+        ...prev[teamKey],
+        fouls: Math.max(0, prev[teamKey].fouls + increment),
+        foulsThisQuarter: Math.max(0, prev[teamKey].foulsThisQuarter + increment),
+      },
+    }));
+  }, []);
 
   // ─── Timeouts ─────────────────────────────────────────────────────────────
 
-  const updateTimeouts = useCallback(async (team: 'A' | 'B', increment = -1) => {
+  const updateTimeouts = useCallback((team: 'A' | 'B', increment = -1) => {
     const teamKey = team === 'A' ? 'teamA' : 'teamB';
-    const newTimeouts = Math.max(0, game[teamKey].timeouts + increment);
-    const updatedGame = { ...game, [teamKey]: { ...game[teamKey], timeouts: newTimeouts } };
-
-    if (gameType === 'local') {
-      setGame(updatedGame);
-      return;
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    await recordGameEvent({
-      gameCode: code,
-      eventType: team === 'A' ? 'TIMEOUT_A' : 'TIMEOUT_B',
-      team,
-      amount: increment,
-      period: game.gameState.period,
-      actorId: user?.id,
-      actorType: 'web',
-      gameSnapshot: updatedGame
-    });
-  }, [code, game, gameType]);
+    setGame(prev => ({
+      ...prev,
+      [teamKey]: {
+        ...prev[teamKey],
+        timeouts: Math.max(0, prev[teamKey].timeouts + increment),
+      },
+    }));
+  }, []);
 
   // ─── Possession ───────────────────────────────────────────────────────────
 
-  const togglePossession = useCallback(async () => {
-    const nextPos: 'A' | 'B' = game.gameState.possession === 'A' ? 'B' : 'A';
-    const updatedGame: BasketballGame = { ...game, gameState: { ...game.gameState, possession: nextPos } };
-
-    if (gameType === 'local') {
-      setGame(updatedGame);
-      return;
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    await recordGameEvent({
-      gameCode: code,
-      eventType: 'POSSESSION',
-      team: nextPos,
-      period: game.gameState.period,
-      actorId: user?.id,
-      actorType: 'web',
-      gameSnapshot: updatedGame
-    });
-  }, [code, game, gameType]);
+  const togglePossession = useCallback(() => {
+    setGame(prev => ({
+      ...prev,
+      gameState: {
+        ...prev.gameState,
+        possession: prev.gameState.possession === 'A' ? 'B' : 'A',
+      },
+    }));
+  }, []);
 
   // ─── Period Transition ────────────────────────────────────────────────────
   const advancePeriodFirestore = useCallback((newPeriod: number) => {

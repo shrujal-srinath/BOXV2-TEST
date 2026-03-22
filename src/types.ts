@@ -1,11 +1,49 @@
 // src/types.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// THE BOX — Unified Type Definitions
+// THE BOX — Unified Type Definitions (v5.0 — CANONICAL)
+//
+// THIS FILE IS THE SINGLE SOURCE OF TRUTH.
+//
+// History of type conflicts this resolves:
+//   - Old types.ts: status 'finished', 3-sport SportType, scorerPin inline,
+//     config: TournamentConfig, no DivisionConfig/GenderCategory
+//   - v4.1 types.ts: status 'completed', 8-sport SchedulableSport, scorerPin
+//     in tournament_secrets, sportConfig + divisions, full bracket topology
+//   - core/types/Game.ts: Game<TState, TRules> generic with BaseTeam (no players)
+//   - CreateTournamentModal.tsx: inline duplicate types with different shapes
+//
+// Rules:
+//   1. EVERY component imports from THIS file. No inline type definitions.
+//   2. If a type exists in core/types/Game.ts, re-export it from here.
+//   3. Legacy aliases are clearly marked @deprecated with migration notes.
+//   4. `sportId` is the canonical field name. `sport` is a legacy alias only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ============================================
-// 1. PLAYER & TEAM DATA
-// ============================================
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  1. RE-EXPORTS FROM CORE (the v2 generic game engine types)              ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+// These are the "real" types the game engine uses. Re-exporting so that
+// components can import everything from '../types' without knowing about
+// the core/ directory structure.
+export type {
+  ScoringMode,
+  NormalizedResult,
+  BaseGameState,
+  BaseTeam,
+  Game,
+} from './core/types/Game';
+
+export type {
+  SportManifest,
+  SportComponentProps,
+  SpectatorProps,
+  WallCardProps,
+} from './core/types/Manifest';
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  2. PLAYER & TEAM DATA (basketball-specific detailed stats)              ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
 
 export interface Player {
   id: string;
@@ -40,19 +78,21 @@ export interface TeamData {
   players: Player[];
 }
 
-// ============================================
-// 2. GAME SETTINGS & STATE
-// ============================================
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  3. GAME SETTINGS & STATE                                                ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
 
 export interface GameSettings {
   gameName: string;
   periodDuration: number;
   shotClockDuration: number;
   periodType: 'quarter' | 'half';
+  gameMode?: 'quick' | 'stats' | 'advanced';
   periods?: number;
   courtNumber?: string;
   tournamentId?: string;
-  fixtureId?: string; // Links game back to its bracket fixture
+  /** Links this game back to its bracket fixture (set when launched from tournament) */
+  fixtureId?: string;
 }
 
 export interface GameState {
@@ -64,11 +104,31 @@ export interface GameState {
   possession: 'A' | 'B';
 }
 
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  4. BASKETBALL GAME (the "legacy flat" type used by HostConsole,         ║
+// ║     SpectatorView, Dashboard, and supabaseGameService)                   ║
+// ║                                                                          ║
+// ║  NOTE: The v2 Game<TState, TRules> from core/types/Game.ts is the        ║
+// ║  forward-looking type. BasketballGame is the shape stored in Supabase    ║
+// ║  `games.data` JSONB. These two need a mapping layer (see normalizers     ║
+// ║  in supabaseGameService.ts).                                             ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
 export interface BasketballGame {
   code: string;
   hostId: string;
+  /**
+   * CANONICAL sport identifier. Always use this field.
+   * Stored as `sportId` in the Supabase `games` table column.
+   */
+  sportId: string;
+  /**
+   * @deprecated Legacy alias for sportId. Kept for backward compat with older
+   * DB rows and components that haven't migrated. ALWAYS prefer `sportId`.
+   * The normalizeGameData() function in supabaseGameService ensures both are set.
+   */
   sport: string;
-  sportId?: string;
+  /** 'live' | 'completed' | 'archived'. NEVER 'finished' — use normalizeGameData(). */
   status: 'live' | 'completed' | 'archived';
   gameType: 'local' | 'online';
   createdAt: number;
@@ -79,11 +139,11 @@ export interface BasketballGame {
   teamB: TeamData;
 }
 
-// ============================================
-// 3. TOURNAMENT ARCHITECTURE — CORE TYPES
-// ============================================
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  5. TOURNAMENT ARCHITECTURE — CORE TYPES                                 ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
 
-/** Sports that can be scheduled in a tournament */
+/** All sports that can be scheduled in a tournament */
 export type SchedulableSport =
   | 'basketball'
   | 'badminton'
@@ -94,18 +154,25 @@ export type SchedulableSport =
   | 'cricket'
   | 'general';
 
-/** SportType is a subset of SchedulableSport (legacy alias kept for compat) */
+/**
+ * Alias kept for import compatibility across the codebase.
+ * Both names refer to the exact same type.
+ */
 export type SportType = SchedulableSport;
 
-/** Gender categories for divisions */
+/** Gender categories for tournament divisions */
 export type GenderCategory = 'men' | 'women' | 'mixed';
 
-/** Competition formats */
+/**
+ * Competition bracket formats.
+ * NOTE: 'random' and 'league' were in the old types — they mapped to
+ * 'knockout' and 'roundrobin' respectively. Only canonical values below.
+ */
 export type TournamentFormat = 'knockout' | 'roundrobin' | 'group+knockout';
 
-// ============================================
-// 4. DIVISION CONFIG
-// ============================================
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  6. DIVISION CONFIG                                                      ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
 
 export interface DivisionConfig {
   /** Deterministic ID: `{sport}_{gender}` e.g. "basketball_men" */
@@ -114,7 +181,7 @@ export interface DivisionConfig {
   gender: GenderCategory;
   isActive: boolean;
   format: TournamentFormat;
-  /** Power-of-2 bracket size (4, 8, 16, 32, 64) */
+  /** Power-of-2 bracket size (4, 8, 16, 32, 64) — knockout only */
   bracketSize?: number;
   /** Division lifecycle status */
   status: 'setup_required' | 'draft' | 'published' | 'completed';
@@ -122,9 +189,12 @@ export interface DivisionConfig {
   champion?: string;
 }
 
-// ============================================
-// 5. TOURNAMENT DOCUMENT
-// ============================================
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  7. TOURNAMENT DOCUMENT                                                  ║
+// ║                                                                          ║
+// ║  v4.1+ schema: scorerPin moved to `tournament_secrets` table.            ║
+// ║  Use getAdminPin() RPC to read it, NEVER read it from this object.       ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
 
 export interface Tournament {
   id: string;
@@ -137,19 +207,19 @@ export interface Tournament {
   endDate?: string;
   /** Tournament lifecycle status */
   status: 'draft' | 'active' | 'archived';
-  /** Court config per sport: { basketball: { courts: 2 }, ... } */
+  /** Per-sport court configuration: e.g. { basketball: { courts: 2 } } */
   sportConfig: {
     [key in SportType]?: {
       courts: number;
     };
   };
-  /** All divisions, keyed by divisionId */
+  /** All divisions keyed by divisionId: e.g. "basketball_men" */
   divisions: {
     [divisionId: string]: DivisionConfig;
   };
-  /** User IDs that can score matches */
+  /** User IDs approved to score matches */
   approvedScorers: string[];
-  /** Pending join requests */
+  /** Pending join requests from volunteers */
   pendingRequests: {
     [userId: string]: {
       displayName: string;
@@ -161,14 +231,14 @@ export interface Tournament {
   createdAt: number;
 }
 
-// ============================================
-// 6. TOURNAMENT FIXTURE (bracket node)
-// ============================================
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  8. TOURNAMENT FIXTURE (bracket node)                                    ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
 
 export interface TournamentFixture {
   id: string;
   tournamentId: string;
-  /** Which division this fixture belongs to */
+  /** Which division this fixture belongs to: e.g. "basketball_men" */
   divisionId: string;
   sport: SportType;
   gender: GenderCategory;
@@ -184,7 +254,8 @@ export interface TournamentFixture {
 
   /** Game lifecycle */
   status: 'scheduled' | 'live' | 'completed';
-  gameCode?: string; // Links to live BasketballGame doc
+  /** Links to the live BasketballGame.code when match is started */
+  gameCode?: string;
 
   /** Bracket topology */
   round?: number;
@@ -200,17 +271,24 @@ export interface TournamentFixture {
 
   /** Scheduling metadata */
   isBye?: boolean;
-  scorerId?: string; // UID of assigned scorer
+  /** UID of the assigned scorer volunteer */
+  scorerId?: string;
   actualStartTime?: number;
   actualEndTime?: number;
 }
 
-// ============================================
-// 7. LEGACY — TournamentConfig
-// (kept for TournamentSetup backwards compat)
-// ============================================
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  9. LEGACY ALIASES — @deprecated                                         ║
+// ║                                                                          ║
+// ║  These exist ONLY so old components don't break on import.               ║
+// ║  They should be migrated away over time.                                 ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
 
-/** @deprecated Use Tournament.sportConfig + Tournament.divisions instead */
+/**
+ * @deprecated Use Tournament.sportConfig + Tournament.divisions instead.
+ * Kept for CreateTournamentModal.tsx backward compat.
+ * Old shape: config.sports[sport].isActive / .courts
+ */
 export interface TournamentConfig {
   sports: {
     [key in SportType]?: {

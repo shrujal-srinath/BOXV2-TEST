@@ -103,24 +103,24 @@ const normalizeResult = (state: BasketballState, rules: BasketballRules): Normal
 // ══════════════════════════════════════════════
 // 4. PLACEHOLDER COMPONENTS (To be replaced with your real UI)
 // ══════════════════════════════════════════════
-const TabletController: React.FC<SportComponentProps<BasketballState, BasketballAction>> = ({ state, dispatch }) => (
+const TabletController: React.FC<SportComponentProps<BasketballState, BasketballAction>> = ({ state, dispatch, context }) => (
     <div className="p-4 bg-gray-900 text-white">
         <h2>Basketball Controller</h2>
         <div className="flex gap-4">
-            <button onClick={() => dispatch({ type: 'ADD_POINTS', team: 'A', amount: 1 })}>Team A +1</button>
-            <button onClick={() => dispatch({ type: 'ADD_POINTS', team: 'B', amount: 1 })}>Team B +1</button>
+            <button onClick={() => dispatch({ type: 'ADD_POINTS', team: 'A', amount: 1 })}>{context.teamA.name} +1</button>
+            <button onClick={() => dispatch({ type: 'ADD_POINTS', team: 'B', amount: 1 })}>{context.teamB.name} +1</button>
         </div>
         <p>Score: {state.scoreA} - {state.scoreB}</p>
     </div>
 );
 
 
-const WallCard: React.FC<WallCardProps<BasketballState>> = ({ state }) => (
+const WallCard: React.FC<WallCardProps<BasketballState>> = ({ state, context }) => (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-8 font-sans">
         <div className="w-full max-w-5xl grid grid-cols-[1fr_auto_1fr] gap-12 items-center px-8">
             {/* Team A */}
             <div className="flex flex-col items-center">
-                <div className="text-3xl font-black uppercase tracking-tight text-red-500 mb-4">HOME</div>
+                <div className="text-3xl font-black uppercase tracking-tight text-red-500 mb-4">{context.teamA.name}</div>
                 <div className="text-[14rem] font-bold leading-none font-mono text-white drop-shadow-[0_0_25px_rgba(220,38,38,0.4)]">
                     {state.scoreA}
                 </div>
@@ -137,7 +137,7 @@ const WallCard: React.FC<WallCardProps<BasketballState>> = ({ state }) => (
             </div>
             {/* Team B */}
             <div className="flex flex-col items-center">
-                <div className="text-3xl font-black uppercase tracking-tight text-blue-500 mb-4">AWAY</div>
+                <div className="text-3xl font-black uppercase tracking-tight text-blue-500 mb-4">{context.teamB.name}</div>
                 <div className="text-[14rem] font-bold leading-none font-mono text-white drop-shadow-[0_0_25px_rgba(37,99,235,0.4)]">
                     {state.scoreB}
                 </div>

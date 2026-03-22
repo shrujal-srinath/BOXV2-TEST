@@ -92,7 +92,8 @@ export const initializeNewGame = async (
     const newGame: BasketballGame = {
         code: gameCode,
         hostId,
-        sport,      // legacy fallback
+        sportId: sport,
+        sport,      // @deprecated legacy alias — kept for old components
         status: 'live',
         gameType: isOnline ? 'online' : 'local',
         createdAt: Date.now(),
@@ -406,3 +407,58 @@ export const recordGameEvent = async (params: {
         throw error;
     }
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// BRIDGE
+// This bridges BasketballGame (legacy flat type) ↔ Game<TState, TRules> (v2 engine)
+// ════════════════════════════════════════════════════════════════════════════
+
+import type { Game } from '../core/types/Game';
+
+/**
+ * Convert a BasketballGame (legacy flat type) to Game<any, any> for the v2 engine.
+ *
+ * Used by:
+ *   - WallView.tsx (DynamicCourtCard subscribes to DB → needs Game<T,R> for manifests)
+ *   - Any future component that reads from supabaseGameService but renders via sport manifests
+ *
+ * This becomes unnecessary once all pages migrate to the v2 Game<T,R> shape.
+ */
+export const toGenericGame = (bg: BasketballGame): Game<any, any> => ({
+    id: bg.code,
+    code: bg.code,
+    hostId: bg.hostId,
+    sportId: bg.sportId || bg.sport || 'basketball',
+    status: bg.status === 'completed' ? 'completed' : bg.status === 'archived' ? 'archived' : 'live',
+    createdAt: bg.createdAt,
+    lastUpdate: bg.lastUpdate,
+    rules: {
+        periods: bg.settings?.periods || 4,
+        periodDurationMin: bg.settings?.periodDuration || 10,
+        shotClockSec: bg.settings?.shotClockDuration || 24,
+        timeoutsPerHalf: 3,
+    },
+    state: {
+        gameRunning: bg.gameState?.gameRunning || false,
+        scoreA: bg.teamA?.score || 0,
+        scoreB: bg.teamB?.score || 0,
+        period: bg.gameState?.period || 1,
+        shotClock: bg.gameState?.shotClock || 24,
+        shotClockRunning: bg.gameState?.shotClockRunning || false,
+        possession: bg.gameState?.possession || 'A',
+        foulsA: bg.teamA?.fouls || 0,
+        foulsB: bg.teamB?.fouls || 0,
+        timeoutsA: bg.teamA?.timeouts || 0,
+        timeoutsB: bg.teamB?.timeouts || 0,
+    },
+    teamA: {
+        name: bg.teamA?.name || 'HOME',
+        color: bg.teamA?.color || '#DC2626',
+        score: bg.teamA?.score || 0,
+    },
+    teamB: {
+        name: bg.teamB?.name || 'AWAY',
+        color: bg.teamB?.color || '#2563EB',
+        score: bg.teamB?.score || 0,
+    },
+});
