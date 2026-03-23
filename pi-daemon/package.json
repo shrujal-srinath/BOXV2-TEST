@@ -8,7 +8,9 @@
         "start": "node index.js"
     },
     "dependencies": {
+        "express": "^5.2.1",
         "onoff": "^6.0.3",
-        "socket.io": "^4.7.4"
+        "socket.io": "^4.8.3",
+        "socket.io-client": "^4.8.3"
     }
 }
