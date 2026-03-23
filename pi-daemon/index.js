@@ -2,7 +2,11 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import readline from 'readline';
-import { BUTTON_CONFIG } from './buttonMap.js';
+import { BUTTON_CONFIG, OUTPUT_CONFIG } from './buttonMap.js';
+import { broadcastToCloud, broadcastClockToCloud } from './supabaseSync.js';
+
+// The ID that remote spectators will use to join the stream
+let currentGameCode = 'BMSCE-LIVE';
 
 // ==========================================
 // 1. HARDWARE MOCKING SETUP
@@ -19,14 +23,21 @@ if (process.platform === 'linux') {
     Gpio = class MockGpio {
         constructor(gpio, direction, edge, options) {
             this.gpio = gpio;
-            this.direction = direction;
+            this.direction = direction; // 'in' or 'out'
             this.value = 0;
             this.watchCallbacks = [];
             global.mockPins[gpio] = this;
         }
         watch(callback) { this.watchCallbacks.push(callback); }
         readSync() { return this.value; }
-        writeSync(value) { this.value = value; }
+        writeSync(value) {
+            this.value = value;
+            // If this is an output pin (like our buzzer), log it to the terminal!
+            if (this.direction === 'out') {
+                if (value === 1) console.log(`\n🔊 [HARDWARE OUTPUT] BUZZER ON (Pin ${this.gpio})`);
+                if (value === 0) console.log(`🔇 [HARDWARE OUTPUT] BUZZER OFF (Pin ${this.gpio})\n`);
+            }
+        }
         unexport() { delete global.mockPins[this.gpio]; }
         simulateChange(newValue) {
             this.value = newValue;
@@ -56,9 +67,40 @@ const saveHistory = () => {
 };
 
 // ==========================================
-// 3. CLOCK TICKER
+// 3. HARDWARE OUTPUT LOGIC (BUZZER)
+// ==========================================
+let buzzerPin;
+let buzzerTimeout = null;
+
+function initializeOutputs() {
+    buzzerPin = new Gpio(OUTPUT_CONFIG.BUZZER_PIN, 'out');
+    // Ensure buzzer is off on startup
+    buzzerPin.writeSync(0);
+}
+
+// Triggers the physical relay for the siren
+function triggerBuzzer(type = 'SHORT') {
+    if (!buzzerPin) return;
+
+    const duration = type === 'LONG' ? 2000 : 800; // 2s for period end, 0.8s for shot clock
+
+    // Turn buzzer ON
+    buzzerPin.writeSync(1);
+
+    // Clear any existing timers so we don't overlap
+    if (buzzerTimeout) clearTimeout(buzzerTimeout);
+
+    // Turn buzzer OFF after duration
+    buzzerTimeout = setTimeout(() => {
+        buzzerPin.writeSync(0);
+    }, duration);
+}
+
+// ==========================================
+// 4. CLOCK TICKER
 // ==========================================
 let lastTick = Date.now();
+let lastCloudTick = 0;
 
 setInterval(() => {
     const now = Date.now();
@@ -66,27 +108,54 @@ setInterval(() => {
     lastTick = now;
 
     if (state.clock.isRunning) {
+        // Keep track of previous times so we know EXACTLY when we hit zero
+        const prevGameMs = state.clock.gameMs;
+        const prevShotMs = state.clock.shotMs;
+
         state.clock.gameMs = Math.max(0, state.clock.gameMs - delta);
         state.clock.shotMs = Math.max(0, state.clock.shotMs - delta);
 
-        if (state.clock.gameMs === 0 || state.clock.shotMs === 0) {
+        let needsFullSync = false;
+
+        // Detect Game Clock hitting 0
+        if (state.clock.gameMs === 0 && prevGameMs > 0) {
+            console.log('🚨 BUZZER! End of Period.');
             state.clock.isRunning = false;
-            console.log('🚨 BUZZER! Clock stopped.');
-            io.emit('state_update', state); // Emit full state to update isRunning flag visually
+            triggerBuzzer('LONG');
+            needsFullSync = true;
+        }
+        // Detect Shot Clock hitting 0 (Only if Game clock isn't also 0)
+        else if (state.clock.shotMs === 0 && prevShotMs > 0 && state.clock.gameMs > 0) {
+            console.log('🚨 BUZZER! Shot Clock Violation.');
+            state.clock.isRunning = false;
+            triggerBuzzer('SHORT');
+            needsFullSync = true;
+        }
+
+        if (needsFullSync) {
+            io.emit('state_update', state); // Update UI to show paused state
+            broadcastToCloud(currentGameCode, state); // Sync to Supabase
         } else {
-            io.emit('clock_sync', state.clock); // Only emit clock data normally to save bandwidth
+            io.emit('clock_sync', state.clock); // Normal high-speed local clock tick
+
+            // Cloud 1-second sync to avoid rate limits
+            if (now - lastCloudTick >= 1000) {
+                broadcastClockToCloud(currentGameCode, state.clock);
+                lastCloudTick = now;
+            }
         }
     }
 }, 100);
 
 // ==========================================
-// 4. BUTTON MAPPING & HARDWARE LOGIC
+// 5. BUTTON MAPPING & HARDWARE LOGIC
 // ==========================================
 const buttons = [];
 let shotClockDownTime = 0;
 
 function initializeHardware() {
     console.log('Wiring up physical interfaces...');
+    initializeOutputs(); // Setup the buzzer!
 
     BUTTON_CONFIG.forEach(config => {
         const button = new Gpio(config.pin, 'in', 'both', { debounceTimeout: 20 });
@@ -109,6 +178,7 @@ function initializeHardware() {
                     }
                     shotClockDownTime = 0;
                     io.emit('state_update', state);
+                    broadcastToCloud(currentGameCode, state);
                 }
                 return;
             }
@@ -129,9 +199,15 @@ function handleGameAction(config) {
             console.log(`> Hardware Action: ${config.team.toUpperCase()} +${config.value}`);
             break;
         case 'TOGGLE_CLOCK':
-            state.clock.isRunning = !state.clock.isRunning;
-            lastTick = Date.now();
-            console.log(`> Hardware Action: CLOCK ${state.clock.isRunning ? 'STARTED' : 'STOPPED'}`);
+            // Don't allow starting the clock if time is 0
+            if (!state.clock.isRunning && state.clock.gameMs > 0 && state.clock.shotMs > 0) {
+                state.clock.isRunning = true;
+                lastTick = Date.now();
+                console.log(`> Hardware Action: CLOCK STARTED`);
+            } else {
+                state.clock.isRunning = false;
+                console.log(`> Hardware Action: CLOCK STOPPED`);
+            }
             break;
         case 'UNDO':
             if (history.length > 0) {
@@ -146,11 +222,13 @@ function handleGameAction(config) {
             console.log(`> Hardware Action: UI TOUCH ${state.ui.isTouchUnlocked ? 'UNLOCKED 🔓' : 'LOCKED 🔒'}`);
             break;
     }
+
     io.emit('state_update', state);
+    broadcastToCloud(currentGameCode, state);
 }
 
 // ==========================================
-// 5. SERVER & WEBSOCKET SETUP
+// 6. SERVER & WEBSOCKET SETUP
 // ==========================================
 const app = express();
 const server = createServer(app);
@@ -159,12 +237,10 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.get('/api/state', (req, res) => res.json(state));
 
 io.on('connection', (socket) => {
-    console.log(`📺 New display connected: ${socket.id}`);
     socket.emit('state_update', state);
 
-    // --- LISTEN FOR MANUAL TOUCH SCREEN OVERRIDES ---
     socket.on('ui_action', (action) => {
-        if (!state.ui.isTouchUnlocked) return; // Security check
+        if (!state.ui.isTouchUnlocked) return;
 
         saveHistory();
         console.log(`> UI Action Received: ${action.type}`, action.payload);
@@ -190,6 +266,7 @@ io.on('connection', (socket) => {
                 break;
         }
         io.emit('state_update', state);
+        broadcastToCloud(currentGameCode, state);
     });
 });
 
@@ -202,12 +279,14 @@ server.listen(PORT, () => {
 
 process.on('SIGINT', () => {
     console.log('\nShutting down...');
+    if (buzzerPin) buzzerPin.writeSync(0); // Ensure buzzer is off before exiting!
+    if (buzzerPin) buzzerPin.unexport();
     buttons.forEach(btn => btn.unexport());
     process.exit();
 });
 
 // ==========================================
-// 6. KEYBOARD SIMULATION
+// 7. KEYBOARD SIMULATION
 // ==========================================
 function setupKeyboardSimulation() {
     if (process.platform === 'linux') return;

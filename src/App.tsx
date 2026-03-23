@@ -37,6 +37,8 @@ import { TournamentSetup } from './pages/TournamentSetup';
 import { TournamentManager } from './pages/TournamentManager';
 import { TournamentViewer } from './pages/TournamentViewer';
 import { VolunteerConsole } from './pages/VolunteerConsole';
+import RefereeScreen from './pages/RefereeScreen'; // <-- Added Referee Route
+import ArenaView from './pages/ArenaView';         // <-- Added Arena Route
 
 // ── Tablet PWA pages (NO auth wrapper — these must be public) ─
 import { StandaloneTablet } from './pages/StandaloneTablet';
@@ -98,6 +100,8 @@ function App() {
             <Route path="/game/:code/shots" element={<ShotChartView />} />
             <Route path="/tv" element={<TvKiosk />} />
             <Route path="/wall" element={<WallView />} />
+            <Route path="/referee" element={<RefereeScreen />} />
+            <Route path="/arena" element={<ArenaView />} />
 
             {/* ── Tournament PUBLIC viewer (shareable QR link, no auth) ── */}
             {/* /t/:id      → bracket/results/live scores for spectators   */}

@@ -8,6 +8,8 @@
         "start": "node index.js"
     },
     "dependencies": {
+        "@supabase/supabase-js": "^2.100.0",
+        "dotenv": "^17.3.1",
         "express": "^5.2.1",
         "onoff": "^6.0.3",
         "socket.io": "^4.8.3",

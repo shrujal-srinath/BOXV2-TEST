@@ -406,11 +406,22 @@ export const Dashboard: React.FC = () => {
                 icon="📺"
                 onClick={() => {
                   setIsMenuOpen(false);
-                  // Opens the actual Pi Receiver screen in a new tab
                   window.open('/tv', '_blank');
                 }}
                 highlight={true}
                 subtitle="Launch the Pi holding screen"
+              />
+
+              {/* <-- ADDED: REFEREE BOX LINK --> */}
+              <MenuItem
+                label="Open Referee Box"
+                icon="🖥️"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  window.open('/referee', '_blank');
+                }}
+                highlight={true}
+                subtitle="Launch the Pi Touchscreen UI"
               />
             </div>
 
