@@ -17,7 +17,6 @@ import type {
     ShotAttribute,
     ShotEvent,
     ShotZoneId,
-    CourtMode,
 } from './types/shotTypes';
 import type { Player } from '../../types';
 
@@ -80,7 +79,6 @@ export const ActionChain: React.FC<ActionChainProps> = ({
     const [shotY, setShotY] = useState<number | null>(null);
     const [shotZone, setShotZone] = useState<ShotZoneId>('unlocated');
     const [attributes, setAttributes] = useState<ShotAttribute[]>([]);
-    const [courtMode, setCourtMode] = useState<CourtMode>('zone');
     const [progress, setProgress] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
 
@@ -198,24 +196,13 @@ export const ActionChain: React.FC<ActionChainProps> = ({
     }, [advanceStep]);
 
     const handleCourtTap = useCallback((x: number, y: number) => {
-        let finalX = x;
-        let finalY = y;
-        let zone = classifyZone(x, y);
+        const zone = classifyZone(x, y);
 
-        // In zone mode, snap to zone centroid
-        if (courtMode === 'zone') {
-            const zoneDef = ZONES[zone];
-            if (zoneDef) {
-                finalX = zoneDef.cx;
-                finalY = zoneDef.cy;
-            }
-        }
-
-        setShotX(finalX);
-        setShotY(finalY);
+        setShotX(x);
+        setShotY(y);
         setShotZone(zone);
         advanceStep('court');
-    }, [courtMode, advanceStep]);
+    }, [advanceStep]);
 
     const handleSkipCourt = useCallback(() => {
         advanceStep('court');
@@ -433,35 +420,11 @@ export const ActionChain: React.FC<ActionChainProps> = ({
                                 }}>
                                     Where on court?
                                 </span>
-                                {/* Mode toggle */}
-                                <div style={{
-                                    display: 'flex', background: '#111', borderRadius: 6,
-                                    border: '1px solid #222', overflow: 'hidden',
-                                }}>
-                                    {(['zone', 'precise'] as CourtMode[]).map(m => (
-                                        <button
-                                            key={m}
-                                            onClick={() => setCourtMode(m)}
-                                            style={{
-                                                padding: '4px 10px', fontSize: 10,
-                                                fontWeight: 700, textTransform: 'uppercase',
-                                                letterSpacing: '0.1em', cursor: 'pointer',
-                                                border: 'none',
-                                                background: courtMode === m ? '#222' : 'transparent',
-                                                color: courtMode === m ? '#fff' : '#555',
-                                                fontFamily: '"Barlow", sans-serif',
-                                            }}
-                                        >
-                                            {m}
-                                        </button>
-                                    ))}
-                                </div>
                             </div>
 
                             <HalfCourt
                                 shots={courtShots}
-                                showZones={courtMode === 'zone'}
-                                mode={courtMode}
+                                showZones={false}
                                 interactive
                                 onCourtTap={handleCourtTap}
                                 maxHeight="35vh"
