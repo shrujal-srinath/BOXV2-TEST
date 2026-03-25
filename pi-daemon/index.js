@@ -39,42 +39,44 @@ import {
 } from './supabaseSync.js';
 
 // ─── Game Code ────────────────────────────────────────────────
-// Null until setup_game is called — buttons are ignored until a game exists
 let currentGameCode = null;
 
 // ==========================================
-// 1. HARDWARE MOCKING SETUP
+// 1. HARDWARE SETUP
 // ==========================================
 let Gpio;
 
 if (process.platform === 'linux') {
-    const onoff = await import('onoff');
-    Gpio = onoff.Gpio;
+    // Use pigpio on the Pi
+    const pigpio = await import('pigpio');
+    Gpio = pigpio.Gpio;
 } else {
+    // Mock GPIO for dev on Mac/Windows
     console.warn('\n⚠️  [DEV MODE] Non-Linux OS detected. GPIO is mocked.\n');
     global.mockPins = {};
 
     Gpio = class MockGpio {
-        constructor(gpio, direction, edge, options) {
+        constructor(gpio, opts = {}) {
             this.gpio = gpio;
-            this.direction = direction;
+            this.opts = opts;
             this.value = 0;
-            this.watchCallbacks = [];
+            this.alertCallbacks = [];
             global.mockPins[gpio] = this;
         }
-        watch(callback) { this.watchCallbacks.push(callback); }
-        readSync() { return this.value; }
-        writeSync(value) {
-            this.value = value;
-            if (this.direction === 'out') {
-                if (value === 1) console.log(`\n🔊 [BUZZER ON]  (Pin ${this.gpio})`);
-                if (value === 0) console.log(`🔇 [BUZZER OFF] (Pin ${this.gpio})\n`);
-            }
+        on(event, callback) {
+            if (event === 'alert') this.alertCallbacks.push(callback);
         }
-        unexport() { delete global.mockPins[this.gpio]; }
-        simulateChange(newValue) {
-            this.value = newValue;
-            this.watchCallbacks.forEach(cb => cb(null, this.value));
+        digitalWrite(value) {
+            this.value = value;
+            if (value === 1) console.log(`\n🔊 [BUZZER ON]  (Pin ${this.gpio})`);
+            if (value === 0) console.log(`🔇 [BUZZER OFF] (Pin ${this.gpio})\n`);
+        }
+        glitchFilter() { }
+        simulatePress() {
+            this.alertCallbacks.forEach(cb => cb(0, Date.now())); // active low: 0 = pressed
+            setTimeout(() => {
+                this.alertCallbacks.forEach(cb => cb(1, Date.now()));
+            }, 80);
         }
     };
 }
@@ -83,23 +85,19 @@ if (process.platform === 'linux') {
 // 2. GAME STATE ENGINE
 // ==========================================
 
-/**
- * Builds initial state from config passed in setup_game.
- * Config is optional — used for re-initialisation with specific settings.
- */
 const getInitialState = (config = null) => ({
     teamA: {
         name: config?.teamAName || 'Team A',
         score: 0,
         fouls: 0,
-        timeouts: config?.timeoutsPerTeam || 2,
+        timeouts: config?.timeoutsPerTeam ?? 2,
         color: config?.teamAColor || '#3B82F6',
     },
     teamB: {
         name: config?.teamBName || 'Team B',
         score: 0,
         fouls: 0,
-        timeouts: config?.timeoutsPerTeam || 2,
+        timeouts: config?.timeoutsPerTeam ?? 2,
         color: config?.teamBColor || '#EF4444',
     },
     clock: {
@@ -114,7 +112,7 @@ const getInitialState = (config = null) => ({
     ui: { isTouchUnlocked: false },
     meta: {
         gameCode: null,
-        gameActive: false,    // true only after setup_game completes
+        gameActive: false,
         periodType: config?.periodType || 'quarter',
     },
 });
@@ -123,7 +121,6 @@ let state = getInitialState();
 let history = [];
 
 const cloneState = (s) => JSON.parse(JSON.stringify(s));
-
 const saveHistory = () => {
     history.push(cloneState(state));
     if (history.length > 50) history.shift();
@@ -132,20 +129,26 @@ const saveHistory = () => {
 // ==========================================
 // 3. HARDWARE OUTPUT (BUZZER)
 // ==========================================
-let buzzerPin;
+let buzzerPin = null;
 let buzzerTimeout = null;
 
 function initializeOutputs() {
-    buzzerPin = new Gpio(OUTPUT_CONFIG.BUZZER_PIN, 'out');
-    buzzerPin.writeSync(0); // ensure off on boot
+    try {
+        buzzerPin = new Gpio(OUTPUT_CONFIG.BUZZER_PIN, { mode: Gpio.OUTPUT });
+        buzzerPin.digitalWrite(0);
+        console.log('✅ Buzzer pin initialized');
+    } catch (e) {
+        console.warn('⚠️  Buzzer GPIO not available — skipping:', e.message);
+        buzzerPin = null;
+    }
 }
 
 function triggerBuzzer(type = 'SHORT') {
     if (!buzzerPin) return;
     const duration = type === 'LONG' ? 2000 : 800;
-    buzzerPin.writeSync(1);
+    buzzerPin.digitalWrite(1);
     if (buzzerTimeout) clearTimeout(buzzerTimeout);
-    buzzerTimeout = setTimeout(() => buzzerPin.writeSync(0), duration);
+    buzzerTimeout = setTimeout(() => buzzerPin.digitalWrite(0), duration);
 }
 
 // ==========================================
@@ -155,7 +158,7 @@ let lastTick = Date.now();
 let lastCloudTick = 0;
 
 setInterval(() => {
-    if (!state.meta.gameActive) return; // Don't tick if no game is set up
+    if (!state.meta.gameActive) return;
 
     const now = Date.now();
     const delta = now - lastTick;
@@ -207,44 +210,54 @@ function initializeHardware() {
     initializeOutputs();
 
     BUTTON_CONFIG.forEach(config => {
-        const button = new Gpio(config.pin, 'in', 'both', { debounceTimeout: 20 });
+        try {
+            const button = new Gpio(config.pin, {
+                mode: Gpio.INPUT,
+                pullUpDown: Gpio.PUD_UP,
+                alert: true,
+            });
+            button.glitchFilter(10000); // 10ms debounce
 
-        button.watch((err, value) => {
-            if (err) return console.error(`GPIO error on pin ${config.pin}:`, err);
+            button.on('alert', (level, tick) => {
+                // Active low: level 0 = pressed, level 1 = released
+                const value = level === 0 ? 1 : 0;
 
-            // Ignore all button presses until a game has been set up
-            if (!state.meta.gameActive) {
-                if (value === 1) console.log('> Button pressed but no active game — ignoring');
-                return;
-            }
-
-            if (config.type === 'SHOT_CLOCK') {
-                if (value === 1) {
-                    shotClockDownTime = Date.now();
-                } else if (value === 0 && shotClockDownTime > 0) {
-                    const duration = Date.now() - shotClockDownTime;
-                    saveHistory();
-                    if (duration >= 500) {
-                        console.log('> SHOT CLOCK RESET (14s)');
-                        state.clock.shotMs = 14 * 1000;
-                    } else {
-                        console.log('> SHOT CLOCK RESET (24s)');
-                        state.clock.shotMs = state.clock.shotClockSeconds * 1000;
-                    }
-                    shotClockDownTime = 0;
-                    io.emit('state_update', state);
-                    broadcastToCloud(currentGameCode, state);
+                if (!state.meta.gameActive) {
+                    if (value === 1) console.log('> Button pressed but no active game — ignoring');
+                    return;
                 }
-                return;
-            }
 
-            if (value === 1) handleGameAction(config);
-        });
+                if (config.type === 'SHOT_CLOCK') {
+                    if (value === 1) {
+                        shotClockDownTime = Date.now();
+                    } else if (value === 0 && shotClockDownTime > 0) {
+                        const duration = Date.now() - shotClockDownTime;
+                        saveHistory();
+                        if (duration >= 500) {
+                            console.log('> SHOT CLOCK RESET (14s)');
+                            state.clock.shotMs = 14 * 1000;
+                        } else {
+                            console.log('> SHOT CLOCK RESET (24s)');
+                            state.clock.shotMs = state.clock.shotClockSeconds * 1000;
+                        }
+                        shotClockDownTime = 0;
+                        io.emit('state_update', state);
+                        broadcastToCloud(currentGameCode, state);
+                    }
+                    return;
+                }
 
-        buttons.push(button);
+                if (value === 1) handleGameAction(config);
+            });
+
+            buttons.push(button);
+            console.log(`✅ Button pin ${config.pin} (${config.type}) ready`);
+        } catch (e) {
+            console.warn(`⚠️  Button pin ${config.pin} not available — skipping:`, e.message);
+        }
     });
 
-    console.log(`✅ ${BUTTON_CONFIG.length} buttons wired`);
+    console.log(`✅ Hardware init complete`);
 }
 
 function handleGameAction(config) {
@@ -265,7 +278,7 @@ function handleGameAction(config) {
             saveHistory();
             if (state[config.team].timeouts > 0) {
                 state[config.team].timeouts -= 1;
-                state.clock.isRunning = false; // auto-stop clock on timeout
+                state.clock.isRunning = false;
                 console.log(`> ${config.team.toUpperCase()} TIMEOUT | Remaining: ${state[config.team].timeouts}`);
             }
             break;
@@ -306,7 +319,6 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// Health check endpoint
 app.get('/api/state', (req, res) => res.json(state));
 app.get('/api/health', (req, res) => res.json({
     status: 'ok',
@@ -316,26 +328,17 @@ app.get('/api/health', (req, res) => res.json({
 
 io.on('connection', (socket) => {
     console.log(`🔌 UI connected: ${socket.id}`);
-
-    // Send current state immediately on connect
     socket.emit('state_update', state);
 
-    // ── GAME SETUP ──────────────────────────────────────────────
-    // Two paths:
-    //   OFFLINE: config.existingGameCode undefined → create new game in Supabase
-    //   ONLINE:  config.existingGameCode set → adopt that code, skip creation
     socket.on('setup_game', async (config) => {
         console.log('\n📋 Setting up game:', config.existingGameCode ? `ONLINE [${config.existingGameCode}]` : 'OFFLINE (new)');
 
         try {
             let gameCode;
-
             if (config.existingGameCode) {
-                // ONLINE: game created by website, daemon just adopts the code
                 gameCode = config.existingGameCode;
                 console.log(`✅ Adopting existing game ${gameCode}`);
             } else {
-                // OFFLINE: Pi creates fresh game in Supabase
                 gameCode = await createGame(config);
                 console.log(`✅ Created new game ${gameCode}`);
             }
@@ -355,8 +358,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ── TOUCH UI ACTIONS ────────────────────────────────────────
-    // Only processed when physical SETTINGS button has unlocked the screen
     socket.on('ui_action', (action) => {
         if (!state.ui.isTouchUnlocked) {
             console.log('> UI action rejected — screen is locked');
@@ -391,7 +392,6 @@ io.on('connection', (socket) => {
                 state.clock.period += 1;
                 state.clock.gameMs = state.clock.periodMinutes * 60 * 1000;
                 state.clock.shotMs = state.clock.shotClockSeconds * 1000;
-                // Reset quarter fouls
                 state.teamA.fouls = 0;
                 state.teamB.fouls = 0;
                 console.log(`> NEXT PERIOD: ${state.clock.period}`);
@@ -404,7 +404,6 @@ io.on('connection', (socket) => {
         persistGameState(currentGameCode, state);
     });
 
-    // ── END GAME ────────────────────────────────────────────────
     socket.on('end_game', async () => {
         if (!currentGameCode) return;
 
@@ -414,7 +413,6 @@ io.on('connection', (socket) => {
         await finishGame(currentGameCode);
         teardownChannel();
 
-        // Reset to idle state
         const endedCode = currentGameCode;
         currentGameCode = null;
         state = getInitialState();
@@ -444,8 +442,7 @@ server.listen(PORT, () => {
 
 process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down...');
-    if (buzzerPin) { buzzerPin.writeSync(0); buzzerPin.unexport(); }
-    buttons.forEach(btn => btn.unexport());
+    if (buzzerPin) buzzerPin.digitalWrite(0);
     teardownChannel();
     process.exit(0);
 });
@@ -467,16 +464,13 @@ function setupKeyboardSimulation() {
     process.stdin.on('keypress', async (str, key) => {
         if (key.ctrl && key.name === 'c') process.emit('SIGINT');
 
-        // 'g' simulates a full game setup from the terminal
         if (key.name === 'g') {
-            const fakeSocket = { emit: (event, data) => console.log(`[DEV] emit → ${event}:`, data) };
             const fakeConfig = {
                 teamAName: 'BMSCE', teamBName: 'RNSIT',
                 teamAColor: '#3B82F6', teamBColor: '#EF4444',
                 periodMinutes: 10, shotClockSeconds: 24,
                 periods: 4, periodType: 'quarter',
             };
-            // Directly call the handler logic
             const gameCode = await createGame(fakeConfig);
             currentGameCode = gameCode;
             state = getInitialState(fakeConfig);
@@ -488,7 +482,6 @@ function setupKeyboardSimulation() {
             return;
         }
 
-        // 'e' simulates end_game
         if (key.name === 'e') {
             if (currentGameCode) {
                 await finishGame(currentGameCode);
@@ -502,21 +495,9 @@ function setupKeyboardSimulation() {
             return;
         }
 
-        // Shot clock long press simulation
-        if (key.name === 'r' && key.shift) {
-            const pin = BUTTON_CONFIG.find(c => c.type === 'SHOT_CLOCK')?.pin;
-            if (pin && global.mockPins?.[pin]) {
-                global.mockPins[pin].simulateChange(1);
-                setTimeout(() => global.mockPins[pin].simulateChange(0), 600);
-            }
-            return;
-        }
-
-        // All other mapped keys
         const config = BUTTON_CONFIG.find(c => c.key === key.name);
         if (config && global.mockPins?.[config.pin]) {
-            global.mockPins[config.pin].simulateChange(1);
-            setTimeout(() => global.mockPins[config.pin].simulateChange(0), 50);
+            global.mockPins[config.pin].simulatePress();
         }
     });
 }

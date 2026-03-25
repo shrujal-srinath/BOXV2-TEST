@@ -111,28 +111,27 @@ export default function RefereeScreen() {
     // ── Physical SETTINGS button toggles live ↔ settings ────
     useEffect(() => {
         if (!gameState) return;
-        if (screen === 'live_game' && gameState.ui.isTouchUnlocked) {
+        if (screen === 'live_game' && gameState.ui?.isTouchUnlocked) {
             setScreen('settings');
-        } else if (screen === 'settings' && !gameState.ui.isTouchUnlocked) {
+        } else if (screen === 'settings' && !gameState.ui?.isTouchUnlocked) {
             setScreen('live_game');
         }
-    }, [gameState?.ui.isTouchUnlocked]);
+    }, [gameState?.ui?.isTouchUnlocked]);
 
     // ── Game ended → post_game ───────────────────────────────
     useEffect(() => {
         if (!gameState) return;
         if ((screen === 'live_game' || screen === 'settings')
-            && !gameState.meta.gameActive
+            && !gameState.meta?.gameActive
             && !gameCode) {
             setScreen('post_game');
-            // Reset box unit so it's available for next game
             if (boxCode) resetBoxUnit(boxCode);
         }
-    }, [gameState?.meta.gameActive, gameCode]);
+    }, [gameState?.meta?.gameActive, gameCode]);
 
     // Cache score while live
     useEffect(() => {
-        if (gameState?.meta.gameActive) {
+        if (gameState?.meta?.gameActive) {
             setFinalScore({
                 a: gameState.teamA.score,
                 b: gameState.teamB.score,
@@ -226,8 +225,8 @@ export default function RefereeScreen() {
     }, [pendingConfig, setupGame]);
 
     const displayGameCode = activeGameCode || gameCode;
-    const teamAColor = gameState?.teamA.color || pendingConfig?.teamAColor || '#3B82F6';
-    const teamBColor = gameState?.teamB.color || pendingConfig?.teamBColor || '#EF4444';
+    const teamAColor = gameState?.teamA?.color || pendingConfig?.teamAColor || '#3B82F6';
+    const teamBColor = gameState?.teamB?.color || pendingConfig?.teamBColor || '#EF4444';
 
     // ── Render ────────────────────────────────────────────────
 

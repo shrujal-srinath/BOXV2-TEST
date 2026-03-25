@@ -130,10 +130,20 @@ export function useRefereeBox() {
             scheduleReconnect();
         });
 
-        socket.on('state_update', (newState: GameState) => {
+        socket.on('state_update', (rawState: any) => {
             if (!mountedRef.current) return;
+            // Normalise: guarantee meta and ui always exist
+            // Guards against old daemon format that does not have these fields
+            const newState: GameState = {
+                ...rawState,
+                ui: rawState.ui ?? { isTouchUnlocked: false },
+                meta: rawState.meta ?? {
+                    gameCode: null,
+                    gameActive: false,
+                    periodType: 'quarter',
+                },
+            };
             setGameState(newState);
-            // Sync game code from state in case of reconnect mid-game
             if (newState.meta?.gameCode) setGameCode(newState.meta.gameCode);
         });
 
