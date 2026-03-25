@@ -56,7 +56,16 @@ const OnlineSetup: React.FC<OnlineSetupProps> = ({ onGameAssigned, onBack }) => 
     const handledRef = useRef(false);
     const cleanupRef = useRef<(() => void)[]>([]);
 
-    const setupUrl = `${window.location.origin}/setup?box=${boxCode}`;
+    const [networkIp, setNetworkIp] = useState('localhost');
+
+    useEffect(() => {
+        fetch('http://localhost:3001/api/network-ip')
+            .then(r => r.json())
+            .then(d => setNetworkIp(d.ip))
+            .catch(() => { });
+    }, []);
+
+    const setupUrl = `http://${networkIp}:5173/setup?box=${boxCode}`;
 
     const handleGameAssigned = (gameCode: string) => {
         if (handledRef.current) return;

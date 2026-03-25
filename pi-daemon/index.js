@@ -28,6 +28,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import readline from 'readline';
+import { execSync } from 'child_process';
 import { BUTTON_CONFIG, OUTPUT_CONFIG } from './buttonMap.js';
 import {
     createGame,
@@ -325,6 +326,15 @@ app.get('/api/health', (req, res) => res.json({
     gameActive: state.meta.gameActive,
     gameCode: currentGameCode,
 }));
+
+app.get('/api/network-ip', (req, res) => {
+    try {
+        const ip = execSync("hostname -I | awk '{print $1}'").toString().trim();
+        res.json({ ip });
+    } catch (e) {
+        res.json({ ip: 'localhost' });
+    }
+});
 
 io.on('connection', (socket) => {
     console.log(`🔌 UI connected: ${socket.id}`);
