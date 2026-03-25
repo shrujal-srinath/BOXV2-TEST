@@ -1,8 +1,9 @@
 // src/pages/GameSetup.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { initializeNewGame } from '../services/supabaseGameService';
 import { subscribeToAuth } from '../services/authService';
+import { assignGameToBox } from '../services/boxUnitService';
 import { SplashScreen } from '../components/SplashScreen';
 import { useHardware } from '../contexts/HardwareContext';
 import type { Player } from '../types';
@@ -15,6 +16,8 @@ const TEAM_COLORS = [
 export const GameSetup: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const boxCodeParam = searchParams.get('box');
   const sportType = location.state?.sport || 'basketball';
 
   // --- STATE ---
@@ -194,6 +197,17 @@ export const GameSetup: React.FC = () => {
       );
 
       setLaunchedGameCode(gameCode);
+
+      // If launched from a Pi QR scan, assign the game to that box unit
+      if (boxCodeParam) {
+        try {
+          await assignGameToBox(boxCodeParam, gameCode);
+          console.log(`[GameSetup] Game ${gameCode} assigned to box ${boxCodeParam}`);
+        } catch (err) {
+          console.warn('[GameSetup] Could not assign to box (non-fatal):', err);
+          // Non-fatal — game still launches normally even if box assignment fails
+        }
+      }
 
       // ── Hardware activation ───────────────────────────────────────────────────
       if (deviceId && isHardwareEnabled) {

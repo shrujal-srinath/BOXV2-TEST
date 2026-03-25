@@ -1,244 +1,275 @@
-// src/components/referee/OnlineSetup.tsx
+// src/components/refereebox/OnlineSetup.tsx
 // ═══════════════════════════════════════════════════════════════
-// THE BOX — ONLINE GAME IMPORT
-// Enter 6-digit game code from website. On match, pulls team names,
-// colors, rules from Supabase and transitions to pre-game confirm.
+// THE BOX — ONLINE SETUP (QR FLOW)
+//
+// No manual code entry. Flow:
+//   1. Pi loads its permanent 4-char box code from localStorage
+//   2. Registers in box_units table in Supabase
+//   3. Displays QR code → operator scans → website GameSetup opens
+//   4. Operator configures everything on website and hits Launch
+//   5. Website writes game_code to box's row + fires broadcast
+//   6. Pi subscription fires → onGameAssigned(gameCode) called
+//   7. RefereeScreen transitions automatically — no manual input
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useRef } from 'react';
+import {
+    registerBoxUnit,
+    startBoxHeartbeat,
+    subscribeBoxUnit,
+    subscribeBoxSignal,
+} from '../../services/boxUnitService';
+
+// ─── QR Code via free API (swap to qrcode.js if offline needed) ─
+const getQRUrl = (text: string): string =>
+    `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(text)}&bgcolor=000000&color=ffffff&margin=10`;
+
+// ─── Permanent box code stored in localStorage ────────────────
+const BOX_CODE_KEY = 'THE_BOX_UNIT_CODE';
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRTUVWXYZ2346789';
+
+const getOrCreateBoxCode = (): string => {
+    const stored = localStorage.getItem(BOX_CODE_KEY);
+    if (stored) return stored;
+    let code = 'BX'; // prefix so it's identifiable
+    for (let i = 0; i < 2; i++) code += CODE_CHARS.charAt(Math.floor(Math.random() * CODE_CHARS.length));
+    localStorage.setItem(BOX_CODE_KEY, code);
+    return code;
+};
+
+// ─── Props ────────────────────────────────────────────────────
 
 interface OnlineSetupProps {
-    onGameFound: (gameData: any) => void;
+    onGameAssigned: (gameCode: string) => void;
     onBack: () => void;
 }
 
-const OnlineSetup: React.FC<OnlineSetupProps> = ({ onGameFound, onBack }) => {
-    const [code, setCode] = useState('');
-    const [status, setStatus] = useState<'idle' | 'searching' | 'found' | 'error'>('idle');
+type Phase = 'registering' | 'waiting' | 'assigned' | 'error';
+
+// ─── Component ────────────────────────────────────────────────
+
+const OnlineSetup: React.FC<OnlineSetupProps> = ({ onGameAssigned, onBack }) => {
+    const [boxCode] = useState<string>(getOrCreateBoxCode);
+    const [phase, setPhase] = useState<Phase>('registering');
     const [errorMsg, setErrorMsg] = useState('');
-    const inputRef = useRef<HTMLInputElement>(null);
+    const [assignedCode, setAssignedCode] = useState('');
+    const handledRef = useRef(false);
+    const cleanupRef = useRef<(() => void)[]>([]);
+
+    const setupUrl = `${window.location.origin}/setup?box=${boxCode}`;
+
+    const handleGameAssigned = (gameCode: string) => {
+        if (handledRef.current) return;
+        handledRef.current = true;
+        setAssignedCode(gameCode);
+        setPhase('assigned');
+        setTimeout(() => onGameAssigned(gameCode), 1200);
+    };
 
     useEffect(() => {
-        // Auto-focus the hidden input for keyboard
-        inputRef.current?.focus();
-    }, []);
+        let heartbeatCleanup: (() => void) | null = null;
 
-    const handleCodeChange = (value: string) => {
-        const cleaned = value.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, 6);
-        setCode(cleaned);
-        setStatus('idle');
-        setErrorMsg('');
+        const init = async () => {
+            try {
+                const { game_code, status } = await registerBoxUnit(boxCode);
 
-        // Auto-search when 6 chars entered
-        if (cleaned.length === 6) {
-            searchGame(cleaned);
-        }
-    };
+                // Already has a game assigned — resume immediately
+                if (game_code && status === 'game_ready') {
+                    handleGameAssigned(game_code);
+                    return;
+                }
 
-    const searchGame = async (gameCode: string) => {
-        setStatus('searching');
-        try {
-            // TODO: Replace with actual Supabase lookup
-            // const { data, error } = await supabase.from('games').select('*').eq('code', gameCode).single();
-            // For now, simulate a search
-            await new Promise(resolve => setTimeout(resolve, 1200));
+                setPhase('waiting');
+                heartbeatCleanup = startBoxHeartbeat(boxCode);
 
-            // Simulated — replace with real lookup
-            setStatus('error');
-            setErrorMsg('GAME NOT FOUND — CHECK CODE');
-        } catch (err) {
-            setStatus('error');
-            setErrorMsg('CONNECTION FAILED');
-        }
-    };
+                const unsubDb = subscribeBoxUnit(boxCode, handleGameAssigned, () => { });
+                const unsubSignal = subscribeBoxSignal(boxCode, handleGameAssigned, () => { });
+                cleanupRef.current = [unsubDb, unsubSignal];
 
-    const codeSlots = Array.from({ length: 6 }, (_, i) => code[i] || '');
+            } catch (err) {
+                console.error('[OnlineSetup] Init failed:', err);
+                setPhase('error');
+                setErrorMsg('Cannot reach Supabase. Check your internet connection.');
+            }
+        };
+
+        init();
+
+        return () => {
+            heartbeatCleanup?.();
+            cleanupRef.current.forEach(fn => fn());
+        };
+    }, [boxCode]);
 
     return (
         <div style={{
-            width: '1024px',
-            height: '600px',
-            background: '#000',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            overflow: 'hidden',
+            width: '1024px', height: '600px', background: '#000',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
             {/* Header */}
             <div style={{
-                width: '100%',
-                padding: '16px 32px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                borderBottom: '1px solid #1a1a1a',
-                flexShrink: 0,
-            }}>
-                <div
-                    onClick={onBack}
-                    style={{
-                        fontFamily: "'Barlow', sans-serif",
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: '#666',
-                        cursor: 'pointer',
-                        padding: '8px 0',
-                    }}
-                >
-                    ← BACK
-                </div>
-                <div style={{
-                    fontFamily: "'Oswald', sans-serif",
-                    fontWeight: 700,
-                    fontSize: '22px',
-                    letterSpacing: '0.1em',
-                    color: '#3B82F6',
-                }}>
-                    SCAN GAME
-                </div>
-                <div style={{ width: '60px' }} />
-            </div>
-
-            {/* Main content */}
-            <div style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '32px',
-                padding: '0 32px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 28px', borderBottom: '1px solid #0f0f0f', flexShrink: 0,
             }}>
                 <div style={{
-                    fontFamily: "'Barlow', sans-serif",
-                    fontSize: '16px',
-                    color: '#666',
-                    textAlign: 'center',
-                    letterSpacing: '0.05em',
-                }}>
-                    Enter the game code shown on the website dashboard
-                </div>
-
-                {/* Hidden input for keyboard trigger */}
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={code}
-                    onChange={(e) => handleCodeChange(e.target.value)}
-                    style={{
-                        position: 'absolute',
-                        opacity: 0,
-                        width: '1px',
-                        height: '1px',
-                    }}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="characters"
-                    inputMode="text"
-                />
-
-                {/* Code display slots */}
-                <div
-                    onClick={() => inputRef.current?.focus()}
-                    style={{
-                        display: 'flex',
-                        gap: '12px',
-                        cursor: 'text',
-                    }}
-                >
-                    {codeSlots.map((char, i) => (
-                        <div key={i} style={{
-                            width: '72px',
-                            height: '88px',
-                            background: char ? '#0a1528' : '#0a0a0a',
-                            border: `2px solid ${i === code.length && status === 'idle'
-                                    ? '#3B82F6'
-                                    : char
-                                        ? '#1a3a6a'
-                                        : '#1a1a1a'
-                                }`,
-                            borderRadius: '12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontFamily: "'Oswald', sans-serif",
-                            fontSize: '40px',
-                            fontWeight: 700,
-                            color: '#3B82F6',
-                            letterSpacing: '0.05em',
-                            transition: 'all 0.15s ease',
-                        }}>
-                            {char || (
-                                i === code.length && status === 'idle' ? (
-                                    <div style={{
-                                        width: '2px',
-                                        height: '36px',
-                                        background: '#3B82F6',
-                                        animation: 'breathe 1s infinite',
-                                    }} />
-                                ) : null
-                            )}
-                        </div>
-                    ))}
-                </div>
-
-                {/* Status line */}
+                    fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                    fontSize: '20px', letterSpacing: '0.25em', color: '#fff',
+                }}>THE BOX</div>
                 <div style={{
                     fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    letterSpacing: '0.1em',
-                    height: '20px',
-                    color: status === 'searching' ? '#F59E0B'
-                        : status === 'found' ? '#22C55E'
-                            : status === 'error' ? '#EF4444'
-                                : '#333',
-                    animation: status === 'searching' ? 'breathe 1s infinite' : 'none',
-                }}>
-                    {status === 'idle' && code.length < 6 && `${6 - code.length} DIGITS REMAINING`}
-                    {status === 'searching' && 'SEARCHING...'}
-                    {status === 'found' && 'GAME FOUND — LOADING'}
-                    {status === 'error' && errorMsg}
+                    fontSize: '10px', letterSpacing: '0.15em', color: '#333',
+                }}>ONLINE SETUP</div>
+                <button onClick={onBack} style={{
+                    background: 'none', border: '1px solid #222', borderRadius: '6px',
+                    color: '#444', fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '11px', letterSpacing: '0.1em', padding: '6px 14px', cursor: 'pointer',
+                }}>← BACK</button>
+            </div>
+
+            {/* Body */}
+            <div style={{
+                flex: 1, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: '64px', padding: '24px 48px',
+            }}>
+                {/* QR Code */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                    <div style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '10px', color: '#444', letterSpacing: '0.2em',
+                    }}>SCAN TO CONFIGURE</div>
+
+                    <div style={{
+                        width: '208px', height: '208px', background: '#000',
+                        border: `3px solid ${phase === 'assigned' ? '#22C55E' : '#1e1e1e'}`,
+                        borderRadius: '12px', overflow: 'hidden',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'border-color 0.3s',
+                    }}>
+                        {phase === 'registering' ? (
+                            <div style={{
+                                width: '32px', height: '32px',
+                                border: '2px solid #1a1a1a', borderTop: '2px solid #F59E0B',
+                                borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+                            }} />
+                        ) : phase === 'assigned' ? (
+                            <div style={{ fontSize: '72px', color: '#22C55E', animation: 'popIn 0.3s ease' }}>✓</div>
+                        ) : (
+                            <img
+                                src={getQRUrl(setupUrl)}
+                                alt="Setup QR Code"
+                                width={200} height={200}
+                                style={{ imageRendering: 'pixelated' }}
+                            />
+                        )}
+                    </div>
+
+                    {/* Box code */}
+                    <div style={{
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '20px', letterSpacing: '0.3em', color: '#333',
+                    }}>{boxCode}</div>
                 </div>
 
-                {/* Retry / Clear */}
-                {(status === 'error' || code.length > 0) && (
-                    <div
-                        onClick={() => {
-                            setCode('');
-                            setStatus('idle');
-                            setErrorMsg('');
-                            inputRef.current?.focus();
-                        }}
-                        style={{
-                            fontFamily: "'Barlow', sans-serif",
-                            fontSize: '14px',
-                            fontWeight: 600,
-                            color: '#555',
-                            cursor: 'pointer',
-                            padding: '12px 24px',
-                            border: '1px solid #222',
-                            borderRadius: '8px',
-                        }}
-                    >
-                        CLEAR & RETRY
-                    </div>
-                )}
+                {/* Divider */}
+                <div style={{ width: '1px', height: '180px', background: '#111', flexShrink: 0 }} />
+
+                {/* Instructions / status */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '340px' }}>
+
+                    {(phase === 'waiting' || phase === 'registering') && (
+                        <>
+                            {[
+                                { n: '1', text: 'Scan the QR code with your phone' },
+                                { n: '2', text: 'Configure teams, rosters, and rules on the website' },
+                                { n: '3', text: 'Hit Launch — The Box loads automatically' },
+                            ].map(step => (
+                                <div key={step.n} style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                                    <div style={{
+                                        width: '28px', height: '28px', borderRadius: '50%',
+                                        background: '#0a0a0a', border: '1px solid #222',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontFamily: "'JetBrains Mono', monospace",
+                                        fontSize: '12px', fontWeight: 700, color: '#F59E0B', flexShrink: 0,
+                                    }}>{step.n}</div>
+                                    <div style={{
+                                        fontFamily: "'Barlow', sans-serif",
+                                        fontSize: '15px', color: '#555', lineHeight: 1.5, paddingTop: '4px',
+                                    }}>{step.text}</div>
+                                </div>
+                            ))}
+
+                            <div style={{
+                                display: 'flex', alignItems: 'center', gap: '10px',
+                                padding: '12px 16px', background: '#070707',
+                                border: '1px solid #141414', borderRadius: '8px', marginTop: '4px',
+                            }}>
+                                <div style={{
+                                    width: '8px', height: '8px', borderRadius: '50%',
+                                    background: '#F59E0B', animation: 'breathe 1.5s infinite', flexShrink: 0,
+                                }} />
+                                <div style={{
+                                    fontFamily: "'JetBrains Mono', monospace",
+                                    fontSize: '11px', color: '#F59E0B', letterSpacing: '0.1em',
+                                }}>
+                                    {phase === 'registering' ? 'CONNECTING...' : 'WAITING FOR GAME LAUNCH...'}
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {phase === 'assigned' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: '11px', color: '#22C55E', letterSpacing: '0.15em',
+                            }}>GAME ASSIGNED ✓</div>
+                            <div style={{
+                                fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                                fontSize: '48px', letterSpacing: '0.25em', color: '#F59E0B',
+                            }}>{assignedCode}</div>
+                            <div style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: '11px', color: '#444', letterSpacing: '0.1em',
+                                animation: 'breathe 1s infinite',
+                            }}>LOADING GAME...</div>
+                        </div>
+                    )}
+
+                    {phase === 'error' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: '11px', color: '#EF4444', letterSpacing: '0.15em',
+                            }}>CONNECTION FAILED</div>
+                            <div style={{
+                                fontFamily: "'Barlow', sans-serif", fontSize: '14px', color: '#555',
+                            }}>{errorMsg}</div>
+                            <button onClick={onBack} style={{
+                                padding: '10px 20px', background: '#111',
+                                border: '1px solid #2a2a2a', borderRadius: '8px',
+                                color: '#666', fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: '11px', letterSpacing: '0.1em',
+                                cursor: 'pointer', width: 'fit-content',
+                            }}>← USE OFFLINE MODE</button>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Bottom hint */}
-            <div style={{
-                padding: '16px 32px',
-                borderTop: '1px solid #1a1a1a',
-                width: '100%',
-                textAlign: 'center',
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '11px',
-                color: '#2a2a2a',
-                letterSpacing: '0.05em',
-            }}>
-                CODE IS SHOWN IN WEBSITE → DASHBOARD → GAME CARD
-            </div>
+            {/* URL hint */}
+            {phase === 'waiting' && (
+                <div style={{
+                    padding: '8px 28px 12px', flexShrink: 0, textAlign: 'center',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '10px', color: '#1a1a1a', letterSpacing: '0.05em',
+                }}>{setupUrl}</div>
+            )}
+
+            <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+                @keyframes breathe { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
+                @keyframes popIn { from { opacity:0; transform:scale(0.6); } to { opacity:1; transform:scale(1); } }
+            `}</style>
         </div>
     );
 };

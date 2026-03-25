@@ -1,66 +1,52 @@
 // src/components/referee/PreGameConfirm.tsx
 // ═══════════════════════════════════════════════════════════════
 // THE BOX — PRE-GAME CONFIRMATION
-// Final review screen before the game begins.
-// Shows team matchup in broadcast-style layout + rules summary.
+//
+// Shows matchup + the game code assigned by the Pi.
+// Spectators use this code on the website to watch live.
+// Referee taps BEGIN to go to live scoreboard.
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState } from 'react';
-
-interface GameConfig {
-    teamAName: string;
-    teamBName: string;
-    teamAColor: string;
-    teamBColor: string;
-    periodMinutes: number;
-    shotClockSeconds: number;
-    periods: number;
-}
+import type { GameConfig } from '../../hooks/useRefereeBox';
 
 interface PreGameConfirmProps {
     config: GameConfig;
+    gameCode: string;       // NEW — assigned by daemon after createGame()
     onStart: () => void;
     onBack: () => void;
 }
 
-const PreGameConfirm: React.FC<PreGameConfirmProps> = ({ config, onStart, onBack }) => {
+const PreGameConfirm: React.FC<PreGameConfirmProps> = ({ config, gameCode, onStart, onBack }) => {
     const [isStarting, setIsStarting] = useState(false);
 
     const handleStart = () => {
         setIsStarting(true);
-        // Brief delay for dramatic effect, then start
-        setTimeout(onStart, 400);
+        setTimeout(onStart, 300);
     };
+
+    const periodLabel = config.periodType === 'half'
+        ? `2 × ${config.periodMinutes} MIN HALVES`
+        : `4 × ${config.periodMinutes} MIN QUARTERS`;
 
     return (
         <div style={{
-            width: '1024px',
-            height: '600px',
+            width: '1024px', height: '600px',
             background: '#000',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            position: 'relative',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden', position: 'relative',
         }}>
-            {/* Starting overlay */}
+            {/* Starting flash overlay */}
             {isStarting && (
                 <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: '#000',
-                    zIndex: 100,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    animation: 'fadeIn 0.3s ease',
+                    position: 'absolute', inset: 0, background: '#000',
+                    zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    animation: 'fadeIn 0.25s ease',
                 }}>
                     <div style={{
                         fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '48px',
-                        letterSpacing: '0.2em',
-                        color: '#22C55E',
-                        animation: 'breathe 0.8s infinite',
+                        fontSize: '32px', fontWeight: 700,
+                        letterSpacing: '0.3em', color: '#F59E0B',
                     }}>
                         GAME ON
                     </div>
@@ -69,245 +55,173 @@ const PreGameConfirm: React.FC<PreGameConfirmProps> = ({ config, onStart, onBack
 
             {/* Header */}
             <div style={{
-                padding: '16px 32px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                borderBottom: '1px solid #1a1a1a',
-                flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 28px', borderBottom: '1px solid #0f0f0f', flexShrink: 0,
             }}>
-                <div
-                    onClick={onBack}
-                    style={{
-                        fontFamily: "'Barlow', sans-serif",
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: '#666',
-                        cursor: 'pointer',
-                        padding: '8px 0',
-                    }}
-                >
-                    ← EDIT
+                <div style={{
+                    fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                    fontSize: '20px', letterSpacing: '0.25em', color: '#fff',
+                }}>
+                    THE BOX
                 </div>
                 <div style={{
                     fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '12px',
-                    color: '#555',
-                    letterSpacing: '0.15em',
+                    fontSize: '10px', letterSpacing: '0.15em', color: '#333',
                 }}>
-                    CONFIRM & START
+                    READY TO START
                 </div>
-                <div style={{ width: '60px' }} />
+                <button onClick={onBack} style={{
+                    background: 'none', border: '1px solid #222',
+                    borderRadius: '6px', color: '#444',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '11px', letterSpacing: '0.1em',
+                    padding: '6px 14px', cursor: 'pointer',
+                }}>
+                    ← BACK
+                </button>
             </div>
 
-            {/* Matchup display */}
+            {/* Main matchup */}
             <div style={{
-                flex: 1,
-                display: 'grid',
-                gridTemplateColumns: '1fr auto 1fr',
-                alignItems: 'center',
-                padding: '0 40px',
+                flex: 1, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: '48px', padding: '20px 40px',
             }}>
                 {/* Team A */}
-                <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '16px',
-                }}>
+                <div style={{ flex: 1, textAlign: 'center' }}>
                     <div style={{
-                        width: '100px',
-                        height: '100px',
-                        borderRadius: '20px',
-                        background: config.teamAColor + '20',
+                        width: '80px', height: '80px', borderRadius: '16px',
+                        background: config.teamAColor + '22',
                         border: `3px solid ${config.teamAColor}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '36px',
-                        color: config.teamAColor,
+                        margin: '0 auto 16px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '28px', color: config.teamAColor,
                     }}>
-                        {config.teamAName.slice(0, 2).toUpperCase()}
+                        {config.teamAName.charAt(0)}
                     </div>
                     <div style={{
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '32px',
-                        letterSpacing: '0.08em',
-                        color: config.teamAColor,
-                        textTransform: 'uppercase',
-                        textAlign: 'center',
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '32px', letterSpacing: '0.08em', color: '#fff',
                     }}>
                         {config.teamAName}
                     </div>
                     <div style={{
                         fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '11px',
-                        color: '#555',
-                        letterSpacing: '0.1em',
+                        fontSize: '11px', color: '#444',
+                        letterSpacing: '0.15em', marginTop: '4px',
                     }}>
-                        HOME / LEFT
+                        HOME
                     </div>
                 </div>
 
-                {/* VS */}
+                {/* Center column — VS + game code + rules */}
                 <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '20px',
-                    padding: '0 40px',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', gap: '16px', flexShrink: 0,
                 }}>
                     <div style={{
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '48px',
-                        color: '#222',
-                        letterSpacing: '0.1em',
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '40px', color: '#1a1a1a', letterSpacing: '0.1em',
                     }}>
                         VS
                     </div>
 
-                    {/* Rules summary */}
+                    {/* Game code card */}
                     <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        alignItems: 'center',
+                        background: '#0a0a0a', border: '1px solid #1e1e1e',
+                        borderRadius: '10px', padding: '12px 20px', textAlign: 'center',
                     }}>
                         <div style={{
-                            display: 'flex',
-                            gap: '16px',
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: '10px', color: '#444',
+                            letterSpacing: '0.2em', marginBottom: '6px',
                         }}>
-                            <RulePill label="PERIOD" value={`${config.periodMinutes}:00`} />
-                            <RulePill label="SHOT" value={`${config.shotClockSeconds}s`} />
-                            <RulePill label="FORMAT" value={config.periods === 4 ? '4Q' : '2H'} />
+                            GAME CODE
                         </div>
+                        <div style={{
+                            fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                            fontSize: '28px', letterSpacing: '0.3em', color: '#F59E0B',
+                        }}>
+                            {gameCode}
+                        </div>
+                        <div style={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: '9px', color: '#333',
+                            letterSpacing: '0.08em', marginTop: '4px',
+                        }}>
+                            SPECTATORS: /watch/{gameCode.toLowerCase()}
+                        </div>
+                    </div>
+
+                    {/* Rules summary */}
+                    <div style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '10px', color: '#333',
+                        letterSpacing: '0.1em', textAlign: 'center', lineHeight: 1.9,
+                    }}>
+                        {periodLabel}<br />
+                        {config.shotClockSeconds > 0
+                            ? `${config.shotClockSeconds}s SHOT CLOCK`
+                            : 'NO SHOT CLOCK'}<br />
+                        {config.timeoutsPerTeam || 2} TIMEOUTS / TEAM
                     </div>
                 </div>
 
                 {/* Team B */}
-                <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '16px',
-                }}>
+                <div style={{ flex: 1, textAlign: 'center' }}>
                     <div style={{
-                        width: '100px',
-                        height: '100px',
-                        borderRadius: '20px',
-                        background: config.teamBColor + '20',
+                        width: '80px', height: '80px', borderRadius: '16px',
+                        background: config.teamBColor + '22',
                         border: `3px solid ${config.teamBColor}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '36px',
-                        color: config.teamBColor,
+                        margin: '0 auto 16px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '28px', color: config.teamBColor,
                     }}>
-                        {config.teamBName.slice(0, 2).toUpperCase()}
+                        {config.teamBName.charAt(0)}
                     </div>
                     <div style={{
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '32px',
-                        letterSpacing: '0.08em',
-                        color: config.teamBColor,
-                        textTransform: 'uppercase',
-                        textAlign: 'center',
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '32px', letterSpacing: '0.08em', color: '#fff',
                     }}>
                         {config.teamBName}
                     </div>
                     <div style={{
                         fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '11px',
-                        color: '#555',
-                        letterSpacing: '0.1em',
+                        fontSize: '11px', color: '#444',
+                        letterSpacing: '0.15em', marginTop: '4px',
                     }}>
-                        AWAY / RIGHT
+                        AWAY
                     </div>
                 </div>
             </div>
 
-            {/* Start button */}
+            {/* BEGIN button */}
             <div style={{
-                padding: '16px 32px 24px',
-                borderTop: '1px solid #1a1a1a',
-                flexShrink: 0,
+                padding: '16px 28px 24px',
+                display: 'flex', justifyContent: 'center', flexShrink: 0,
             }}>
-                <div
+                <button
                     onClick={handleStart}
+                    disabled={isStarting}
                     style={{
-                        width: '100%',
-                        height: '64px',
-                        background: 'linear-gradient(135deg, #22C55E 0%, #16A34A 100%)',
-                        borderRadius: '14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '12px',
-                        cursor: 'pointer',
-                        transition: 'transform 0.1s',
+                        padding: '20px 100px',
+                        background: isStarting ? '#333' : '#F59E0B',
+                        border: 'none', borderRadius: '12px', color: '#000',
+                        fontFamily: "'Oswald', sans-serif", fontSize: '22px',
+                        fontWeight: 700, letterSpacing: '0.25em', cursor: 'pointer',
+                        transition: 'all 0.15s ease', WebkitTapHighlightColor: 'transparent',
                     }}
-                    onTouchStart={(e) => {
-                        (e.currentTarget as HTMLElement).style.transform = 'scale(0.98)';
-                    }}
-                    onTouchEnd={(e) => {
-                        (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
-                    }}
+                    onTouchStart={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.97)'; }}
+                    onTouchEnd={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
                 >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                        <polygon points="5,3 19,12 5,21" />
-                    </svg>
-                    <span style={{
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '24px',
-                        letterSpacing: '0.2em',
-                        color: '#fff',
-                    }}>
-                        START GAME
-                    </span>
-                </div>
+                    {isStarting ? 'STARTING...' : 'BEGIN ▶'}
+                </button>
             </div>
+
+            <style>{`@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }`}</style>
         </div>
     );
 };
-
-// ── Rule pill sub-component ──
-const RulePill: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-    <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '8px 16px',
-        background: '#0a0a0a',
-        border: '1px solid #1a1a1a',
-        borderRadius: '8px',
-        minWidth: '80px',
-    }}>
-        <div style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '9px',
-            color: '#555',
-            letterSpacing: '0.15em',
-            marginBottom: '4px',
-        }}>
-            {label}
-        </div>
-        <div style={{
-            fontFamily: "'Oswald', sans-serif",
-            fontSize: '20px',
-            fontWeight: 700,
-            color: '#fff',
-        }}>
-            {value}
-        </div>
-    </div>
-);
 
 export default PreGameConfirm;
