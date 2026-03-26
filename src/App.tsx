@@ -22,6 +22,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { subscribeToAuth } from './services/authService';
 import { HardwareProvider } from './contexts/HardwareContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // ── Website pages ──────────────────────────────────────────
 import { LandingPage } from './pages/LandingPage';
@@ -78,72 +79,74 @@ function App() {
   }, []);
 
   return (
-    <Router>
-      <HardwareProvider userId={userId}>
-        <div className="min-h-screen bg-black text-white font-sans">
-          <Routes>
+    <ThemeProvider>
+      <Router>
+        <HardwareProvider userId={userId}>
+          <div className="min-h-screen bg-gray-50 text-zinc-900 dark:bg-black dark:text-white font-sans transition-colors duration-300">
+            <Routes>
 
-            {/* ══════════════════════════════════════════════
+              {/* ══════════════════════════════════════════════
               TABLET PWA ROUTES
               ── Completely public. No ProtectedHostRoute.
               ── Must stay this way: iPad Air 2 in a gym
                  with no internet must never hit an auth wall.
               ══════════════════════════════════════════════ */}
-            <Route path="/tablet/standalone" element={<StandaloneTablet />} />
-            <Route path="/tablet/:gameCode" element={<TabletController />} />
+              <Route path="/tablet/standalone" element={<StandaloneTablet />} />
+              <Route path="/tablet/:gameCode" element={<TabletController />} />
 
-            {/* ══════════════════════════════════════════════
+              {/* ══════════════════════════════════════════════
               WEBSITE — PUBLIC ROUTES
               ══════════════════════════════════════════════ */}
-            <Route path="/" element={<RootRedirect />} />
-            <Route path="/watch/:gameCode" element={<SpectatorView />} />
-            <Route path="/game/:code/shots" element={<ShotChartView />} />
-            <Route path="/tv" element={<TvKiosk />} />
-            <Route path="/wall" element={<WallView />} />
-            <Route path="/referee" element={<RefereeScreen />} />
-            <Route path="/arena" element={<ArenaView />} />
+              <Route path="/" element={<RootRedirect />} />
+              <Route path="/watch/:gameCode" element={<SpectatorView />} />
+              <Route path="/game/:code/shots" element={<ShotChartView />} />
+              <Route path="/tv" element={<TvKiosk />} />
+              <Route path="/wall" element={<WallView />} />
+              <Route path="/referee" element={<RefereeScreen />} />
+              <Route path="/arena" element={<ArenaView />} />
 
-            {/* ── Tournament PUBLIC viewer (shareable QR link, no auth) ── */}
-            {/* /t/:id      → bracket/results/live scores for spectators   */}
-            {/* /t/:id/volunteer → scorer console (PIN-gated, no auth)     */}
-            <Route path="/t/:id" element={<TournamentViewer />} />
-            <Route path="/t/:id/volunteer" element={<VolunteerConsole />} />
+              {/* ── Tournament PUBLIC viewer (shareable QR link, no auth) ── */}
+              {/* /t/:id      → bracket/results/live scores for spectators   */}
+              {/* /t/:id/volunteer → scorer console (PIN-gated, no auth)     */}
+              <Route path="/t/:id" element={<TournamentViewer />} />
+              <Route path="/t/:id/volunteer" element={<VolunteerConsole />} />
 
-            {/* ══════════════════════════════════════════════
+              {/* ══════════════════════════════════════════════
               WEBSITE — PROTECTED ROUTES
               ══════════════════════════════════════════════ */}
-            <Route path="/dashboard" element={
-              <ProtectedHostRoute><Dashboard /></ProtectedHostRoute>
-            } />
+              <Route path="/dashboard" element={
+                <ProtectedHostRoute><Dashboard /></ProtectedHostRoute>
+              } />
 
-            <Route path="/setup" element={
-              <ProtectedHostRoute><GameSetup /></ProtectedHostRoute>
-            } />
+              <Route path="/setup" element={
+                <ProtectedHostRoute><GameSetup /></ProtectedHostRoute>
+              } />
 
-            <Route path="/host/:gameCode" element={
-              <ProtectedHostRoute><HostConsole /></ProtectedHostRoute>
-            } />
+              <Route path="/host/:gameCode" element={
+                <ProtectedHostRoute><HostConsole /></ProtectedHostRoute>
+              } />
 
-            {/* Tournament admin routes */}
-            <Route path="/tournament" element={
-              <ProtectedHostRoute><TournamentDashboard /></ProtectedHostRoute>
-            } />
-            <Route path="/tournament/create" element={
-              <ProtectedHostRoute><TournamentSetup /></ProtectedHostRoute>
-            } />
-            <Route path="/tournament/:id/manage" element={
-              <ProtectedHostRoute><TournamentManager /></ProtectedHostRoute>
-            } />
+              {/* Tournament admin routes */}
+              <Route path="/tournament" element={
+                <ProtectedHostRoute><TournamentDashboard /></ProtectedHostRoute>
+              } />
+              <Route path="/tournament/create" element={
+                <ProtectedHostRoute><TournamentSetup /></ProtectedHostRoute>
+              } />
+              <Route path="/tournament/:id/manage" element={
+                <ProtectedHostRoute><TournamentManager /></ProtectedHostRoute>
+              } />
 
-            {/* ══════════════════════════════════════════════
+              {/* ══════════════════════════════════════════════
               FALLBACK
               ══════════════════════════════════════════════ */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
 
-          </Routes>
-        </div>
-      </HardwareProvider>
-    </Router>
+            </Routes>
+          </div>
+        </HardwareProvider>
+      </Router>
+    </ThemeProvider>
   );
 }
 

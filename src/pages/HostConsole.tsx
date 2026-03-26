@@ -28,7 +28,7 @@ import { stopAllCastsForGame } from '../services/tvDisplayService';
 import { supabase } from '../services/supabase';
 import type { Player } from '../types';
 
-import { AdvancedConsole } from '../components/shotchart/AdvancedConsole';
+import { AdvancedStatsV2 } from '../components/shotchart/AdvancedStatsV2';
 import { createShotEvent, createGameAction, subscribeToShots } from '../services/shotService';
 import type { ShotEvent, ShotType, ShotZoneId, ShotAttribute, GameActionType } from '../components/shotchart/types/shotTypes';
 
@@ -626,54 +626,19 @@ export const HostConsole: React.FC = () => {
     // ── Early return: Advanced mode takes over the whole page ─────────────
     if (isAdvancedMode && game) {
         return (
-            <AdvancedConsole
-                // Team A
+            <AdvancedStatsV2
                 teamAName={game.teamA.name}
                 teamAColor={game.teamA.color}
                 teamAPlayers={game.teamA.players || []}
-                teamAScore={game.teamA.score}
-                teamAFouls={game.teamA.fouls}
-                teamATimeouts={game.teamA.timeouts}
-                // Team B
                 teamBName={game.teamB.name}
                 teamBColor={game.teamB.color}
                 teamBPlayers={game.teamB.players || []}
-                teamBScore={game.teamB.score}
-                teamBFouls={game.teamB.fouls}
-                teamBTimeouts={game.teamB.timeouts}
-                // Timer
-                period={timer.period}
-                minutes={timer.minutes}
-                seconds={timer.seconds}
-                shotClock={timer.shotClock}
-                gameRunning={timer.gameRunning}
-                possession={game.gameState.possession}
-                // Shot chart
-                existingShots={gameShotEvents}
-                // Scoring handlers
-                onScoreChange={(team, pts) => handleWebScore(team, pts)}
+                onScoreChange={handleWebScore}
                 onShotRecorded={handleShotRecorded}
                 onSecondaryAction={handleAdvancedSecondaryAction}
-                // Clock handlers
-                onToggleClock={() => timer.toggleClock()}
-                onNextPeriod={() => timer.nextPeriod()}
-                onResetShotClock={(val) => {
-                    if (val === 14) timer.resetShotClock14();
-                    else timer.resetShotClock24();
-                }}
-                onTogglePossession={() => togglePossession()}
-                // Game info
-                gameName={game.settings?.gameName}
-                gameCode={gameCode}
-                // Action bar
-                onUndo={handleUndo}
-                onCast={() => setShowCastModal(true)}
-                onExport={handleExportStats}
-                onEndGame={handleEndGame}
-                onBack={() => setShowBackConfirm(true)}
-                // Hardware
-                hwMode={hwMode}
-                isWebLocked={isWebLocked}
+                existingShots={gameShotEvents}
+                period={timer.period}
+                gameClockSec={timer.minutes * 60 + timer.seconds}
             />
         );
     }

@@ -6,9 +6,6 @@
   font-family: Inter, system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: dark;
-  background-color: #000;
-  color: #fff;
 }
 
 /* === UTILITY: Sharp Corners & Scrollbars === */
@@ -24,12 +21,11 @@ button,
 }
 
 ::-webkit-scrollbar-track {
-  background: #09090b;
+  @apply bg-gray-100 dark:bg-zinc-950;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 3px;
+  @apply bg-gray-300 dark:bg-zinc-700 rounded-sm;
 }
 
 /* === ANIMATION ENGINE === */
@@ -144,6 +140,7 @@ button,
     min-height: 100vh !important;
     transform: none !important;
     visibility: visible !important;
-    background-color: #000 !important;
+    @apply bg-gray-50 dark:bg-black;
+    /* Dynamic background */
   }
 }

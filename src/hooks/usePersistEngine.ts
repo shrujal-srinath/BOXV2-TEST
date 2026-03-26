@@ -12,6 +12,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { broadcastScoreUpdate } from '../services/supabaseBroadcastService';
+import { fromBasketballGame, toBasketballGame } from '../adapters/basketballAdapter';
+import type { Game } from '../core/types/Game';
+import type { BasketballState, BasketballRules } from '../sports/basketball/manifest';
+import type { BasketballGame } from '../types';
 
 /**
  * usePersistEngine
@@ -26,16 +30,8 @@ import { broadcastScoreUpdate } from '../services/supabaseBroadcastService';
  */
 export const usePersistEngine = (
     gameCode: string | null,
-    dbGame: any,
-    engineState: {
-        scoreA: number;
-        scoreB: number;
-        foulsA: number;
-        foulsB: number;
-        timeoutsA: number;
-        timeoutsB: number;
-        possession: 'A' | 'B';
-    },
+    dbGame: Game<BasketballState, BasketballRules> | null,
+    engineState: BasketballState,
     enabled: boolean
 ) => {
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,35 +55,29 @@ export const usePersistEngine = (
             return;
         }
 
-        const freshData = row.data as any;
+        const originalData = row.data as BasketballGame;
+        const freshGame = fromBasketballGame(originalData);
 
-        // Step 2: Merge ONLY the fields the engine owns
-        const merged = {
-            ...freshData,
-            teamA: {
-                ...freshData.teamA,
-                score: engineState.scoreA,
-                fouls: engineState.foulsA,
-                timeouts: engineState.timeoutsA,
+        // Step 2: Merge the new engine state into the fresh Game object
+        const mergedGame: Game<BasketballState, BasketballRules> = {
+            ...freshGame,
+            state: {
+                ...freshGame.state,
+                ...engineState,
             },
-            teamB: {
-                ...freshData.teamB,
-                score: engineState.scoreB,
-                fouls: engineState.foulsB,
-                timeouts: engineState.timeoutsB,
-            },
-            gameState: {
-                ...freshData.gameState,
-                possession: engineState.possession,
-            },
+            teamA: { ...freshGame.teamA, score: engineState.scoreA },
+            teamB: { ...freshGame.teamB, score: engineState.scoreB },
             lastUpdate: Date.now(),
         };
 
-        // Step 3: Write merged snapshot
+        // Step 3: Convert back to the legacy BasketballGame format for writing
+        const dataToWrite = toBasketballGame(mergedGame, originalData);
+
+        // Step 4: Write merged snapshot
         const { error } = await supabase
             .from('games')
             .update({
-                data: merged,
+                data: dataToWrite,
                 lastUpdate: Date.now(),
             })
             .eq('code', gameCode);
@@ -110,7 +100,7 @@ export const usePersistEngine = (
             engineState.foulsB,
             engineState.timeoutsA,
             engineState.timeoutsB,
-            engineState.possession,
+            engineState.possession as 'A' | 'B'
         );
     }, [gameCode, engineState, enabled]);
 

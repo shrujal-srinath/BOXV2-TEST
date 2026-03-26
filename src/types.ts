@@ -114,6 +114,16 @@ export interface GameState {
 // ║  in supabaseGameService.ts).                                             ║
 // ╚════════════════════════════════════════════════════════════════════════════╝
 
+/**
+ * @deprecated This is the legacy flat type. New code should use Game<TState, TRules> from core/types/Game.ts
+ * 
+ * MIGRATION PATH:
+ * 1. If you're reading from Supabase, use toGenericGame() to convert
+ * 2. If you're displaying UI, use the sport manifest's components
+ * 3. If you're writing new features, use Game<TState, TRules> directly
+ * 
+ * This type will be removed in v6.0 (target: Q2 2026)
+ */
 export interface BasketballGame {
   code: string;
   hostId: string;

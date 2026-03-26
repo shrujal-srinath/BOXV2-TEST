@@ -11,12 +11,19 @@
 import { supabase } from './supabase';
 import type { BasketballGame, GameSettings, TeamData, GameState, Player } from '../types';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { validateBasketballGame } from '../validation/gameSchema';
 
 // ─── Channel cache for realtime subscriptions ─────────────────────────────────
 const gameSubChannels = new Map<string, RealtimeChannel>();
 
 // ─── Data normalizer — runs on every row read from the DB ─────────────────────
-const normalizeGameData = (data: any): BasketballGame => {
+/**
+ * @deprecated DO NOT USE. This function patches over malformed DB data.
+ * Fix the root cause: validate on write, not read.
+ * Kept temporarily for reading legacy rows.
+ */
+const normalizeGameData_DEPRECATED = (data: any): BasketballGame => {
+    console.warn('[DEPRECATED] normalizeGameData called. Migrate to validated writes.');
     const game = { ...data };
     // Ensure sportId is always populated (handles rows written before the migration)
     game.sportId = game.sportId || game.sport || 'basketball';
@@ -104,6 +111,13 @@ export const initializeNewGame = async (
         teamB: { ...createDefaultTeam(teamB.name, teamB.color), ...teamB },
     };
 
+    // ✅ VALIDATION CHECKPOINT
+    const validation = validateBasketballGame(newGame);
+    if (!validation.success) {
+        console.error('[Supabase] Game validation failed:', validation.errors);
+        throw new Error(`Invalid game data: ${validation.errors.join(', ')}`);
+    }
+
     // Write to Supabase Postgres
     const { error } = await supabase
         .from('games')
@@ -113,7 +127,7 @@ export const initializeNewGame = async (
             sportId: sport,
             status: 'live',
             gameType: isOnline ? 'online' : 'local',
-            data: newGame,
+            data: validation.data,
             lastUpdate: Date.now(),
         });
 
@@ -159,7 +173,15 @@ export const subscribeToGame = (
                 callback(null); // Give up after 3 attempts (~1.8s total)
             }
         } else {
-            callback(normalizeGameData(data.data));
+            // ✅ VALIDATE ON READ
+            const validation = validateBasketballGame(data.data);
+            if (validation.success) {
+                callback(validation.data);
+            } else {
+                console.warn('[Supabase] Invalid game data from DB:', validation.errors);
+                // Fallback to deprecated normalizer for legacy rows
+                callback(normalizeGameData_DEPRECATED(data.data));
+            }
         }
     };
     fetchWithRetry(3);
@@ -180,7 +202,8 @@ export const subscribeToGame = (
                 if (payload.eventType === 'DELETE') {
                     callback(null);
                 } else if (payload.new && (payload.new as any).data) {
-                    callback(normalizeGameData((payload.new as any).data));
+                    const validation = validateBasketballGame((payload.new as any).data);
+                    callback(validation.success ? validation.data : normalizeGameData_DEPRECATED((payload.new as any).data));
                 }
             }
         )
@@ -215,7 +238,10 @@ export const subscribeToLiveGames = (
             .order('lastUpdate', { ascending: false });
 
         if (!error && data) {
-            callback(data.map(row => normalizeGameData(row.data)));
+            callback(data.map(row => {
+                const validation = validateBasketballGame(row.data);
+                return validation.success ? validation.data : normalizeGameData_DEPRECATED(row.data);
+            }));
         }
     };
 
@@ -274,10 +300,17 @@ export const updateGameField = async (
     }
     obj[parts[parts.length - 1]] = value;
 
+    // ✅ VALIDATE BEFORE WRITE
+    const validation = validateBasketballGame(gameData);
+    if (!validation.success) {
+        console.error('[Supabase] updateGameField validation failed:', validation.errors);
+        throw new Error(`Invalid game data after update: ${validation.errors.join(', ')}`);
+    }
+
     // Write back
     const { error } = await supabase
         .from('games')
-        .update({ data: gameData, lastUpdate: Date.now() })
+        .update({ data: validation.data, lastUpdate: Date.now() })
         .eq('code', gameId);
 
     if (error) {
@@ -317,9 +350,16 @@ export const batchUpdateGame = async (
         obj[parts[parts.length - 1]] = value;
     }
 
+    // ✅ VALIDATE BEFORE WRITE
+    const validation = validateBasketballGame(gameData);
+    if (!validation.success) {
+        console.error('[Supabase] batchUpdateGame validation failed:', validation.errors);
+        throw new Error(`Invalid game data after update: ${validation.errors.join(', ')}`);
+    }
+
     const { error } = await supabase
         .from('games')
-        .update({ data: gameData, lastUpdate: Date.now() })
+        .update({ data: validation.data, lastUpdate: Date.now() })
         .eq('code', gameId);
 
     if (error) {
@@ -367,7 +407,8 @@ export const getGameByCode = async (code: string): Promise<BasketballGame | null
         .single();
 
     if (error || !data) return null;
-    return normalizeGameData(data.data);
+    const validation = validateBasketballGame(data.data);
+    return validation.success ? validation.data : normalizeGameData_DEPRECATED(data.data);
 };
 
 /**
