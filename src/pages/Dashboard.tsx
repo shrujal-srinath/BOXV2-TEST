@@ -159,7 +159,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {visibleGames.map((g, index) => (
-            <div key={g.code || `game-${index}`} className={`bg-white dark:bg-zinc-900/50 border border-[#D4CCC3] dark:border-zinc-800 p-4 rounded-xl transition-all shadow-sm dark:shadow-none group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
+            <div key={g.code || `game-${index}`} className={`bg-white dark:bg-zinc-900/50 border border-[#D4CCC3] dark:border-zinc-800 p-4 rounded-xl transition-all shadow-[0_1px_3px_rgba(44,36,25,0.04)] dark:shadow-none group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
               {/* Status Color Bar */}
               <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${isMyGames ? 'bg-red-600' : 'bg-blue-600'}`}></div>
 
@@ -181,15 +181,15 @@ export const Dashboard: React.FC = () => {
               </div>
 
               {/* Title & Code */}
-              <h3 className={`font-black italic text-xl text-[#2C2419] dark:text-white mb-1 transition-colors uppercase tracking-tight pl-2 truncate ${isMyGames ? 'group-hover:text-red-600 dark:group-hover:text-red-400' : 'group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
+              <h3 className={`font-black italic text-xl text-[#2C2419] dark:text-white mb-1 transition-colors uppercase tracking-tight pl-2 truncate ${isMyGames ? 'group-hover:text-[#C45832] dark:group-hover:text-red-400' : 'group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
                 {g.settings?.gameName || 'UNTITLED GAME'}
               </h3>
-              <div className="text-xs font-mono text-zinc-500 dark:text-zinc-400 mb-4 pl-2">ID: <span className="text-zinc-600 dark:text-zinc-500">{g.code || '----'}</span></div>
+              <div className="text-xs font-mono text-[#A08B6E] dark:text-zinc-400 mb-4 pl-2">ID: <span className="text-[#8B7355] dark:text-zinc-500">{g.code || '----'}</span></div>
 
               {/* Score */}
-              <div className="flex items-center justify-between bg-[#F0EAE2] dark:bg-black p-3 rounded-xl border border-[#D4CCC3] dark:border-zinc-800 shadow-inner dark:shadow-none mb-3 mt-auto">
+              <div className="flex items-center justify-between bg-[#F0EAE2] dark:bg-black p-3 rounded-xl border border-[#D4CCC3] dark:border-zinc-800 shadow-[inset_0_1px_3px_rgba(44,36,25,0.06)] dark:shadow-none mb-3 mt-auto">
                 <div className="font-bold text-lg" style={{ color: g.teamA?.color || '#DC2626' }}>{g.teamA?.score ?? 0}</div>
-                <div className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">VS</div>
+                <div className="text-[9px] text-[#A08B6E] dark:text-zinc-600 uppercase tracking-widest font-bold">VS</div>
                 <div className="font-bold text-lg" style={{ color: g.teamB?.color || '#2563EB' }}>{g.teamB?.score ?? 0}</div>
               </div>
 
@@ -197,15 +197,15 @@ export const Dashboard: React.FC = () => {
               <div className="flex gap-2">
                 {isMyGames ? (
                   <>
-                    <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2 bg-[#C45832] hover:bg-[#A84828] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white dark:text-white border border-[#C45832] dark:border-transparent shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors">
+                    <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2 bg-[#C45832] hover:bg-[#A84828] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white dark:text-white border border-[#C45832] dark:border-transparent shadow-[0_2px_6px_rgba(196,88,50,0.2)] dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors">
                       Console
                     </button>
-                    <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2 bg-white hover:bg-[#EDE5DA] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#2C2419] dark:text-white border border-[#D4CCC3] dark:border-transparent shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors">
+                    <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2 bg-[#EDE5DA] hover:bg-[#E2D8CA] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#2C2419] dark:text-white border border-[#D4CCC3] dark:border-transparent shadow-[0_1px_2px_rgba(44,36,25,0.04)] dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors">
                       Tablet
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2 bg-[#C45832] hover:bg-[#A84828] dark:bg-blue-900 dark:hover:bg-blue-800 text-white dark:text-white shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2">
+                  <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2 bg-[#C45832] hover:bg-[#A84828] dark:bg-blue-900 dark:hover:bg-blue-800 text-white dark:text-white shadow-[0_2px_6px_rgba(196,88,50,0.2)] dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2">
                     <span>●</span> Watch Stream
                   </button>
                 )}
@@ -219,7 +219,7 @@ export const Dashboard: React.FC = () => {
           <div className="mt-8 text-center">
             <button
               onClick={() => setIsExpanded(true)}
-              className="px-6 py-3 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-500 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-full transition-all"
+              className="px-6 py-3 bg-white dark:bg-zinc-900 border border-[#D4CCC3] dark:border-zinc-700 hover:border-[#B8AD9F] dark:hover:border-zinc-500 text-[#6B5D4D] dark:text-zinc-400 hover:text-[#2C2419] dark:hover:text-white shadow-[0_1px_3px_rgba(44,36,25,0.04)] dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-full transition-all"
             >
               Show {hiddenCount} More Games ↓
             </button>
@@ -230,7 +230,7 @@ export const Dashboard: React.FC = () => {
           <div className="mt-8 text-center">
             <button
               onClick={() => setIsExpanded(false)}
-              className="text-zinc-500 dark:text-zinc-600 hover:text-zinc-900 dark:hover:text-zinc-400 text-[10px] font-bold uppercase tracking-widest"
+              className="text-[#8B7355] dark:text-zinc-600 hover:text-[#2C2419] dark:hover:text-zinc-400 text-[10px] font-bold uppercase tracking-widest"
             >
               Show Less ↑
             </button>
@@ -247,9 +247,9 @@ export const Dashboard: React.FC = () => {
 
     if (tournaments.length === 0) {
       return (
-        <div className="border border-dashed border-gray-300 dark:border-zinc-800 p-12 text-center rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-900/30 transition-colors">
+        <div className="border border-dashed border-[#D4CCC3] dark:border-zinc-800 p-12 text-center rounded-lg hover:bg-[#F0EAE2] dark:hover:bg-zinc-900/30 transition-colors">
           <div className="text-4xl mb-4 grayscale opacity-20">🏆</div>
-          <p className="text-zinc-500 dark:text-zinc-600 text-xs font-mono uppercase tracking-widest">No active tournaments found.</p>
+          <p className="text-[#8B7355] dark:text-zinc-600 text-xs font-mono uppercase tracking-widest">No active tournaments found.</p>
           <button onClick={handleEnterTournament} className="mt-4 text-xs font-bold text-yellow-600 dark:text-yellow-500 hover:text-yellow-700 dark:hover:text-yellow-400 uppercase tracking-widest">
             + Create Tournament
           </button>
@@ -261,7 +261,7 @@ export const Dashboard: React.FC = () => {
       <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr">
           {visibleTournaments.map((t, index) => (
-            <div key={t.id || `tourney-${index}`} className="bg-white dark:bg-zinc-900/50 border border-gray-200 dark:border-zinc-800 shadow-sm dark:shadow-none p-4 rounded-sm transition-all group relative overflow-hidden hover:border-yellow-500 dark:hover:border-yellow-600 flex flex-col">
+            <div key={t.id || `tourney-${index}`} className="bg-white dark:bg-zinc-900/50 border border-[#D4CCC3] dark:border-zinc-800 shadow-[0_1px_3px_rgba(44,36,25,0.04)] dark:shadow-none p-4 rounded-sm transition-all group relative overflow-hidden hover:border-[#B8860B] dark:hover:border-yellow-600 flex flex-col">
               <div className="absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 bg-yellow-500 dark:bg-yellow-600"></div>
 
               <div className="flex justify-between items-start mb-4 pl-2">
@@ -269,13 +269,13 @@ export const Dashboard: React.FC = () => {
                 <div className="w-2 h-2 rounded-full animate-pulse bg-green-500"></div>
               </div>
 
-              <h3 className="font-black italic text-xl text-zinc-900 dark:text-white mb-1 transition-colors uppercase tracking-tight pl-2 group-hover:text-yellow-600 dark:group-hover:text-yellow-400 truncate">
+              <h3 className="font-black italic text-xl text-[#2C2419] dark:text-white mb-1 transition-colors uppercase tracking-tight pl-2 group-hover:text-[#B8860B] dark:group-hover:text-yellow-400 truncate">
                 {t.name || 'UNTITLED'}
               </h3>
-              <div className="text-xs font-mono text-zinc-500 dark:text-zinc-400 mb-4 pl-2">Organizer: <span className="text-zinc-600 dark:text-zinc-500">{t.organizer || 'Unknown'}</span></div>
+              <div className="text-xs font-mono text-[#A08B6E] dark:text-zinc-400 mb-4 pl-2">Organizer: <span className="text-[#8B7355] dark:text-zinc-500">{t.organizer || 'Unknown'}</span></div>
 
               <div className="flex gap-2 mt-auto">
-                <button onClick={() => navigate(t.adminId === user?.id ? `/tournament/${t.id}/manage` : `/tournament`)} className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white text-xs font-bold uppercase tracking-widest rounded transition-colors border border-gray-200 dark:border-zinc-700 shadow-sm dark:shadow-none">
+                <button onClick={() => navigate(t.adminId === user?.id ? `/tournament/${t.id}/manage` : `/tournament`)} className="flex-1 py-2 bg-[#EDE5DA] hover:bg-[#E2D8CA] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#2C2419] dark:text-white text-xs font-bold uppercase tracking-widest rounded transition-colors border border-[#D4CCC3] dark:border-zinc-700 shadow-[0_1px_2px_rgba(44,36,25,0.04)] dark:shadow-none">
                   {t.adminId === user?.id ? 'Manage' : 'View Details'}
                 </button>
               </div>
@@ -288,7 +288,7 @@ export const Dashboard: React.FC = () => {
           <div className="mt-8 text-center">
             <button
               onClick={() => setIsExpanded(true)}
-              className="px-6 py-3 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-500 text-yellow-700 dark:text-yellow-600 hover:text-yellow-800 dark:hover:text-yellow-400 shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-full transition-all"
+              className="px-6 py-3 bg-white dark:bg-zinc-900 border border-[#D4CCC3] dark:border-zinc-700 hover:border-[#B8AD9F] dark:hover:border-zinc-500 text-[#B8860B] dark:text-yellow-600 hover:text-[#9A7209] dark:hover:text-yellow-400 shadow-[0_1px_3px_rgba(44,36,25,0.04)] dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-full transition-all"
             >
               Show {hiddenCount} More Tournaments ↓
             </button>
@@ -308,13 +308,13 @@ export const Dashboard: React.FC = () => {
   return (
     <div className={`min-h-screen bg-[#F5F0EB] dark:bg-black font-sans text-[#2C2419] dark:text-white transition-colors duration-300 overflow-x-hidden`}>
       {/* HEADER */}
-      <header className="border-b border-[#D4CCC3] dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20 shadow-sm dark:shadow-none">
+      <header className="border-b border-[#D4CCC3] dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20 shadow-[0_1px_3px_rgba(44,36,25,0.04)] dark:shadow-none">
         <button onClick={() => setActiveModal('profile')} className="flex items-center gap-4 group hover:bg-[#EDE5DA] dark:hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all cursor-pointer">
           <div className="relative">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black italic text-sm shadow-lg overflow-hidden border-2 ${user ? 'border-[#C45832] bg-[#F5DED5] dark:bg-zinc-800' : 'border-[#D4CCC3] dark:border-zinc-600 bg-[#EDE5DA] dark:bg-zinc-800'}`}>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black italic text-sm shadow-lg overflow-hidden border-2 ${user ? 'border-[#C45832] dark:border-red-600 bg-[#EDE5DA] dark:bg-zinc-800' : 'border-[#B8AD9F] dark:border-zinc-600 bg-[#EDE5DA] dark:bg-zinc-800'}`}>
               {user?.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} alt="User" className="w-full h-full object-cover" /> : <span className="text-[#8B7355] dark:text-zinc-400">{user ? (user.user_metadata?.full_name?.[0] || 'U') : 'G'}</span>}
             </div>
-            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-black rounded-full animate-pulse"></div>
+            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-[#F5F0EB] dark:border-black rounded-full animate-pulse"></div>
           </div>
           <div className="text-left text-[#2C2419] dark:text-white font-bold text-sm">
             {user ? (user.user_metadata?.full_name || 'Operator') : 'Guest User'}
@@ -327,7 +327,7 @@ export const Dashboard: React.FC = () => {
           className={`
             flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all mr-auto ml-4 shadow-sm dark:shadow-none
             ${isConnected
-              ? 'bg-green-100 border-green-300 text-green-700 hover:bg-green-200 dark:bg-green-950/30 dark:border-green-800 dark:text-green-500 dark:hover:bg-green-900/50'
+              ? 'bg-green-50 border-green-300 text-green-800 hover:bg-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-500 dark:hover:bg-green-900/50'
               : 'bg-[#EDE5DA] border-[#D4CCC3] text-[#8B7355] hover:text-[#6B5D4D] dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-600 dark:hover:text-zinc-400 opacity-0 md:opacity-100'
             }
           `}
@@ -341,9 +341,9 @@ export const Dashboard: React.FC = () => {
         {/* ----------------------------- */}
 
         <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-[55] hover:bg-[#EDE5DA] dark:hover:bg-zinc-800 rounded transition-colors" aria-label="Open menu">
-          <div className="w-6 h-0.5 bg-[#B8AD9F] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors"></div>
-          <div className="w-6 h-0.5 bg-[#B8AD9F] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors"></div>
-          <div className="w-4 h-0.5 bg-[#B8AD9F] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors ml-auto"></div>
+          <div className="w-6 h-0.5 bg-[#8B7355] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors"></div>
+          <div className="w-6 h-0.5 bg-[#8B7355] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors"></div>
+          <div className="w-4 h-0.5 bg-[#8B7355] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors ml-auto"></div>
         </button>
       </header>
 
@@ -356,7 +356,7 @@ export const Dashboard: React.FC = () => {
 
       {/* SLIDE-OUT MENU PANEL */}
       <div
-        className={`fixed top-0 right-0 w-[320px] h-full bg-white dark:bg-zinc-950 border-l border-[#D4CCC3] dark:border-zinc-800 shadow-2xl z-50 isolate transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed top-0 right-0 w-[320px] h-full bg-white dark:bg-zinc-950 border-l border-[#D4CCC3] dark:border-zinc-800 shadow-[-8px_0_32px_rgba(44,36,25,0.1)] dark:shadow-2xl z-50 isolate transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
         style={{ willChange: 'transform' }}
       >
         <div className="p-6 h-full flex flex-col">
@@ -368,21 +368,21 @@ export const Dashboard: React.FC = () => {
           <div className="flex-1 overflow-y-auto pr-2">
             {/* 1. NAVIGATION */}
             <div className="space-y-1 mb-6">
-              <div className="text-[9px] font-black text-zinc-400 dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">Navigation</div>
+              <div className="text-[9px] font-black text-[#A08B6E] dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">Navigation</div>
               <MenuItem label="Dashboard" icon="⊞" onClick={() => setIsMenuOpen(false)} active />
               <MenuItem label="Tournament Mode" icon="🏆" onClick={() => { setIsMenuOpen(false); setActiveModal('confirmTournament'); }} highlight subtitle="League Management" />
             </div>
 
             {/* 2. PERSONAL */}
             <div className="space-y-1 mb-6">
-              <div className="text-[9px] font-black text-zinc-400 dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">Personal</div>
+              <div className="text-[9px] font-black text-[#A08B6E] dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">Personal</div>
               <MenuItem label="My Profile" icon="👤" onClick={() => { setIsMenuOpen(false); setActiveModal('profile'); }} disabled={!user} />
               <MenuItem label="Match History" icon="↺" onClick={() => { setIsMenuOpen(false); setActiveModal('history'); }} disabled={!user} />
             </div>
 
             {/* 3. HARDWARE */}
             <div className="space-y-1 mb-6">
-              <div className="text-[9px] font-black text-zinc-400 dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">Hardware</div>
+              <div className="text-[9px] font-black text-[#A08B6E] dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">Hardware</div>
               <MenuItem
                 label={isConnected ? "Handheld Connected" : "Connect Handheld"}
                 icon={isConnected ? "🎮" : "🔗"}
@@ -422,7 +422,7 @@ export const Dashboard: React.FC = () => {
 
             {/* 4. SYSTEM & THEME */}
             <div className="space-y-1 mb-6">
-              <div className="text-[9px] font-black text-zinc-400 dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">System</div>
+              <div className="text-[9px] font-black text-[#A08B6E] dark:text-zinc-700 uppercase tracking-widest mb-2 px-4">System</div>
 
               {/* <-- ADDED THEME TOGGLE MENU ITEM --> */}
               <MenuItem
@@ -438,7 +438,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="pt-6 border-t border-[#E2DAD0] dark:border-zinc-900 mt-auto">
-            <button onClick={handleLogout} className="w-full text-left flex items-center gap-4 p-4 hover:bg-red-50 dark:hover:bg-red-900/10 text-red-600 dark:text-red-500 transition-colors uppercase font-bold text-xs tracking-widest rounded group">
+            <button onClick={handleLogout} className="w-full text-left flex items-center gap-4 p-4 hover:bg-red-50 dark:hover:bg-red-900/10 text-[#C45832] dark:text-red-500 transition-colors uppercase font-bold text-xs tracking-widest rounded group">
               <span className="text-lg group-hover:-translate-x-1 transition-transform">↪</span> <span>Log Out</span>
             </button>
           </div>
@@ -454,8 +454,8 @@ export const Dashboard: React.FC = () => {
 
         {/* 1. INITIALIZE NEW SESSION */}
         <section className="mb-12">
-          <h2 className="text-[#6B5D4D] dark:text-zinc-500 text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-3 pl-4 border-l-2 border-[#C45832]">
-            Initialize New Session
+          <h2 className="text-[#8B7355] dark:text-zinc-500 text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-2 pb-3 border-b border-[#E2DAD0] dark:border-transparent">
+            <span className="w-2 h-2 bg-[#C45832] dark:bg-red-600 rounded-full"></span> Initialize New Session
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <SportCard isSelected={selectedSport === 'basketball'} name="BASKETBALL" desc="FIBA / NBA Rules • Shot Clock" icon="🏀" onClick={() => startNewGame('basketball')} accent="red" />
@@ -475,10 +475,10 @@ export const Dashboard: React.FC = () => {
               className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'all' ? 'text-[#C45832] dark:text-white' : 'text-[#8B7355] hover:text-[#6B5D4D] dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
               Active Feed
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-[#C45832] text-white' : 'bg-[#EDE5DA] text-[#8B7355] dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-[#C45832] text-white dark:bg-blue-600' : 'bg-[#EDE5DA] text-[#8B7355] dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {liveFeed.length}
               </span>
-              {activeTab === 'all' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#C45832]"></div>}
+              {activeTab === 'all' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#C45832] dark:bg-blue-600"></div>}
             </button>
 
             <button
@@ -486,10 +486,10 @@ export const Dashboard: React.FC = () => {
               className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'my' ? 'text-[#C45832] dark:text-white' : 'text-[#8B7355] hover:text-[#6B5D4D] dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
               My Games
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'my' ? 'bg-[#C45832] text-white dark:bg-white dark:text-black' : 'bg-[#EDE5DA] text-[#8B7355] dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'my' ? 'bg-[#C45832] text-white dark:bg-red-600 dark:text-white' : 'bg-[#EDE5DA] text-[#8B7355] dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {myGames.length}
               </span>
-              {activeTab === 'my' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#C45832]"></div>}
+              {activeTab === 'my' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#C45832] dark:bg-red-600"></div>}
             </button>
 
             <button
@@ -533,7 +533,7 @@ export const Dashboard: React.FC = () => {
             <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed mb-4">
               {isInstalled ? "This device is fully provisioned as a Referee Unit." : "System pre-flight check required before installing dedicated firmware."}
             </p>
-            <div className="bg-gray-50 dark:bg-black p-4 border border-gray-200 dark:border-zinc-800 space-y-3 rounded">
+            <div className="bg-[#F0EAE2] dark:bg-black p-4 border border-[#D4CCC3] dark:border-zinc-800 space-y-3 rounded">
               <StatusItem label="Secure Context (HTTPS)" status={window.location.protocol === 'https:' ? 'online' : 'offline'} />
               <StatusItem label="Local Storage" status={typeof localStorage !== 'undefined' ? 'online' : 'offline'} />
               <StatusItem label="Service Worker" status={'serviceWorker' in navigator ? 'online' : 'offline'} />
@@ -544,17 +544,17 @@ export const Dashboard: React.FC = () => {
                 {prompt ? (
                   <button onClick={() => { triggerInstall().then(s => s && setActiveModal(null)); }} className="w-full bg-green-600 hover:bg-green-500 text-white dark:text-black font-black py-4 uppercase tracking-widest text-xs transition-colors shadow-[0_0_20px_rgba(34,197,94,0.3)] dark:shadow-[0_0_20px_rgba(34,197,94,0.4)]">Install Firmware</button>
                 ) : (
-                  <div className="mt-4 p-4 bg-gray-100 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg shadow-sm dark:shadow-none">
-                    <h4 className="text-zinc-500 dark:text-zinc-400 text-[10px] font-bold uppercase tracking-widest mb-3">Manual Installation</h4>
+                  <div className="mt-4 p-4 bg-[#F0EAE2] dark:bg-zinc-900 border border-[#D4CCC3] dark:border-zinc-800 rounded-lg shadow-[0_1px_2px_rgba(44,36,25,0.04)] dark:shadow-none">
+                    <h4 className="text-[#8B7355] dark:text-zinc-400 text-[10px] font-bold uppercase tracking-widest mb-3">Manual Installation</h4>
                     <div className="space-y-3">
                       <div className="flex items-start gap-3">
-                        <span className="bg-gray-300 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-500 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold shrink-0">1</span>
+                        <span className="bg-[#D4CCC3] dark:bg-zinc-800 text-[#6B5D4D] dark:text-zinc-500 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold shrink-0">1</span>
                         <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-tight pt-0.5">
                           Tap the <span className="font-bold text-blue-600 dark:text-blue-400">Share</span> button below
                         </p>
                       </div>
                       <div className="flex items-start gap-3">
-                        <span className="bg-gray-300 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-500 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold shrink-0">2</span>
+                        <span className="bg-[#D4CCC3] dark:bg-zinc-800 text-[#6B5D4D] dark:text-zinc-500 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold shrink-0">2</span>
                         <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-tight pt-0.5">
                           Scroll down and tap <span className="font-bold text-zinc-900 dark:text-white">Add to Home Screen</span>
                         </p>
@@ -564,7 +564,7 @@ export const Dashboard: React.FC = () => {
                 )}
               </div>
             )}
-            {isInstalled && <button onClick={() => setActiveModal(null)} className="w-full bg-gray-200 text-zinc-900 hover:bg-gray-300 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700 font-bold py-4 uppercase tracking-widest text-[10px] mt-4 transition-colors">Close</button>}
+            {isInstalled && <button onClick={() => setActiveModal(null)} className="w-full bg-[#EDE5DA] text-[#2C2419] hover:bg-[#E2D8CA] dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700 font-bold py-4 uppercase tracking-widest text-[10px] mt-4 transition-colors">Close</button>}
           </div>
         </Modal>
       )}
@@ -575,15 +575,15 @@ export const Dashboard: React.FC = () => {
             <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center mx-auto border border-yellow-300 dark:border-yellow-900/50 shadow-sm dark:shadow-none">
               <span className="text-3xl">🏆</span>
             </div>
-            <p className="text-zinc-600 dark:text-zinc-400 text-xs leading-relaxed">
-              You are about to switch to the <strong className="text-zinc-900 dark:text-white">Tournament Management Console</strong>.
+            <p className="text-[#6B5D4D] dark:text-zinc-400 text-xs leading-relaxed">
+              You are about to switch to the <strong className="text-[#2C2419] dark:text-white">Tournament Management Console</strong>.
               <br />This allows you to organize leagues, brackets, and manage multiple scorers.
             </p>
             <div className="flex gap-4">
-              <button onClick={() => setActiveModal(null)} className="flex-1 py-3 bg-transparent border border-gray-300 dark:border-zinc-700 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white font-bold uppercase tracking-widest text-xs rounded transition-colors">
+              <button onClick={() => setActiveModal(null)} className="flex-1 py-3 bg-transparent border border-[#D4CCC3] dark:border-zinc-700 text-[#6B5D4D] hover:text-[#2C2419] dark:text-zinc-400 dark:hover:text-white font-bold uppercase tracking-widest text-xs rounded transition-colors">
                 Cancel
               </button>
-              <button onClick={handleEnterTournament} className="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-500 text-white dark:text-black font-black uppercase tracking-widest text-xs rounded shadow-lg shadow-yellow-500/30 dark:shadow-yellow-900/20 transition-colors">
+              <button onClick={handleEnterTournament} className="flex-1 py-3 bg-[#B8860B] hover:bg-[#9A7209] dark:bg-yellow-600 dark:hover:bg-yellow-500 text-white dark:text-black font-black uppercase tracking-widest text-xs rounded shadow-lg shadow-[#B8860B]/20 dark:shadow-yellow-900/20 transition-colors">
                 Enter
               </button>
             </div>
@@ -676,19 +676,21 @@ const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
     <button
       onClick={onClick}
       className={`
-        bg-white dark:bg-zinc-900/40 border border-[#D4CCC3] dark:border-zinc-800 p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between hover:shadow-lg dark:hover:shadow-none shadow-sm dark:shadow-none rounded-xl
-        ${borderClasses} 
-        ${isSelected ? 'is-selected shadow-lg scale-[1.02]' : ''}
+        bg-white dark:bg-zinc-900/40 border border-[#D4CCC3] dark:border-zinc-800 border-l-[3px] p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between
+        hover:shadow-[0_2px_8px_rgba(44,36,25,0.06),0_8px_20px_rgba(44,36,25,0.04)] dark:hover:shadow-none shadow-[0_1px_3px_rgba(44,36,25,0.04)] dark:shadow-none
+        ${borderClasses}
+        ${isSelected ? 'is-selected shadow-[inset_0_2px_4px_rgba(44,36,25,0.08),0_1px_2px_rgba(44,36,25,0.04)] dark:shadow-lg scale-[1.02] !border-l-[4px]' : ''}
       `}
+      style={{ borderLeftColor: accent === 'red' ? '#C45832' : accent === 'blue' ? '#2563EB' : accent === 'green' ? '#3D7A3C' : accent === 'yellow' ? '#B8860B' : accent === 'orange' ? '#C5631C' : accent === 'purple' ? '#7C3AED' : '#C45832' }}
     >
       <div className={`absolute -top-4 -right-4 text-[120px] transition-all duration-500 rotate-12 transform-gpu backface-hidden perspective-1000 ${iconStateClass} ${glowClasses}`}>
         {icon}
       </div>
       <div className="relative z-10">
         <h3 className={`text-xl font-black italic text-[#2C2419] dark:text-zinc-300 transition-colors uppercase tracking-tight ${textClasses}`}>{name}</h3>
-        <p className="text-zinc-500 text-[10px] mt-1 uppercase tracking-widest font-bold leading-tight">{desc}</p>
+        <p className="text-[#8B7355] dark:text-zinc-500 text-[10px] mt-1 uppercase tracking-widest font-bold leading-tight">{desc}</p>
       </div>
-      <div className={`relative z-10 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${isSelected ? 'text-[#2C2419] dark:text-white' : 'text-[#8B7355] group-hover:text-[#2C2419] dark:group-hover:text-white'} ${textClasses}`}>Initialize <span className="text-sm">→</span></div>
+      <div className={`relative z-10 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${isSelected ? 'text-[#2C2419] dark:text-white' : 'text-[#A08B6E] dark:text-zinc-500 group-hover:text-[#2C2419] dark:group-hover:text-white'} ${textClasses}`}>Initialize <span className="text-sm">→</span></div>
     </button>
   );
 };

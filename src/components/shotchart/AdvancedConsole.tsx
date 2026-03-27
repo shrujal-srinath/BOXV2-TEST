@@ -27,6 +27,9 @@ import type {
     ShotEvent, ShotAttribute, ShotZoneId, ShotType, GameActionType,
 } from './types/shotTypes';
 import type { Player } from '../../types';
+import { TimedPlayerPopup } from './TimedPlayerPopup';
+import { JumpBallModal } from './JumpBallModal';
+import { SubstitutionPanel } from './SubstitutionPanel';
 
 // ── CSS ──────────────────────────────────────────────────────────────────────
 
@@ -124,6 +127,16 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
     const [showStats, setShowStats] = useState<'A' | 'B' | null>(null);
     const pendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // ── New component state ──
+    const [deferredShot, setDeferredShot] = useState<{
+        x: number; y: number; zone: string;
+        points: 1 | 2 | 3; shotType: string; teamSide: 'A' | 'B';
+    } | null>(null);
+    const [showJumpBall, setShowJumpBall] = useState(() => {
+        return period === 1 && !gameRunning;
+    });
+    const [showSubPanel, setShowSubPanel] = useState<'A' | 'B' | null>(null);
+
     const teamColor = (s: 'A' | 'B') => s === 'A' ? teamAColor : teamBColor;
     const pA = useMemo(() => teamAPlayers.filter(p => p.name), [teamAPlayers]);
     const pB = useMemo(() => teamBPlayers.filter(p => p.name), [teamBPlayers]);
@@ -201,10 +214,23 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
     }, [isWebLocked, pending, selA, selB, pA, pB, onShotRecorded, attrs, teamAName, teamBName]);
 
     const handleCourtTap = useCallback((x: number, y: number) => {
+        // Deferred attribution: if no player selected and no pending shot, show popup
+        const teamSide = x < 50 ? 'A' : 'B';
+        const selectedPlayer = teamSide === 'A' ? selA : selB;
+
+        if (!selectedPlayer && !pending) {
+            const zone = classifyZone(x, y);
+            let points: 1 | 2 | 3 = 2;
+            if (zone.includes('three') || zone.includes('corner')) points = 3;
+            if (zone === 'free_throw_line') points = 1;
+            setDeferredShot({ x, y, zone, points, shotType: 'field_goal', teamSide });
+            return;
+        }
+
         if (!pending) return;
         let fx = x, fy = y, zone = classifyZone(x, y);
         finalize(fx, fy, zone);
-    }, [pending, finalize]);
+    }, [pending, finalize, selA, selB]);
 
     // ── Keyboard ──
     useEffect(() => {
@@ -214,7 +240,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
             if (e.key === 'r' || e.key === 'R') onResetShotClock(e.shiftKey ? 14 : 24);
             if (e.key === 'p' || e.key === 'P') onTogglePossession();
             if (e.key === 'n' || e.key === 'N') onNextPeriod();
-            if (e.key === 'Escape') { if (showStats) setShowStats(null); else if (pending) { setPending(null); setAttrs([]); } }
+            if (e.key === 'Escape') { if (deferredShot) setDeferredShot(null); else if (showStats) setShowStats(null); else if (pending) { setPending(null); setAttrs([]); } }
             if (e.key === 'z' && (e.ctrlKey || e.metaKey) && onUndo) onUndo();
         };
         window.addEventListener('keydown', h);
@@ -301,7 +327,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                 {/* Left sidebar */}
                 <TeamSidebar side="A" color={teamAColor} name={teamAName} players={pA} selId={selA} setSel={setSelA}
                     onMade={(p, t) => handleMade('A', p, t)} onMiss={(p, t) => handleMiss('A', p, t)} onMissFT={() => handleMissFT('A')}
-                    onSec={(a) => onSecondaryAction('A', a)} isPending={pending?.teamSide === 'A'} locked={!!isWebLocked} />
+                    onSec={(a) => onSecondaryAction('A', a)} onSub={() => setShowSubPanel('A')} isPending={pending?.teamSide === 'A'} locked={!!isWebLocked} />
 
                 {/* Court center */}
                 <div className="flex-1 flex flex-col min-w-0">
@@ -357,7 +383,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                 {/* Right sidebar */}
                 <TeamSidebar side="B" color={teamBColor} name={teamBName} players={pB} selId={selB} setSel={setSelB}
                     onMade={(p, t) => handleMade('B', p, t)} onMiss={(p, t) => handleMiss('B', p, t)} onMissFT={() => handleMissFT('B')}
-                    onSec={(a) => onSecondaryAction('B', a)} isPending={pending?.teamSide === 'B'} locked={!!isWebLocked} />
+                    onSec={(a) => onSecondaryAction('B', a)} onSub={() => setShowSubPanel('B')} isPending={pending?.teamSide === 'B'} locked={!!isWebLocked} />
 
                 {/* ── PLAYER STATS DRAWER ── */}
                 {showStats && (
@@ -422,6 +448,78 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                     </div>
                 </div>
             </div>
+
+            {/* ═══ INTEGRATED MODALS ═══ */}
+
+            {deferredShot && (
+                <TimedPlayerPopup
+                    shotInfo={deferredShot as any}
+                    players={deferredShot.teamSide === 'A' ? pA : pB}
+                    teamColor={deferredShot.teamSide === 'A' ? teamAColor : teamBColor}
+                    onSelectPlayer={(playerId) => {
+                        onShotRecorded({
+                            teamSide: deferredShot.teamSide,
+                            playerId,
+                            points: deferredShot.points,
+                            made: true,
+                            shotType: deferredShot.shotType as ShotType,
+                            x: deferredShot.x,
+                            y: deferredShot.y,
+                            zone: deferredShot.zone as ShotZoneId,
+                            attributes: [],
+                        });
+                        onScoreChange(deferredShot.teamSide, deferredShot.points);
+                        setDeferredShot(null);
+                    }}
+                    onSkip={() => {
+                        onShotRecorded({
+                            teamSide: deferredShot.teamSide,
+                            playerId: null,
+                            points: deferredShot.points,
+                            made: true,
+                            shotType: deferredShot.shotType as ShotType,
+                            x: deferredShot.x,
+                            y: deferredShot.y,
+                            zone: deferredShot.zone as ShotZoneId,
+                            attributes: [],
+                        });
+                        onScoreChange(deferredShot.teamSide, deferredShot.points);
+                        setDeferredShot(null);
+                    }}
+                    onCancel={() => setDeferredShot(null)}
+                />
+            )}
+
+            {showJumpBall && (
+                <JumpBallModal
+                    teamAName={teamAName}
+                    teamAColor={teamAColor}
+                    teamAPlayers={pA}
+                    teamBName={teamBName}
+                    teamBColor={teamBColor}
+                    teamBPlayers={pB}
+                    onComplete={(result) => {
+                        console.log('Jump ball won by team', result.winner);
+                        setShowJumpBall(false);
+                    }}
+                    onSkip={() => setShowJumpBall(false)}
+                />
+            )}
+
+            {showSubPanel && (
+                <SubstitutionPanel
+                    teamSide={showSubPanel}
+                    teamName={showSubPanel === 'A' ? teamAName : teamBName}
+                    teamColor={showSubPanel === 'A' ? teamAColor : teamBColor}
+                    allPlayers={showSubPanel === 'A' ? pA : pB}
+                    activePlayerIds={(showSubPanel === 'A' ? pA : pB).slice(0, 5).map(p => p.id)}
+                    onConfirm={(activeIds) => {
+                        console.log('Updated roster for team', showSubPanel, activeIds);
+                        setShowSubPanel(null);
+                    }}
+                    onCancel={() => setShowSubPanel(null)}
+                />
+            )}
         </div>
     );
 };
@@ -452,7 +550,7 @@ const TeamScoreBlock: React.FC<{ side: 'A' | 'B'; name: string; color: string; s
 };
 
 /* Team sidebar — TactileBtn style */
-const TeamSidebar: React.FC<{ side: 'A' | 'B'; color: string; name: string; players: Player[]; selId: string | null; setSel: (id: string | null) => void; onMade: (p: 1 | 2 | 3, t: ShotType) => void; onMiss: (p: 2 | 3, t: ShotType) => void; onMissFT: () => void; onSec: (a: GameActionType) => void; isPending?: boolean; locked: boolean }> = ({ side, color, name, players, selId, setSel, onMade, onMiss, onMissFT, onSec, isPending, locked }) => (
+const TeamSidebar: React.FC<{ side: 'A' | 'B'; color: string; name: string; players: Player[]; selId: string | null; setSel: (id: string | null) => void; onMade: (p: 1 | 2 | 3, t: ShotType) => void; onMiss: (p: 2 | 3, t: ShotType) => void; onMissFT: () => void; onSec: (a: GameActionType) => void; onSub: (side: 'A' | 'B') => void; isPending?: boolean; locked: boolean }> = ({ side, color, name, players, selId, setSel, onMade, onMiss, onMissFT, onSec, onSub, isPending, locked }) => (
     <div className={`w-[200px] shrink-0 bg-black ${side === 'A' ? 'border-r' : 'border-l'} border-zinc-800 flex flex-col gap-2 p-2.5 overflow-y-auto`}
         style={{ opacity: locked ? 0.3 : 1, pointerEvents: locked ? 'none' : 'auto' }}>
         {/* Header */}
@@ -475,6 +573,10 @@ const TeamSidebar: React.FC<{ side: 'A' | 'B'; color: string; name: string; play
                             color: p.id === selId ? '#fff' : 'rgba(255,255,255,0.35)',
                         }} title={p.name}>{p.number || '?'}</button>
                 ))}
+                <button onClick={() => onSub(side)}
+                    className="w-10 h-10 rounded flex items-center justify-center text-[8px] font-bold uppercase tracking-wider text-yellow-500 hover:text-yellow-400 transition-all active:scale-90"
+                    style={{ background: 'rgba(255,255,255,0.02)', border: '1.5px solid rgba(234,179,8,0.2)' }}
+                    title="Substitution">SUB</button>
             </div>
         )}
 
