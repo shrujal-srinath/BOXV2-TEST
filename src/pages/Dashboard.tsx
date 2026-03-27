@@ -159,7 +159,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {visibleGames.map((g, index) => (
-            <div key={g.code || `game-${index}`} className={`bg-white dark:bg-zinc-900/50 border border-gray-200 dark:border-zinc-800 p-4 rounded-sm transition-all shadow-sm dark:shadow-none group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
+            <div key={g.code || `game-${index}`} className={`bg-white dark:bg-zinc-900/50 border border-[#D4CCC3] dark:border-zinc-800 p-4 rounded-xl transition-all shadow-sm dark:shadow-none group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
               {/* Status Color Bar */}
               <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${isMyGames ? 'bg-red-600' : 'bg-blue-600'}`}></div>
 
@@ -167,7 +167,7 @@ export const Dashboard: React.FC = () => {
               {isMyGames && (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteGame(g.code); }}
-                  className="absolute top-2 right-2 p-2 bg-gray-100 dark:bg-black/80 text-zinc-500 dark:text-zinc-400 hover:text-red-600 hover:bg-gray-200 dark:hover:bg-zinc-900 rounded-full transition-all z-20 opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-gray-300 dark:border-zinc-800"
+                  className="absolute top-2 right-2 p-2 bg-[#F0EAE2] dark:bg-black/80 text-[#B8AD9F] dark:text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-zinc-900 rounded-full transition-all z-20 opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-[#D4CCC3] dark:border-zinc-800"
                   title="Delete Session"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -176,18 +176,18 @@ export const Dashboard: React.FC = () => {
 
               {/* Header */}
               <div className="flex justify-between items-start mb-4 pl-2">
-                <div className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest bg-gray-100 dark:bg-black px-2 py-1 rounded">{g.sport || 'BASKETBALL'}</div>
+                <div className="text-[10px] font-bold text-[#6B5D4D] dark:text-zinc-400 uppercase tracking-widest bg-[#F0EAE2] dark:bg-black px-2 py-1 rounded-full">{g.sport || 'BASKETBALL'}</div>
                 <div className={`w-2 h-2 rounded-full animate-pulse ${isMyGames ? 'bg-red-500' : 'bg-blue-500'}`}></div>
               </div>
 
               {/* Title & Code */}
-              <h3 className={`font-black italic text-xl text-zinc-900 dark:text-white mb-1 transition-colors uppercase tracking-tight pl-2 truncate ${isMyGames ? 'group-hover:text-red-600 dark:group-hover:text-red-400' : 'group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
+              <h3 className={`font-black italic text-xl text-[#2C2419] dark:text-white mb-1 transition-colors uppercase tracking-tight pl-2 truncate ${isMyGames ? 'group-hover:text-red-600 dark:group-hover:text-red-400' : 'group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
                 {g.settings?.gameName || 'UNTITLED GAME'}
               </h3>
               <div className="text-xs font-mono text-zinc-500 dark:text-zinc-400 mb-4 pl-2">ID: <span className="text-zinc-600 dark:text-zinc-500">{g.code || '----'}</span></div>
 
               {/* Score */}
-              <div className="flex items-center justify-between bg-gray-50 dark:bg-black p-3 rounded border border-gray-200 dark:border-zinc-800 shadow-inner dark:shadow-none mb-3 mt-auto">
+              <div className="flex items-center justify-between bg-[#F0EAE2] dark:bg-black p-3 rounded-xl border border-[#D4CCC3] dark:border-zinc-800 shadow-inner dark:shadow-none mb-3 mt-auto">
                 <div className="font-bold text-lg" style={{ color: g.teamA?.color || '#DC2626' }}>{g.teamA?.score ?? 0}</div>
                 <div className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">VS</div>
                 <div className="font-bold text-lg" style={{ color: g.teamB?.color || '#2563EB' }}>{g.teamB?.score ?? 0}</div>
@@ -197,15 +197,15 @@ export const Dashboard: React.FC = () => {
               <div className="flex gap-2">
                 {isMyGames ? (
                   <>
-                    <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-gray-200 dark:border-transparent shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded transition-colors">
+                    <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2 bg-[#C45832] hover:bg-[#A84828] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white dark:text-white border border-[#C45832] dark:border-transparent shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors">
                       Console
                     </button>
-                    <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-gray-200 dark:border-transparent shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded transition-colors">
+                    <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2 bg-white hover:bg-[#EDE5DA] dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[#2C2419] dark:text-white border border-[#D4CCC3] dark:border-transparent shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors">
                       Tablet
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-800 dark:text-white shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded transition-colors flex items-center justify-center gap-2">
+                  <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2 bg-[#C45832] hover:bg-[#A84828] dark:bg-blue-900 dark:hover:bg-blue-800 text-white dark:text-white shadow-sm dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2">
                     <span>●</span> Watch Stream
                   </button>
                 )}
@@ -300,23 +300,23 @@ export const Dashboard: React.FC = () => {
 
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center transition-colors duration-300">
-      <div className="w-8 h-8 border-3 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+    <div className="min-h-screen bg-[#F5F0EB] dark:bg-black flex items-center justify-center transition-colors duration-300">
+      <div className="w-8 h-8 border-3 border-[#C45832] border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
 
   return (
-    <div className={`min-h-screen bg-gray-50 dark:bg-black font-sans text-zinc-900 dark:text-white transition-colors duration-300 overflow-x-hidden`}>
+    <div className={`min-h-screen bg-[#F5F0EB] dark:bg-black font-sans text-[#2C2419] dark:text-white transition-colors duration-300 overflow-x-hidden`}>
       {/* HEADER */}
-      <header className="border-b border-gray-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20 shadow-sm dark:shadow-none">
-        <button onClick={() => setActiveModal('profile')} className="flex items-center gap-4 group hover:bg-gray-100 dark:hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all">
+      <header className="border-b border-[#D4CCC3] dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20 shadow-sm dark:shadow-none">
+        <button onClick={() => setActiveModal('profile')} className="flex items-center gap-4 group hover:bg-[#EDE5DA] dark:hover:bg-zinc-800/50 p-2 -ml-2 rounded-lg transition-all cursor-pointer">
           <div className="relative">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black italic text-sm shadow-lg overflow-hidden border-2 ${user ? 'border-red-600 bg-gray-200 dark:bg-zinc-800' : 'border-gray-400 dark:border-zinc-600 bg-gray-200 dark:bg-zinc-800'}`}>
-              {user?.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} alt="User" className="w-full h-full object-cover" /> : <span className="text-zinc-500 dark:text-zinc-400">{user ? (user.user_metadata?.full_name?.[0] || 'U') : 'G'}</span>}
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black italic text-sm shadow-lg overflow-hidden border-2 ${user ? 'border-[#C45832] bg-[#F5DED5] dark:bg-zinc-800' : 'border-[#D4CCC3] dark:border-zinc-600 bg-[#EDE5DA] dark:bg-zinc-800'}`}>
+              {user?.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} alt="User" className="w-full h-full object-cover" /> : <span className="text-[#8B7355] dark:text-zinc-400">{user ? (user.user_metadata?.full_name?.[0] || 'U') : 'G'}</span>}
             </div>
             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-black rounded-full animate-pulse"></div>
           </div>
-          <div className="text-left text-zinc-900 dark:text-white font-bold text-sm">
+          <div className="text-left text-[#2C2419] dark:text-white font-bold text-sm">
             {user ? (user.user_metadata?.full_name || 'Operator') : 'Guest User'}
           </div>
         </button>
@@ -328,7 +328,7 @@ export const Dashboard: React.FC = () => {
             flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all mr-auto ml-4 shadow-sm dark:shadow-none
             ${isConnected
               ? 'bg-green-100 border-green-300 text-green-700 hover:bg-green-200 dark:bg-green-950/30 dark:border-green-800 dark:text-green-500 dark:hover:bg-green-900/50'
-              : 'bg-gray-100 border-gray-300 text-zinc-500 hover:text-zinc-700 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-600 dark:hover:text-zinc-400 opacity-0 md:opacity-100'
+              : 'bg-[#EDE5DA] border-[#D4CCC3] text-[#8B7355] hover:text-[#6B5D4D] dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-600 dark:hover:text-zinc-400 opacity-0 md:opacity-100'
             }
           `}
         >
@@ -340,29 +340,29 @@ export const Dashboard: React.FC = () => {
         </button>
         {/* ----------------------------- */}
 
-        <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-[55] hover:bg-gray-100 dark:hover:bg-zinc-800 rounded transition-colors" aria-label="Open menu">
-          <div className="w-6 h-0.5 bg-zinc-600 dark:bg-zinc-400 group-hover:bg-black dark:group-hover:bg-white transition-colors"></div>
-          <div className="w-6 h-0.5 bg-zinc-600 dark:bg-zinc-400 group-hover:bg-black dark:group-hover:bg-white transition-colors"></div>
-          <div className="w-4 h-0.5 bg-zinc-600 dark:bg-zinc-400 group-hover:bg-black dark:group-hover:bg-white transition-colors ml-auto"></div>
+        <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-[55] hover:bg-[#EDE5DA] dark:hover:bg-zinc-800 rounded transition-colors" aria-label="Open menu">
+          <div className="w-6 h-0.5 bg-[#B8AD9F] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors"></div>
+          <div className="w-6 h-0.5 bg-[#B8AD9F] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors"></div>
+          <div className="w-4 h-0.5 bg-[#B8AD9F] dark:bg-zinc-400 group-hover:bg-[#2C2419] dark:group-hover:bg-white transition-colors ml-auto"></div>
         </button>
       </header>
 
       {/* SLIDE-OUT MENU BACKDROP */}
       <div
-        className={`fixed inset-0 bg-zinc-900/40 dark:bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${isMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        className={`fixed inset-0 bg-[#2C2419]/30 dark:bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${isMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
         onPointerDown={(e) => { e.stopPropagation(); setIsMenuOpen(false); }}
       />
 
       {/* SLIDE-OUT MENU PANEL */}
       <div
-        className={`fixed top-0 right-0 w-[320px] h-full bg-white dark:bg-zinc-950 border-l border-gray-200 dark:border-zinc-800 shadow-2xl z-50 isolate transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed top-0 right-0 w-[320px] h-full bg-white dark:bg-zinc-950 border-l border-[#D4CCC3] dark:border-zinc-800 shadow-2xl z-50 isolate transform transition-transform duration-300 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
         style={{ willChange: 'transform' }}
       >
         <div className="p-6 h-full flex flex-col">
-          <div className="flex justify-between items-center mb-8 border-b border-gray-200 dark:border-zinc-900 pb-4">
-            <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Command Menu</h2>
-            <button onClick={() => setIsMenuOpen(false)} className="text-2xl text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-zinc-900">&times;</button>
+          <div className="flex justify-between items-center mb-8 border-b border-[#E2DAD0] dark:border-zinc-900 pb-4">
+            <h2 className="text-xs font-bold text-[#8B7355] uppercase tracking-widest">Command Menu</h2>
+            <button onClick={() => setIsMenuOpen(false)} className="text-2xl text-[#B8AD9F] hover:text-[#2C2419] dark:hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded hover:bg-[#EDE5DA] dark:hover:bg-zinc-900">&times;</button>
           </div>
 
           <div className="flex-1 overflow-y-auto pr-2">
@@ -437,7 +437,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-6 border-t border-gray-200 dark:border-zinc-900 mt-auto">
+          <div className="pt-6 border-t border-[#E2DAD0] dark:border-zinc-900 mt-auto">
             <button onClick={handleLogout} className="w-full text-left flex items-center gap-4 p-4 hover:bg-red-50 dark:hover:bg-red-900/10 text-red-600 dark:text-red-500 transition-colors uppercase font-bold text-xs tracking-widest rounded group">
               <span className="text-lg group-hover:-translate-x-1 transition-transform">↪</span> <span>Log Out</span>
             </button>
@@ -454,8 +454,8 @@ export const Dashboard: React.FC = () => {
 
         {/* 1. INITIALIZE NEW SESSION */}
         <section className="mb-12">
-          <h2 className="text-zinc-500 text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-            <span className="w-2 h-2 bg-red-600 rounded-full"></span> Initialize New Session
+          <h2 className="text-[#6B5D4D] dark:text-zinc-500 text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-3 pl-4 border-l-2 border-[#C45832]">
+            Initialize New Session
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <SportCard isSelected={selectedSport === 'basketball'} name="BASKETBALL" desc="FIBA / NBA Rules • Shot Clock" icon="🏀" onClick={() => startNewGame('basketball')} accent="red" />
@@ -469,35 +469,35 @@ export const Dashboard: React.FC = () => {
 
         {/* 2. LIVE GAMES & TOURNAMENTS TABS */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="flex items-center gap-6 border-b border-gray-200 dark:border-zinc-800 pb-0 mb-6 overflow-x-auto">
+          <div className="flex items-center gap-6 border-b border-[#D4CCC3] dark:border-zinc-800 pb-0 mb-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('all')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'all' ? 'text-blue-600 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
+              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'all' ? 'text-[#C45832] dark:text-white' : 'text-[#8B7355] hover:text-[#6B5D4D] dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
               Active Feed
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-[#C45832] text-white' : 'bg-[#EDE5DA] text-[#8B7355] dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {liveFeed.length}
               </span>
-              {activeTab === 'all' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600"></div>}
+              {activeTab === 'all' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#C45832]"></div>}
             </button>
 
             <button
               onClick={() => setActiveTab('my')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'my' ? 'text-red-600 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
+              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'my' ? 'text-[#C45832] dark:text-white' : 'text-[#8B7355] hover:text-[#6B5D4D] dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
               My Games
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'my' ? 'bg-red-600 text-white dark:bg-white dark:text-black' : 'bg-gray-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'my' ? 'bg-[#C45832] text-white dark:bg-white dark:text-black' : 'bg-[#EDE5DA] text-[#8B7355] dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {myGames.length}
               </span>
-              {activeTab === 'my' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-600"></div>}
+              {activeTab === 'my' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#C45832]"></div>}
             </button>
 
             <button
               onClick={() => setActiveTab('tournaments')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'tournaments' ? 'text-yellow-600 dark:text-yellow-400' : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
+              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'tournaments' ? 'text-[#B8860B] dark:text-yellow-400' : 'text-[#8B7355] hover:text-[#6B5D4D] dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
               Live Tournaments
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'tournaments' ? 'bg-yellow-600 text-white dark:text-black' : 'bg-gray-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'tournaments' ? 'bg-[#B8860B] text-white dark:text-black' : 'bg-[#EDE5DA] text-[#8B7355] dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {liveTournaments.length}
               </span>
               {activeTab === 'tournaments' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-yellow-500"></div>}
@@ -615,19 +615,19 @@ const WatchByCodeCard = ({ onWatch }: { onWatch: (code: string) => void }) => {
   const [code, setCode] = useState('');
 
   return (
-    <div className="bg-white dark:bg-zinc-900/50 border border-gray-200 dark:border-zinc-800 p-4 rounded-sm flex flex-col justify-between min-h-[220px] h-full shadow-sm dark:shadow-none relative overflow-hidden group hover:border-blue-500 transition-all">
+    <div className="bg-white dark:bg-zinc-900/50 border border-[#D4CCC3] dark:border-zinc-800 p-4 rounded-xl flex flex-col justify-between min-h-[220px] h-full shadow-sm dark:shadow-none relative overflow-hidden group hover:border-[#C45832] transition-all">
       {/* Visual Consistency Bar */}
-      <div className="absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 bg-blue-600"></div>
+      <div className="absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 bg-[#C45832]"></div>
 
       {/* Background Decor */}
       <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 dark:bg-blue-500/5 blur-3xl rounded-full pointer-events-none"></div>
 
       <div className="relative z-10 pl-2">
         <div className="flex items-center gap-2 mb-2">
-          <div className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest bg-gray-100 dark:bg-black px-2 py-1 rounded">SPECTATOR</div>
+          <div className="text-[10px] font-bold text-[#6B5D4D] dark:text-zinc-400 uppercase tracking-widest bg-[#F0EAE2] dark:bg-black px-2 py-1 rounded-full">SPECTATOR</div>
           <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
         </div>
-        <h2 className="text-zinc-900 dark:text-white font-black italic text-xl uppercase tracking-tight mb-4 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Find a Game</h2>
+        <h2 className="text-[#2C2419] dark:text-white font-black italic text-xl uppercase tracking-tight mb-4 group-hover:text-[#C45832] dark:group-hover:text-blue-400 transition-colors">Find a Game</h2>
       </div>
 
       <div className="relative z-10 space-y-2 mt-auto pl-2">
@@ -636,13 +636,13 @@ const WatchByCodeCard = ({ onWatch }: { onWatch: (code: string) => void }) => {
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder="ENTER CODE"
-          className="w-full bg-gray-50 dark:bg-black/50 border border-gray-300 dark:border-zinc-700 text-zinc-900 dark:text-white text-center font-mono font-bold text-sm py-2 rounded focus:outline-none focus:border-blue-500 transition-colors placeholder:text-zinc-400 dark:placeholder:text-zinc-700 uppercase shadow-inner dark:shadow-none"
+          className="w-full bg-[#F0EAE2] dark:bg-black/50 border border-[#D4CCC3] dark:border-zinc-700 text-[#2C2419] dark:text-white text-center font-mono font-bold text-sm py-2 rounded-lg focus:outline-none focus:border-[#C45832] transition-colors placeholder:text-[#B8AD9F] dark:placeholder:text-zinc-700 uppercase shadow-inner dark:shadow-none"
           maxLength={6}
         />
         <button
           disabled={code.length < 4}
           onClick={() => onWatch(code)}
-          className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-widest py-2 rounded transition-all shadow-[0_0_15px_rgba(37,99,235,0.2)] dark:shadow-[0_0_15px_rgba(37,99,235,0.3)] hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] dark:hover:shadow-[0_0_20px_rgba(37,99,235,0.5)]"
+          className="w-full bg-[#C45832] hover:bg-[#A84828] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-widest py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(196,88,50,0.2)] dark:shadow-[0_0_15px_rgba(37,99,235,0.3)] hover:shadow-[0_0_20px_rgba(196,88,50,0.4)] dark:hover:shadow-[0_0_20px_rgba(37,99,235,0.5)]"
         >
           Watch Now
         </button>
@@ -676,7 +676,7 @@ const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
     <button
       onClick={onClick}
       className={`
-        bg-white dark:bg-zinc-900/40 border border-gray-200 dark:border-zinc-800 p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between hover:shadow-lg dark:hover:shadow-none shadow-sm dark:shadow-none
+        bg-white dark:bg-zinc-900/40 border border-[#D4CCC3] dark:border-zinc-800 p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between hover:shadow-lg dark:hover:shadow-none shadow-sm dark:shadow-none rounded-xl
         ${borderClasses} 
         ${isSelected ? 'is-selected shadow-lg scale-[1.02]' : ''}
       `}
@@ -685,16 +685,16 @@ const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
         {icon}
       </div>
       <div className="relative z-10">
-        <h3 className={`text-xl font-black italic text-zinc-900 dark:text-zinc-300 transition-colors uppercase tracking-tight ${textClasses}`}>{name}</h3>
+        <h3 className={`text-xl font-black italic text-[#2C2419] dark:text-zinc-300 transition-colors uppercase tracking-tight ${textClasses}`}>{name}</h3>
         <p className="text-zinc-500 text-[10px] mt-1 uppercase tracking-widest font-bold leading-tight">{desc}</p>
       </div>
-      <div className={`relative z-10 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${isSelected ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white'} ${textClasses}`}>Initialize <span className="text-sm">→</span></div>
+      <div className={`relative z-10 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${isSelected ? 'text-[#2C2419] dark:text-white' : 'text-[#8B7355] group-hover:text-[#2C2419] dark:group-hover:text-white'} ${textClasses}`}>Initialize <span className="text-sm">→</span></div>
     </button>
   );
 };
 
 const MenuItem = ({ label, icon, onClick, active, disabled, highlight, subtitle, badge }: any) => (
-  <button onClick={onClick} disabled={disabled} className={`w-full text-left flex items-center justify-between p-4 rounded-sm transition-all uppercase font-bold text-[10px] tracking-widest relative ${active ? 'bg-gray-100 text-zinc-900 dark:bg-zinc-800 dark:text-white' : 'text-zinc-600 hover:text-zinc-900 hover:bg-gray-50 dark:text-zinc-500 dark:hover:text-white dark:hover:bg-zinc-900'} ${disabled ? 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-zinc-500' : ''} ${highlight ? 'bg-blue-50/50 text-blue-600 hover:bg-blue-100/50 hover:text-blue-700 border border-blue-200 dark:bg-blue-900/10 dark:text-blue-400 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 dark:border-blue-900/30' : ''}`}>
+  <button onClick={onClick} disabled={disabled} className={`w-full text-left flex items-center justify-between p-4 rounded-lg transition-all uppercase font-bold text-[10px] tracking-widest relative ${active ? 'bg-[#F5DED5] text-[#C45832] dark:bg-zinc-800 dark:text-white' : 'text-[#6B5D4D] hover:text-[#2C2419] hover:bg-[#F0EAE2] dark:text-zinc-500 dark:hover:text-white dark:hover:bg-zinc-900'} ${disabled ? 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-[#8B7355]' : ''} ${highlight ? 'bg-[#FDF6E3] text-[#B8860B] hover:bg-[#F5DED5] hover:text-[#9A7209] border border-[#E8C7B8] dark:bg-blue-900/10 dark:text-blue-400 dark:hover:bg-blue-900/20 dark:hover:text-blue-300 dark:border-blue-900/30' : ''}`}>
     <div className="flex items-center gap-4 flex-1 min-w-0">
       <span className="text-lg w-6 text-center flex-shrink-0">{icon}</span>
       <div className="flex-1 min-w-0">
@@ -702,17 +702,17 @@ const MenuItem = ({ label, icon, onClick, active, disabled, highlight, subtitle,
         {subtitle && <div className="text-[8px] text-zinc-500 mt-0.5 normal-case tracking-normal truncate">{subtitle}</div>}
       </div>
     </div>
-    {badge && <span className="ml-2 bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 shadow-sm dark:shadow-none">{badge}</span>}
+    {badge && <span className="ml-2 bg-[#C45832] text-white text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 shadow-sm dark:shadow-none">{badge}</span>}
   </button>
 );
 
 const Modal = ({ title, children, onClose }: any) => (
   <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-    <div className="absolute inset-0 bg-zinc-900/40 dark:bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
-    <div className="bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 w-full max-w-md p-6 relative z-10 animate-in zoom-in-95 duration-200 shadow-xl dark:shadow-2xl rounded-sm">
-      <div className="flex justify-between items-center mb-6 border-b border-gray-200 dark:border-zinc-800 pb-4">
-        <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-900 dark:text-white">{title}</h3>
-        <button onClick={onClose} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-2xl transition-colors leading-none">&times;</button>
+    <div className="absolute inset-0 bg-[#2C2419]/30 dark:bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
+    <div className="bg-white dark:bg-zinc-950 border border-[#D4CCC3] dark:border-zinc-800 w-full max-w-md p-6 relative z-10 animate-in zoom-in-95 duration-200 shadow-xl dark:shadow-2xl rounded-lg">
+      <div className="flex justify-between items-center mb-6 border-b border-[#E2DAD0] dark:border-zinc-800 pb-4">
+        <h3 className="text-sm font-bold uppercase tracking-widest text-[#2C2419] dark:text-white">{title}</h3>
+        <button onClick={onClose} className="text-[#B8AD9F] hover:text-[#2C2419] dark:hover:text-white text-2xl transition-colors leading-none">&times;</button>
       </div>
       {children}
     </div>
@@ -720,9 +720,9 @@ const Modal = ({ title, children, onClose }: any) => (
 );
 
 const InfoRow = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-zinc-900">
-    <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{label}</span>
-    <span className="text-sm text-zinc-900 dark:text-white font-mono">{value}</span>
+  <div className="flex justify-between items-center py-2 border-b border-[#E2DAD0] dark:border-zinc-900">
+    <span className="text-[10px] text-[#8B7355] uppercase tracking-widest font-bold">{label}</span>
+    <span className="text-sm text-[#2C2419] dark:text-white font-mono">{value}</span>
   </div>
 );
 
@@ -730,7 +730,7 @@ const StatusItem = ({ label, status }: { label: string; status: 'online' | 'offl
   const statusConfig = { online: { color: 'bg-green-500', text: 'Active', textColor: 'text-green-600 dark:text-green-400' }, offline: { color: 'bg-red-500', text: 'Error', textColor: 'text-red-600 dark:text-red-400' }, local: { color: 'bg-yellow-500', text: 'Pending', textColor: 'text-yellow-600 dark:text-yellow-400' } };
   const config = statusConfig[status];
   return (
-    <div className="flex justify-between items-center py-3 border-b border-gray-200 dark:border-zinc-900">
+    <div className="flex justify-between items-center py-3 border-b border-[#E2DAD0] dark:border-zinc-900">
       <span className="text-xs text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">{label}</span>
       <div className="flex items-center gap-2">
         <div className="relative"><div className={`w-2 h-2 ${config.color} rounded-full`}></div><div className={`absolute inset-0 w-2 h-2 ${config.color} rounded-full animate-ping opacity-75`}></div></div>

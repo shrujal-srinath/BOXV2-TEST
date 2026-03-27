@@ -80,9 +80,11 @@ export const BasketballGameSchema = z.object({
 
 // ─── Validator Functions ─────────────────────────────────────────────────────
 
-export type ValidationResult<T> =
-    | { success: true; data: T }
-    | { success: false; errors: string[] };
+export type ValidationResult<T> = {
+    success: boolean;
+    data?: T;
+    errors?: string[];
+};
 
 export function validateBasketballGame(data: unknown): ValidationResult<BasketballGame> {
     const result = BasketballGameSchema.safeParse(data);

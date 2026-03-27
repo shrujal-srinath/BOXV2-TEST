@@ -28,7 +28,7 @@ import { stopAllCastsForGame } from '../services/tvDisplayService';
 import { supabase } from '../services/supabase';
 import type { Player } from '../types';
 
-import { AdvancedStatsV2 } from '../components/shotchart/AdvancedStatsV2';
+import { AdvancedConsole } from '../components/shotchart/AdvancedConsole';
 import { createShotEvent, createGameAction, subscribeToShots } from '../services/shotService';
 import type { ShotEvent, ShotType, ShotZoneId, ShotAttribute, GameActionType } from '../components/shotchart/types/shotTypes';
 
@@ -626,19 +626,42 @@ export const HostConsole: React.FC = () => {
     // ── Early return: Advanced mode takes over the whole page ─────────────
     if (isAdvancedMode && game) {
         return (
-            <AdvancedStatsV2
+            <AdvancedConsole
+                // Team A
                 teamAName={game.teamA.name}
                 teamAColor={game.teamA.color}
                 teamAPlayers={game.teamA.players || []}
+                teamAScore={game.teamA.score}
+                teamAFouls={game.teamA.fouls}
+                teamATimeouts={game.teamA.timeouts}
+                // Team B
                 teamBName={game.teamB.name}
                 teamBColor={game.teamB.color}
                 teamBPlayers={game.teamB.players || []}
-                onScoreChange={handleWebScore}
+                teamBScore={game.teamB.score}
+                teamBFouls={game.teamB.fouls}
+                teamBTimeouts={game.teamB.timeouts}
+                // Timer
+                period={timer.period}
+                minutes={timer.minutes}
+                seconds={timer.seconds}
+                shotClock={timer.shotClock}
+                gameRunning={timer.gameRunning}
+                possession={game.gameState.possession}
+                // Shot chart
+                existingShots={gameShotEvents}
+                // Scoring handlers
+                onScoreChange={(team, pts) => handleWebScore(team, pts)}
                 onShotRecorded={handleShotRecorded}
                 onSecondaryAction={handleAdvancedSecondaryAction}
-                existingShots={gameShotEvents}
-                period={timer.period}
-                gameClockSec={timer.minutes * 60 + timer.seconds}
+                // Clock handlers
+                onToggleClock={() => timer.toggleClock()}
+                onNextPeriod={() => timer.nextPeriod()}
+                onResetShotClock={(val) => {
+                    if (val === 14) timer.resetShotClock14();
+                    else timer.resetShotClock24();
+                }}
+                onTogglePossession={() => togglePossession()}
             />
         );
     }

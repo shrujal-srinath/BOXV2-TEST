@@ -1,4 +1,10 @@
 /* src/components/SplashScreen.css */
+/* ═══════════════════════════════════════════════════════════════
+   THE BOX — SPLASH SCREEN
+   
+   DARK MODE:  Original industrial black + red glow aesthetic
+   LIGHT MODE: "Warm Concrete" — sandstone, terracotta, stamped logo
+   ═══════════════════════════════════════════════════════════════ */
 
 :root {
   --sp-red: #DC2626;
@@ -8,49 +14,147 @@
   --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
 }
 
+/* ─── LIGHT MODE: Warm Concrete Palette ─────────────────────── */
+.light {
+  --sp-bg: #F5F0EB;
+  --sp-bg-warm: #EDE5DA;
+  --sp-accent: #C45832;
+  --sp-text: #2C2419;
+  --sp-text-muted: #8B7355;
+  --sp-grid-color: rgba(139, 115, 85, 0.06);
+  --sp-separator-shadow: 0 0 12px rgba(196, 88, 50, 0.3);
+}
+
+.dark {
+  --sp-bg: #050505;
+  --sp-bg-warm: #0a0505;
+  --sp-accent: #DC2626;
+  --sp-text: #ffffff;
+  --sp-text-muted: #a1a1aa;
+  --sp-grid-color: rgba(255, 255, 255, 0.03);
+  --sp-separator-shadow: 0 0 10px #DC2626;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE LAYOUT (shared)
+   ═══════════════════════════════════════════════════════════════ */
+
 .splash-screen {
   position: fixed;
   inset: 0;
-  background-color: var(--sp-black);
-  color: white;
   z-index: 9999;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   overflow: hidden;
 }
 
-/* === BACKGROUND === */
+/* --- Dark Mode Base --- */
+.dark .splash-screen {
+  background-color: var(--sp-black);
+  color: white;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* --- Light Mode Base --- */
+.light .splash-screen {
+  background-color: var(--sp-bg);
+  color: var(--sp-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BACKGROUND LAYERS
+   ═══════════════════════════════════════════════════════════════ */
+
 .splash-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
 }
 
-.bg-gradient {
+/* --- Dark: Moody red radial --- */
+.dark .bg-gradient {
   position: absolute;
   inset: 0;
   background: radial-gradient(circle at 50% 30%, #1a0505 0%, #000000 80%);
 }
 
-.bg-grid {
+/* --- Light: Warm sandstone radial with subtle vignette --- */
+.light .bg-gradient {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background:
+    radial-gradient(ellipse at 50% 40%, #F5F0EB 0%, #EDE5DA 50%, #E2D8CA 100%);
+}
+
+/* --- Dark: faint white grid --- */
+.dark .bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
   mask-image: radial-gradient(circle at center, black 30%, transparent 80%);
 }
 
-.bg-noise {
+/* --- Light: Warm crosshatch grid (feels like textured paper) --- */
+.light .bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--sp-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sp-grid-color) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 85%);
+}
+
+/* --- Dark: noise overlay --- */
+.dark .bg-noise {
   position: absolute;
   inset: 0;
   opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
 }
 
-/* === CENTER CONTENT === */
+/* --- Light: Paper-grain noise (slightly stronger, warmer) --- */
+.light .bg-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+/* --- Light Mode ONLY: Court-line watermark behind logo --- */
+.light .bg-grid::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 280px;
+  height: 280px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(196, 88, 50, 0.08);
+  border-radius: 50%;
+}
+
+.light .bg-grid::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: rgba(196, 88, 50, 0.06);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CENTER CONTENT
+   ═══════════════════════════════════════════════════════════════ */
+
 .splash-content {
   position: relative;
   z-index: 10;
@@ -67,7 +171,12 @@
   padding: 0 1rem;
 }
 
-.hero-logo {
+/* ═══════════════════════════════════════════════════════════════
+   HERO LOGO
+   ═══════════════════════════════════════════════════════════════ */
+
+/* --- Dark: metallic gradient text with white glow --- */
+.dark .hero-logo {
   font-size: clamp(3.5rem, 10vw, 7rem);
   font-weight: 900;
   font-style: italic;
@@ -83,8 +192,33 @@
   filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.1));
 }
 
-.reveal-logo {
+/* --- Light: Embossed stamp on warm concrete ---
+     Deep brown/charcoal text with a subtle pressed-in feel.
+     Logo "stamps down" instead of floating up.               */
+.light .hero-logo {
+  font-size: clamp(3.5rem, 10vw, 7rem);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.04em;
+  margin: 0;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(1.15);
+  color: #2C2419;
+  -webkit-text-fill-color: #2C2419;
+  text-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.4),
+    0 -1px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* --- Dark: float up --- */
+.dark .reveal-logo {
   animation: logo-enter 1.2s var(--ease-out-expo) forwards;
+}
+
+/* --- Light: STAMP DOWN — scales from 1.15 to 1.0 with a slight bounce --- */
+.light .reveal-logo {
+  animation: logo-stamp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 @keyframes logo-enter {
@@ -94,7 +228,29 @@
   }
 }
 
-.logo-shine {
+@keyframes logo-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(0.97);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LOGO SHINE
+   ═══════════════════════════════════════════════════════════════ */
+
+/* --- Dark: bright white sweep --- */
+.dark .logo-shine {
   position: absolute;
   top: 0;
   left: 0;
@@ -105,9 +261,26 @@
   pointer-events: none;
 }
 
+/* --- Light: warm gold highlight sweep --- */
+.light .logo-shine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(196, 88, 50, 0.05) 35%, rgba(196, 88, 50, 0.15) 50%, rgba(196, 88, 50, 0.05) 65%, transparent 100%);
+  transform: translateX(-100%) skewX(-20deg);
+  pointer-events: none;
+}
+
 .animate-shine {
   animation: shine-pass 2.5s ease-in-out forwards;
   animation-delay: 0.5s;
+}
+
+/* Light mode: shorter delay since stamp is faster than float-up */
+.light .animate-shine {
+  animation-delay: 0.3s;
 }
 
 @keyframes shine-pass {
@@ -116,17 +289,34 @@
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   SEPARATOR LINE
+   ═══════════════════════════════════════════════════════════════ */
+
 .separator {
   width: 0;
   height: 2px;
+  transition: width 1s var(--ease-out-expo);
+}
+
+.dark .separator {
   background: var(--sp-red);
   box-shadow: 0 0 10px var(--sp-red);
-  transition: width 1s var(--ease-out-expo);
+}
+
+/* Light: terracotta line, no glow — clean and crisp */
+.light .separator {
+  background: var(--sp-accent);
+  box-shadow: none;
 }
 
 .expand-line {
   width: 60px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   CREDITS / SUBTITLE
+   ═══════════════════════════════════════════════════════════════ */
 
 .credits-container {
   display: flex;
@@ -140,25 +330,51 @@
   gap: 0.6rem;
   font-size: 0.75rem;
   letter-spacing: 0.2em;
-  color: var(--sp-text-muted);
   opacity: 0;
   transform: translateY(10px);
 }
 
+.dark .credit-row {
+  color: var(--sp-text-muted);
+}
+
+.light .credit-row {
+  color: #8B7355;
+}
+
 .credit-bold {
-  color: white;
   font-weight: 800;
   font-size: 1rem;
   letter-spacing: 0.05em;
 }
 
+.dark .credit-bold {
+  color: white;
+}
+
+.light .credit-bold {
+  color: #2C2419;
+}
+
+.credit-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+}
+
 .credit-sub {
   font-size: 0.6rem;
   letter-spacing: 0.15em;
-  color: #555;
   text-transform: uppercase;
   opacity: 0;
   transform: translateY(10px);
+}
+
+.dark .credit-sub {
+  color: #555;
+}
+
+.light .credit-sub {
+  color: #A08B6E;
 }
 
 .fade-up {
@@ -180,7 +396,10 @@
   }
 }
 
-/* === LOADER FOOTER === */
+/* ═══════════════════════════════════════════════════════════════
+   LOADER / PROGRESS BAR
+   ═══════════════════════════════════════════════════════════════ */
+
 .loader-container {
   position: absolute;
   bottom: 3rem;
@@ -198,28 +417,53 @@
   font-family: 'Courier New', monospace;
   font-size: 0.65rem;
   font-weight: 700;
-  color: var(--sp-text-muted);
   letter-spacing: 0.05em;
 }
 
-.status-percent {
+.dark .loader-info {
+  color: var(--sp-text-muted);
+}
+
+.light .loader-info {
+  color: #A08B6E;
+}
+
+.dark .status-percent {
   color: white;
+}
+
+.light .status-percent {
+  color: #2C2419;
 }
 
 .progress-track {
   width: 100%;
   height: 2px;
-  background: var(--sp-zinc);
   border-radius: 2px;
   overflow: hidden;
   position: relative;
 }
 
+.dark .progress-track {
+  background: var(--sp-zinc);
+}
+
+.light .progress-track {
+  background: #D4CCC3;
+}
+
 .progress-fill {
   height: 100%;
-  background: var(--sp-red);
   position: relative;
   transition: width 0.1s linear;
+}
+
+.dark .progress-fill {
+  background: var(--sp-red);
+}
+
+.light .progress-fill {
+  background: var(--sp-accent);
 }
 
 .progress-glow {
@@ -229,17 +473,42 @@
   transform: translateY(-50%);
   width: 20px;
   height: 4px;
+}
+
+.dark .progress-glow {
   background: white;
   filter: blur(2px);
   box-shadow: 0 0 10px white;
 }
 
-/* === EXIT STATE === */
-.is-exiting .splash-content {
+/* Light: subtle warm glow instead of harsh white */
+.light .progress-glow {
+  background: rgba(196, 88, 50, 0.6);
+  filter: blur(3px);
+  box-shadow: 0 0 8px rgba(196, 88, 50, 0.3);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EXIT ANIMATION
+   ═══════════════════════════════════════════════════════════════ */
+
+.is-exiting {
+  pointer-events: none;
+}
+
+/* --- Dark: blur + scale out --- */
+.dark .is-exiting .splash-content {
   opacity: 0;
   transform: scale(0.95);
   filter: blur(10px);
   transition: all 0.8s var(--ease-out-expo);
+}
+
+/* --- Light: clean fade to white (no blur — keeps it crisp) --- */
+.light .is-exiting .splash-content {
+  opacity: 0;
+  transform: scale(0.98);
+  transition: all 0.6s var(--ease-out-expo);
 }
 
 .is-exiting .loader-container {
@@ -248,11 +517,18 @@
   transition: all 0.5s ease-in;
 }
 
-.is-exiting .splash-bg {
+.dark .is-exiting .splash-bg {
   opacity: 0;
   transition: opacity 1s ease 0.2s;
 }
 
-.is-exiting {
-  pointer-events: none;
+/* Light: warm fade — bg fades to pure white before dashboard loads */
+.light .is-exiting .splash-bg {
+  opacity: 0;
+  transition: opacity 0.8s ease 0.1s;
+}
+
+.light .is-exiting {
+  background-color: #FFFFFF;
+  transition: background-color 0.6s ease 0.3s;
 }

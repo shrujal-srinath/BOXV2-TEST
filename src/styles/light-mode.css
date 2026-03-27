@@ -1,0 +1,436 @@
+/* src/styles/light-mode.css */
+/* ═══════════════════════════════════════════════════════════════
+   THE BOX — "WARM CONCRETE" LIGHT MODE DESIGN SYSTEM
+   
+   This file defines the LIGHT MODE personality.
+   Import in main.tsx/App.tsx AFTER tailwind imports.
+   
+   Dark mode = Industrial black, neon glows, zinc steel
+   Light mode = Sandstone concrete, terracotta accents, 
+                embossed textures, editorial sports mag
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── PALETTE VARIABLES ─────────────────────────────────────── */
+.light {
+    /* Surfaces */
+    --box-bg-primary: #F5F0EB;
+    /* Warm sandstone */
+    --box-bg-secondary: #EDE5DA;
+    /* Lighter sand */
+    --box-bg-card: #FFFFFF;
+    /* White cards pop against sand */
+    --box-bg-inset: #F0EAE2;
+    /* Recessed areas (score boxes) */
+    --box-bg-hover: #E8DFD3;
+    /* Hovered surfaces */
+
+    /* Text */
+    --box-text-primary: #2C2419;
+    /* Deep espresso */
+    --box-text-secondary: #6B5D4D;
+    /* Warm mid-brown */
+    --box-text-muted: #8B7355;
+    /* Faded leather */
+    --box-text-hint: #A08B6E;
+    /* Lightest readable */
+
+    /* Accent (replaces dark mode's red) */
+    --box-accent: #C45832;
+    /* Terracotta / burnt sienna */
+    --box-accent-hover: #A84828;
+    /* Darker terracotta */
+    --box-accent-light: #F5DED5;
+    /* Terracotta tint for bgs */
+    --box-accent-shadow: rgba(196, 88, 50, 0.15);
+
+    /* Borders */
+    --box-border: #D4CCC3;
+    /* Stone border */
+    --box-border-light: #E2DAD0;
+    /* Faint border */
+    --box-border-heavy: #B8AD9F;
+    /* Strong divider */
+
+    /* Sport accent colors (warmer / muted versions for light mode) */
+    --box-sport-red: #C45832;
+    --box-sport-blue: #2563EB;
+    --box-sport-green: #3D7A3C;
+    --box-sport-yellow: #B8860B;
+    /* Dark gold instead of bright yellow */
+    --box-sport-orange: #C5631C;
+    --box-sport-purple: #7C3AED;
+}
+
+/* ─── PAGE BACKGROUND ───────────────────────────────────────── */
+/* Replaces the flat bg-black with a textured sandstone feel */
+.light body,
+.light #root {
+    background-color: var(--box-bg-primary);
+    color: var(--box-text-primary);
+}
+
+/* ─── BACKGROUND TEXTURE (applied to dashboard wrapper) ────── */
+/* Subtle linen/crosshatch texture — industrial but warm */
+.light .dashboard-bg-texture {
+    position: relative;
+}
+
+.light .dashboard-bg-texture::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(139, 115, 85, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139, 115, 85, 0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: radial-gradient(ellipse at 50% 30%, black 20%, transparent 70%);
+}
+
+/* ─── HEADER ────────────────────────────────────────────────── */
+/* Light header: white bar with warm border, not zinc-950 */
+.light .box-header {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--box-border);
+}
+
+/* ─── CARD SYSTEM ───────────────────────────────────────────── */
+/* Light cards: White with subtle warm shadow & crisp 1px border */
+.light .box-card {
+    background: var(--box-bg-card);
+    border: 1px solid var(--box-border);
+    box-shadow:
+        0 1px 3px rgba(44, 36, 25, 0.04),
+        0 4px 12px rgba(44, 36, 25, 0.03);
+    transition: all 0.2s ease;
+}
+
+.light .box-card:hover {
+    border-color: var(--box-border-heavy);
+    box-shadow:
+        0 2px 6px rgba(44, 36, 25, 0.06),
+        0 8px 24px rgba(44, 36, 25, 0.05);
+}
+
+/* ─── SPORT CARDS (special treatment) ────────────────────────── */
+/* Instead of glow effects, light mode uses:
+   - 3px left border in sport color
+   - On hover: left border expands to full background wash
+   - On select: inset shadow + thicker border              */
+
+.light .box-sport-card {
+    background: var(--box-bg-card);
+    border: 1px solid var(--box-border);
+    border-left: 3px solid var(--box-border);
+    box-shadow: 0 1px 3px rgba(44, 36, 25, 0.04);
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.light .box-sport-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.light .box-sport-card:hover {
+    border-color: var(--box-border-heavy);
+    box-shadow:
+        0 2px 8px rgba(44, 36, 25, 0.06),
+        0 8px 20px rgba(44, 36, 25, 0.04);
+}
+
+.light .box-sport-card:hover::before {
+    opacity: 1;
+}
+
+/* Sport-specific left borders + background washes */
+.light .box-sport-card[data-accent="red"] {
+    border-left-color: var(--box-sport-red);
+}
+
+.light .box-sport-card[data-accent="blue"] {
+    border-left-color: var(--box-sport-blue);
+}
+
+.light .box-sport-card[data-accent="green"] {
+    border-left-color: var(--box-sport-green);
+}
+
+.light .box-sport-card[data-accent="yellow"] {
+    border-left-color: var(--box-sport-yellow);
+}
+
+.light .box-sport-card[data-accent="orange"] {
+    border-left-color: var(--box-sport-orange);
+}
+
+.light .box-sport-card[data-accent="purple"] {
+    border-left-color: var(--box-sport-purple);
+}
+
+.light .box-sport-card[data-accent="red"]:hover::before {
+    background: rgba(196, 88, 50, 0.04);
+}
+
+.light .box-sport-card[data-accent="blue"]:hover::before {
+    background: rgba(37, 99, 235, 0.04);
+}
+
+.light .box-sport-card[data-accent="green"]:hover::before {
+    background: rgba(61, 122, 60, 0.04);
+}
+
+.light .box-sport-card[data-accent="yellow"]:hover::before {
+    background: rgba(184, 134, 11, 0.04);
+}
+
+.light .box-sport-card[data-accent="orange"]:hover::before {
+    background: rgba(197, 99, 28, 0.04);
+}
+
+.light .box-sport-card[data-accent="purple"]:hover::before {
+    background: rgba(124, 58, 237, 0.04);
+}
+
+/* Selected state: thicker border + inset shadow (pressed feel) */
+.light .box-sport-card.is-selected {
+    border-left-width: 4px;
+    box-shadow:
+        inset 0 2px 4px rgba(44, 36, 25, 0.08),
+        0 1px 2px rgba(44, 36, 25, 0.04);
+}
+
+.light .box-sport-card[data-accent="red"].is-selected {
+    border-color: var(--box-sport-red);
+}
+
+.light .box-sport-card[data-accent="blue"].is-selected {
+    border-color: var(--box-sport-blue);
+}
+
+.light .box-sport-card[data-accent="green"].is-selected {
+    border-color: var(--box-sport-green);
+}
+
+.light .box-sport-card[data-accent="yellow"].is-selected {
+    border-color: var(--box-sport-yellow);
+}
+
+.light .box-sport-card[data-accent="orange"].is-selected {
+    border-color: var(--box-sport-orange);
+}
+
+.light .box-sport-card[data-accent="purple"].is-selected {
+    border-color: var(--box-sport-purple);
+}
+
+/* ─── SECTION DIVIDERS ──────────────────────────────────────── */
+/* Court-line style: thin rule with a dot at the left */
+.light .box-section-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--box-text-muted);
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--box-border-light);
+    margin-bottom: 1.5rem;
+}
+
+.light .box-section-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ─── SCORE BOX (inside game cards) ─────────────────────────── */
+/* Recessed "scoreboard digit" style */
+.light .box-score-inset {
+    background: var(--box-bg-inset);
+    border: 1px solid var(--box-border);
+    box-shadow: inset 0 1px 3px rgba(44, 36, 25, 0.06);
+}
+
+/* ─── TAB BAR ───────────────────────────────────────────────── */
+.light .box-tab-active {
+    color: var(--box-accent);
+    border-bottom: 2px solid var(--box-accent);
+}
+
+.light .box-tab-inactive {
+    color: var(--box-text-muted);
+}
+
+.light .box-tab-inactive:hover {
+    color: var(--box-text-secondary);
+}
+
+.light .box-tab-badge-active {
+    background: var(--box-accent);
+    color: white;
+}
+
+.light .box-tab-badge-inactive {
+    background: var(--box-bg-secondary);
+    color: var(--box-text-muted);
+}
+
+/* ─── BUTTONS ───────────────────────────────────────────────── */
+/* Primary: filled terracotta */
+.light .box-btn-primary {
+    background: var(--box-accent);
+    color: white;
+    border: 1px solid var(--box-accent);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.15s ease;
+}
+
+.light .box-btn-primary:hover {
+    background: var(--box-accent-hover);
+    border-color: var(--box-accent-hover);
+    box-shadow: 0 2px 8px var(--box-accent-shadow);
+}
+
+/* Secondary: white with terracotta border */
+.light .box-btn-secondary {
+    background: var(--box-bg-card);
+    color: var(--box-text-primary);
+    border: 1px solid var(--box-border);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.15s ease;
+}
+
+.light .box-btn-secondary:hover {
+    border-color: var(--box-accent);
+    color: var(--box-accent);
+    background: var(--box-accent-light);
+}
+
+/* ─── SLIDE MENU ────────────────────────────────────────────── */
+.light .box-slide-menu {
+    background: #FFFFFF;
+    border-left: 1px solid var(--box-border);
+    box-shadow: -8px 0 32px rgba(44, 36, 25, 0.1);
+}
+
+/* ─── MODAL ─────────────────────────────────────────────────── */
+.light .box-modal-overlay {
+    background: rgba(44, 36, 25, 0.3);
+    backdrop-filter: blur(4px);
+}
+
+.light .box-modal-content {
+    background: var(--box-bg-card);
+    border: 1px solid var(--box-border);
+    box-shadow:
+        0 4px 16px rgba(44, 36, 25, 0.08),
+        0 16px 48px rgba(44, 36, 25, 0.12);
+}
+
+/* ─── INPUT FIELDS ──────────────────────────────────────────── */
+.light .box-input {
+    background: var(--box-bg-card);
+    border: 1px solid var(--box-border);
+    color: var(--box-text-primary);
+    box-shadow: inset 0 1px 2px rgba(44, 36, 25, 0.04);
+}
+
+.light .box-input:focus {
+    border-color: var(--box-accent);
+    box-shadow:
+        inset 0 1px 2px rgba(44, 36, 25, 0.04),
+        0 0 0 3px var(--box-accent-shadow);
+}
+
+.light .box-input::placeholder {
+    color: var(--box-text-hint);
+}
+
+/* ─── GAME CARD (live feed) ─────────────────────────────────── */
+.light .box-game-card {
+    background: var(--box-bg-card);
+    border: 1px solid var(--box-border);
+    box-shadow: 0 1px 3px rgba(44, 36, 25, 0.04);
+    transition: all 0.2s ease;
+}
+
+.light .box-game-card:hover {
+    border-color: var(--box-border-heavy);
+    box-shadow:
+        0 2px 6px rgba(44, 36, 25, 0.06),
+        0 6px 16px rgba(44, 36, 25, 0.04);
+}
+
+/* Game card left accent bar */
+.light .box-game-card .box-card-accent {
+    transition: width 0.2s ease;
+}
+
+.light .box-game-card:hover .box-card-accent {
+    width: 3px;
+}
+
+/* ─── TOURNAMENT BUTTON ─────────────────────────────────────── */
+/* Uses dark gold instead of bright yellow */
+.light .box-tournament-btn {
+    background: var(--box-sport-yellow);
+    color: white;
+    box-shadow: 0 2px 8px rgba(184, 134, 11, 0.2);
+}
+
+.light .box-tournament-btn:hover {
+    background: #9A7209;
+    box-shadow: 0 4px 12px rgba(184, 134, 11, 0.25);
+}
+
+/* ─── SCROLLBAR (subtle warm tone) ──────────────────────────── */
+.light ::-webkit-scrollbar {
+    width: 6px;
+}
+
+.light ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.light ::-webkit-scrollbar-thumb {
+    background: var(--box-border);
+    border-radius: 3px;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+    background: var(--box-border-heavy);
+}
+
+/* ─── UTILITY OVERRIDES ─────────────────────────────────────── */
+/* Badge for LIVE indicator */
+.light .box-live-badge {
+    background: #DC2626;
+    color: white;
+    box-shadow: none;
+}
+
+/* Status dots */
+.light .box-status-dot-live {
+    background: #16A34A;
+    box-shadow: 0 0 6px rgba(22, 163, 74, 0.3);
+}
+
+/* Emoji icon tint - makes emoji less garish on warm bg */
+.light .box-emoji-muted {
+    filter: saturate(0.7) brightness(0.9);
+}

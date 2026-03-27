@@ -1,6 +1,7 @@
 // src/components/ConnectControllerModal.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useHardware } from '../contexts/HardwareContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface ConnectControllerModalProps {
     userId: string;
@@ -60,8 +61,8 @@ const ConfirmedIcon = () => (
 
 const FoundIcon = () => (
     <div className="relative w-20 h-20 mx-auto">
-        <div className="absolute inset-0 rounded-full bg-zinc-900 border-2 border-white/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <div className="absolute inset-0 rounded-full bg-[#F0EAE2] dark:bg-zinc-900 border-2 border-[#D4CCC3] dark:border-white/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-[#6B5D4D] dark:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
             </svg>
         </div>
@@ -190,11 +191,11 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/90 backdrop-blur-sm"
+                className="absolute inset-0 bg-[#2C2419]/30 dark:bg-black/90 backdrop-blur-sm"
                 onClick={isTransitioning ? undefined : onClose}
             />
 
-            <div className="relative z-10 w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="relative z-10 w-full max-w-sm bg-white dark:bg-zinc-950 border border-[#D4CCC3] dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
 
                 {/* Top accent bar */}
                 <div className={`h-0.5 w-full transition-all duration-500 ${bar}`} />
@@ -203,17 +204,17 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                     {/* ── HEADER ── */}
                     <div className="flex items-start justify-between mb-8">
                         <div>
-                            <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-[0.25em] mb-1 font-mono">
+                            <p className="text-[#8B7355] dark:text-zinc-600 text-[10px] font-bold uppercase tracking-[0.25em] mb-1 font-mono">
                                 Hardware Controller
                             </p>
-                            <h2 className="text-xl font-black text-white uppercase tracking-tight leading-none">
+                            <h2 className="text-xl font-black text-[#2C2419] dark:text-white uppercase tracking-tight leading-none">
                                 {title}
                             </h2>
                         </div>
                         {!isTransitioning && (
                             <button
                                 onClick={onClose}
-                                className="text-zinc-600 hover:text-white transition-colors text-xl leading-none mt-0.5 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-800"
+                                className="text-[#B8AD9F] dark:text-zinc-600 hover:text-[#2C2419] dark:hover:text-white transition-colors text-xl leading-none mt-0.5 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#EDE5DA] dark:hover:bg-zinc-800"
                             >
                                 ✕
                             </button>
@@ -223,7 +224,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                     {/* ── PHASE: INPUT / ERROR ── */}
                     {(phase === 'input' || phase === 'error') && (
                         <div>
-                            <p className="text-zinc-500 text-xs font-mono mb-6 leading-relaxed">
+                            <p className="text-[#8B7355] dark:text-zinc-500 text-xs font-mono mb-6 leading-relaxed">
                                 Power on your ESP32 controller. The 4-character pairing code will appear on its screen.
                             </p>
 
@@ -239,17 +240,17 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                         onChange={e => handleDigitChange(i, e.target.value)}
                                         onKeyDown={e => handleKeyDown(i, e)}
                                         autoFocus={i === 0}
-                                        className={`w-14 h-16 text-center text-3xl font-black font-mono rounded-lg border-2 bg-black text-white outline-none transition-all uppercase
-                                            ${d ? 'border-white' : 'border-zinc-800 focus:border-zinc-500'}
-                                            ${phase === 'error' ? 'border-red-800' : ''}
+                                        className={`w-14 h-16 text-center text-3xl font-black font-mono rounded-lg border-2 bg-[#F0EAE2] dark:bg-black text-[#2C2419] dark:text-white outline-none transition-all uppercase
+                                            ${d ? 'border-[#C45832] dark:border-white' : 'border-[#D4CCC3] dark:border-zinc-800 focus:border-[#C45832] dark:focus:border-zinc-500'}
+                                            ${phase === 'error' ? 'border-red-500 dark:border-red-800' : ''}
                                         `}
                                     />
                                 ))}
                             </div>
 
                             {errorMsg && (
-                                <div className="bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-3 mb-5">
-                                    <p className="text-red-400 text-xs font-mono leading-relaxed">
+                                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg px-4 py-3 mb-5">
+                                    <p className="text-red-600 dark:text-red-400 text-xs font-mono leading-relaxed">
                                         ⚠ {errorMsg}
                                     </p>
                                 </div>
@@ -258,7 +259,7 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                             <button
                                 onClick={handlePair}
                                 disabled={!canPair}
-                                className="w-full py-3.5 bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-lg"
+                                className="w-full py-3.5 bg-[#C45832] dark:bg-white text-white dark:text-black font-black text-sm uppercase tracking-widest hover:bg-[#A84828] dark:hover:bg-zinc-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded-lg"
                             >
                                 Pair Controller →
                             </button>
@@ -269,8 +270,8 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                     {phase === 'searching' && (
                         <div className="text-center py-4">
                             <SearchingRings />
-                            <p className="text-amber-400 text-sm font-bold mt-6 mb-1">Searching for device</p>
-                            <p className="text-zinc-600 text-xs font-mono">Looking for controller <span className="text-white">{code}</span>...</p>
+                            <p className="text-amber-600 dark:text-amber-400 text-sm font-bold mt-6 mb-1">Searching for device</p>
+                            <p className="text-[#8B7355] dark:text-zinc-600 text-xs font-mono">Looking for controller <span className="text-[#2C2419] dark:text-white">{code}</span>...</p>
                         </div>
                     )}
 
@@ -278,8 +279,8 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                     {phase === 'found' && (
                         <div className="text-center py-4">
                             <FoundIcon />
-                            <p className="text-white text-sm font-bold mt-6 mb-1">Device Found</p>
-                            <p className="text-zinc-500 text-xs font-mono">Initiating pairing handshake...</p>
+                            <p className="text-[#2C2419] dark:text-white text-sm font-bold mt-6 mb-1">Device Found</p>
+                            <p className="text-[#8B7355] dark:text-zinc-500 text-xs font-mono">Initiating pairing handshake...</p>
                         </div>
                     )}
 
@@ -287,9 +288,9 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                     {phase === 'handshaking' && (
                         <div className="text-center py-4">
                             <HandshakingRings code={code} />
-                            <p className="text-blue-400 text-sm font-bold mt-6 mb-1">Waiting for confirmation</p>
-                            <p className="text-zinc-500 text-xs font-mono">ESP32 is confirming the link...</p>
-                            <p className="text-zinc-700 text-[10px] font-mono mt-2">Check your device display</p>
+                            <p className="text-blue-600 dark:text-blue-400 text-sm font-bold mt-6 mb-1">Waiting for confirmation</p>
+                            <p className="text-[#8B7355] dark:text-zinc-500 text-xs font-mono">ESP32 is confirming the link...</p>
+                            <p className="text-[#B8AD9F] dark:text-zinc-700 text-[10px] font-mono mt-2">Check your device display</p>
                         </div>
                     )}
 
@@ -298,19 +299,19 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                         <div>
                             <div className="flex flex-col items-center mb-6">
                                 <ConfirmedIcon />
-                                <p className="text-green-400 text-sm font-bold mt-4 mb-1">Controller Paired</p>
-                                <p className="text-zinc-500 text-xs font-mono">Device is ready</p>
+                                <p className="text-green-600 dark:text-green-400 text-sm font-bold mt-4 mb-1">Controller Paired</p>
+                                <p className="text-[#8B7355] dark:text-zinc-500 text-xs font-mono">Device is ready</p>
                             </div>
 
                             {/* Device status card */}
-                            <div className="bg-black border border-zinc-800 rounded-xl p-4 mb-6 space-y-3">
+                            <div className="bg-[#F0EAE2] dark:bg-black border border-[#D4CCC3] dark:border-zinc-800 rounded-xl p-4 mb-6 space-y-3">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Device ID</span>
-                                    <span className="text-white font-black font-mono text-base tracking-widest">{pairedCode}</span>
+                                    <span className="text-[#8B7355] dark:text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Device ID</span>
+                                    <span className="text-[#2C2419] dark:text-white font-black font-mono text-base tracking-widest">{pairedCode}</span>
                                 </div>
 
                                 <div className="flex items-center justify-between">
-                                    <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Status</span>
+                                    <span className="text-[#8B7355] dark:text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Status</span>
                                     <div className="flex items-center gap-2">
                                         <span className={`w-2 h-2 rounded-full ${deviceOnline ? 'bg-green-400 animate-pulse' : 'bg-zinc-600'}`} />
                                         <span className={`text-xs font-bold font-mono ${deviceOnline ? 'text-green-400' : 'text-zinc-500'}`}>
@@ -320,11 +321,11 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                                 </div>
 
                                 <div className="flex items-center justify-between">
-                                    <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Transport</span>
+                                    <span className="text-[#8B7355] dark:text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Transport</span>
                                     <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest
                                         ${transport === 'supabase'
-                                            ? 'bg-blue-900/30 border border-blue-700/50 text-blue-400'
-                                            : 'bg-zinc-900 border border-zinc-700 text-zinc-500'
+                                            ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700/50 text-blue-600 dark:text-blue-400'
+                                            : 'bg-[#EDE5DA] dark:bg-zinc-900 border border-[#D4CCC3] dark:border-zinc-700 text-[#8B7355] dark:text-zinc-500'
                                         }`}>
                                         <span className={`w-1.5 h-1.5 rounded-full ${transport === 'supabase' ? 'bg-blue-400 animate-pulse' : 'bg-zinc-600'}`} />
                                         {transport === 'supabase' ? 'CLOUD RTDB' : 'DISCONNECTED'}
@@ -333,8 +334,8 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
 
                                 {lastSeen > 0 && (
                                     <div className="flex items-center justify-between">
-                                        <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Last Seen</span>
-                                        <span className="text-zinc-400 text-[10px] font-mono">
+                                        <span className="text-[#8B7355] dark:text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Last Seen</span>
+                                        <span className="text-[#6B5D4D] dark:text-zinc-400 text-[10px] font-mono">
                                             {deviceOnline ? 'Just now' : `${Math.round((Date.now() - lastSeen) / 1000)}s ago`}
                                         </span>
                                     </div>
@@ -344,13 +345,13 @@ export const ConnectControllerModal: React.FC<ConnectControllerModalProps> = ({
                             <div className="flex gap-3">
                                 <button
                                     onClick={onClose}
-                                    className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white font-bold text-sm uppercase tracking-widest transition-colors rounded-lg"
+                                    className="flex-1 py-3 bg-[#EDE5DA] dark:bg-zinc-900 hover:bg-[#E8DFD3] dark:hover:bg-zinc-800 border border-[#D4CCC3] dark:border-zinc-700 text-[#2C2419] dark:text-white font-bold text-sm uppercase tracking-widest transition-colors rounded-lg"
                                 >
                                     Done
                                 </button>
                                 <button
                                     onClick={handleUnpair}
-                                    className="py-3 px-4 border border-zinc-800 hover:border-red-800 text-zinc-600 hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded-lg"
+                                    className="py-3 px-4 border border-[#D4CCC3] dark:border-zinc-800 hover:border-red-400 dark:hover:border-red-800 text-[#B8AD9F] dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors text-xs font-bold uppercase tracking-widest rounded-lg"
                                 >
                                     Unpair
                                 </button>
