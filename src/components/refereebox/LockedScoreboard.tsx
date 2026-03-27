@@ -1,42 +1,11 @@
-// src/components/referee/LiveScoreboard.tsx
-// ═══════════════════════════════════════════════════════════════
-// THE BOX — LIVE GAME SCOREBOARD (LOCKED VIEW)
-// 
-// This is what the referee sees 99% of the time during a game.
-// ALL input comes from physical buttons — screen is read-only.
-//
-// Layout (1024×600):
-// ┌──────────────────────────────────────────────────────────┐
-// │ STATUS BAR: period · clock status · system health    36px│
-// ├────────────────┬──────────────┬──────────────────────────┤
-// │                │              │                          │
-// │   TEAM A       │  GAME CLOCK  │   TEAM B                 │
-// │   ███ 47 ███   │   8:42       │   ███ 52 ███            │
-// │                │              │                          │
-// │   ●●●●○ FOULS │  SHOT CLOCK  │   ●●●○○ FOULS           │
-// │   ■■□ T.O.    │     14       │   ■■■ T.O.              │
-// │                │  ◄ POSS ►    │                          │
-// ├────────────────┴──────────────┴──────────────────────────┤
-// │ FOOTER: undo available · last action · settings hint 32px│
-// └──────────────────────────────────────────────────────────┘
-// ═══════════════════════════════════════════════════════════════
+// src/components/refereebox/LockedScoreboard.tsx
+// THE BOX — Referee Live Scoreboard (Redesigned v3)
+// Fully responsive. Scores are the hero. Compresses to header when popup is open.
 
 import React, { useState, useEffect, useRef } from 'react';
 
-interface TeamState {
-    name: string;
-    score: number;
-    fouls: number;
-    timeouts: number;
-    color?: string;
-}
-
-interface ClockState {
-    gameMs: number;
-    shotMs: number;
-    isRunning: boolean;
-    period: number;
-}
+interface TeamState { name: string; score: number; fouls: number; timeouts: number; color?: string; }
+interface ClockState { gameMs: number; shotMs: number; isRunning: boolean; period: number; totalPeriods: number; }
 
 interface LiveScoreboardProps {
     teamA: TeamState;
@@ -47,99 +16,77 @@ interface LiveScoreboardProps {
     canUndo: boolean;
     teamAColor?: string;
     teamBColor?: string;
+    isConnected?: boolean;
+    isTouchUnlocked?: boolean;
+    undoFlash?: boolean;
+    settingsFlash?: boolean | null;
+    isCompressed?: boolean; // true when popup is open
 }
 
-// ── Helpers ──
 const formatGameClock = (ms: number): string => {
-    const totalSeconds = Math.ceil(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    const s = Math.ceil(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
 const formatShotClock = (ms: number): number => Math.ceil(ms / 1000);
 
-const getPeriodLabel = (period: number): string => {
-    if (period <= 4) return `Q${period}`;
-    return `OT${period - 4}`;
+const getPeriodLabel = (period: number, total: number): string => {
+    if (total === 2) return period <= 2 ? `H${period}` : `OT${period - 2}`;
+    return period <= 4 ? `Q${period}` : `OT${period - 4}`;
 };
 
-// ── Foul LED strip ──
-const FoulIndicator: React.FC<{ count: number; max?: number; color: string }> = ({
-    count, max = 5, color,
-}) => (
-    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        {Array.from({ length: max }).map((_, i) => {
-            const lit = i < count;
-            const isBonus = i >= 4; // 5th foul = bonus in FIBA
-            return (
-                <div key={i} style={{
-                    width: '16px',
-                    height: '16px',
-                    borderRadius: '50%',
-                    background: lit
-                        ? isBonus ? '#F97316' : color
-                        : '#1a1a1a',
-                    border: `1.5px solid ${lit
-                        ? isBonus ? '#F97316' : color
-                        : '#2a2a2a'}`,
-                    boxShadow: lit ? `0 0 8px ${isBonus ? '#F9731644' : color + '44'}` : 'none',
-                    transition: 'all 0.2s ease',
-                }} />
-            );
-        })}
+// ── Foul dots ──
+const FoulDots: React.FC<{ count: number; color: string; size?: number }> = ({ count, color, size = 14 }) => (
+    <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} style={{
+                width: size, height: size, borderRadius: '50%',
+                background: i < count ? (i >= 4 ? '#F97316' : color) : '#1a1a1a',
+                border: `1.5px solid ${i < count ? (i >= 4 ? '#F97316' : color) : '#2a2a2a'}`,
+                boxShadow: i < count ? `0 0 6px ${i >= 4 ? '#F97316' : color}66` : 'none',
+                transition: 'all 0.2s',
+            }} />
+        ))}
     </div>
 );
 
-// ── Timeout dots ──
-const TimeoutIndicator: React.FC<{ used: number; total?: number; color: string }> = ({
-    used, total = 3, color,
-}) => {
-    // Show remaining timeouts
-    const remaining = Math.max(0, total - used);
-    return (
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            {Array.from({ length: total }).map((_, i) => (
-                <div key={i} style={{
-                    width: '14px',
-                    height: '14px',
-                    borderRadius: '3px',
-                    background: i < remaining ? color : '#1a1a1a',
-                    border: `1.5px solid ${i < remaining ? color : '#2a2a2a'}`,
-                    opacity: i < remaining ? 0.9 : 0.3,
-                    transition: 'all 0.2s ease',
-                }} />
-            ))}
-        </div>
-    );
-};
+// ── Timeout squares ──
+const TimeoutDots: React.FC<{ used: number; total?: number; color: string }> = ({ used, total = 3, color }) => (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        {Array.from({ length: total }).map((_, i) => (
+            <div key={i} style={{
+                width: 12, height: 12, borderRadius: '2px',
+                background: i < (total - used) ? color : '#1a1a1a',
+                border: `1.5px solid ${i < (total - used) ? color : '#2a2a2a'}`,
+                transition: 'all 0.2s',
+            }} />
+        ))}
+    </div>
+);
 
-// ── Score with animation ──
-const ScoreNumber: React.FC<{ score: number; color: string }> = ({ score, color }) => {
-    const [prevScore, setPrevScore] = useState(score);
-    const [animating, setAnimating] = useState(false);
+// ── Score digit with flash animation ──
+const ScoreDisplay: React.FC<{ score: number; color: string; size: string }> = ({ score, color, size }) => {
+    const [flash, setFlash] = useState(false);
+    const prevScore = useRef(score);
 
     useEffect(() => {
-        if (score !== prevScore) {
-            setAnimating(true);
-            const t = setTimeout(() => {
-                setAnimating(false);
-                setPrevScore(score);
-            }, 500);
-            return () => clearTimeout(t);
+        if (score !== prevScore.current) {
+            setFlash(true);
+            setTimeout(() => setFlash(false), 400);
+            prevScore.current = score;
         }
-    }, [score, prevScore]);
+    }, [score]);
 
     return (
         <div style={{
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'Oswald', sans-serif",
             fontWeight: 700,
-            fontSize: '96px',
+            fontSize: size,
+            color: flash ? color : '#fff',
+            textShadow: flash ? `0 0 40px ${color}` : 'none',
+            transition: 'color 0.15s, text-shadow 0.15s',
+            letterSpacing: '-0.02em',
             lineHeight: 1,
-            color: '#fff',
-            textShadow: animating ? `0 0 40px ${color}88` : 'none',
-            animation: animating ? 'scorePop 0.4s ease' : 'none',
-            transition: 'text-shadow 0.3s ease',
             fontVariantNumeric: 'tabular-nums',
         }}>
             {score}
@@ -147,427 +94,310 @@ const ScoreNumber: React.FC<{ score: number; color: string }> = ({ score, color 
     );
 };
 
-// ═══════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════
-
-const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
-    teamA, teamB, clock, possession, lastAction, canUndo,
-    teamAColor = '#3B82F6', teamBColor = '#EF4444',
-}) => {
-    const shotClockValue = formatShotClock(clock.shotMs);
-    const isShotClockCritical = shotClockValue <= 5 && clock.isRunning;
-    const isShotClockWarning = shotClockValue <= 10 && clock.isRunning;
-    const isGameClockLow = clock.gameMs <= 60000 && clock.isRunning; // last minute
+// ════════════════════════════════════════════════════
+// COMPRESSED HEADER — shown when popup is open
+// ════════════════════════════════════════════════════
+export const CompressedHeader: React.FC<{
+    teamA: TeamState; teamB: TeamState; clock: ClockState;
+    teamAColor: string; teamBColor: string;
+}> = ({ teamA, teamB, clock, teamAColor, teamBColor }) => {
+    const shotVal = formatShotClock(clock.shotMs);
+    const isCritical = shotVal <= 5 && clock.isRunning;
 
     return (
         <div style={{
-            width: '1024px',
-            height: '600px',
-            background: '#000',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            position: 'relative',
+            width: '100%', height: '56px',
+            background: '#050505',
+            borderBottom: '1px solid #1a1a1a',
+            display: 'flex', alignItems: 'center',
+            padding: '0 20px', gap: '16px',
+            flexShrink: 0,
         }}>
-            {/* Subtle scanline texture */}
-            <div style={{
-                position: 'absolute',
-                inset: 0,
-                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.008) 3px, rgba(255,255,255,0.008) 4px)',
-                pointerEvents: 'none',
-                zIndex: 10,
-            }} />
+            {/* Team A */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                <div style={{ width: 6, height: 28, borderRadius: 3, background: teamAColor }} />
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 13, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    {teamA.name}
+                </span>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 24, color: '#fff', marginLeft: 6 }}>
+                    {teamA.score}
+                </span>
+            </div>
+
+            {/* Center clocks */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', minWidth: 140 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: 20, color: clock.isRunning ? '#fff' : '#555' }}>
+                        {formatGameClock(clock.gameMs)}
+                    </span>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: clock.isRunning ? '#22C55E' : '#333', boxShadow: clock.isRunning ? '0 0 8px #22C55E' : 'none' }} />
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: 18, color: isCritical ? '#EF4444' : '#F59E0B' }}>
+                        {shotVal}
+                    </span>
+                </div>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.1em' }}>
+                    {getPeriodLabel(clock.period, clock.totalPeriods || 4)}
+                </span>
+            </div>
+
+            {/* Team B */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, justifyContent: 'flex-end' }}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 24, color: '#fff', marginRight: 6 }}>
+                    {teamB.score}
+                </span>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 13, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    {teamB.name}
+                </span>
+                <div style={{ width: 6, height: 28, borderRadius: 3, background: teamBColor }} />
+            </div>
+        </div>
+    );
+};
+
+// ════════════════════════════════════════════════════
+// MAIN SCOREBOARD — full screen, scores as hero
+// ════════════════════════════════════════════════════
+const LiveScoreboard: React.FC<LiveScoreboardProps> = ({
+    teamA, teamB, clock, possession, lastAction, canUndo,
+    teamAColor = '#3B82F6', teamBColor = '#EF4444',
+    isConnected = true, isTouchUnlocked = false,
+    undoFlash = false, settingsFlash = null,
+}) => {
+    const shotVal = formatShotClock(clock.shotMs);
+    const isShotCritical = shotVal <= 5 && clock.isRunning;
+    const isShotWarning = shotVal <= 10 && clock.isRunning;
+    const isGameClockLow = clock.gameMs <= 60000 && clock.isRunning;
+    const periodLabel = getPeriodLabel(clock.period, clock.totalPeriods || 4);
+
+    return (
+        <div style={{
+            width: '100vw', height: '100vh',
+            background: '#000',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden', position: 'relative',
+            fontFamily: "'Oswald', sans-serif",
+        }}>
+            {/* Scanlines */}
+            <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.006) 3px, rgba(255,255,255,0.006) 4px)', pointerEvents: 'none', zIndex: 10 }} />
+
+            {/* Settings unlock flash overlay */}
+            {settingsFlash !== null && (
+                <div style={{
+                    position: 'absolute', inset: 0, zIndex: 50, pointerEvents: 'none',
+                    border: `3px solid ${settingsFlash ? '#F59E0B' : '#3B82F6'}`,
+                    borderRadius: 0,
+                    boxShadow: `inset 0 0 40px ${settingsFlash ? '#F59E0B22' : '#3B82F622'}`,
+                    animation: 'settingsFlash 0.3s ease',
+                }} />
+            )}
+
+            {/* Undo flash overlay */}
+            {undoFlash && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 50, pointerEvents: 'none', background: 'rgba(59, 130, 246, 0.08)', animation: 'undoFlash 0.6s ease' }} />
+            )}
 
             {/* ── STATUS BAR ── */}
             <div style={{
-                height: '36px',
-                background: '#080808',
-                borderBottom: '1px solid #1a1a1a',
-                display: 'flex',
-                alignItems: 'center',
+                height: '32px', background: '#080808',
+                borderBottom: '1px solid #111',
+                display: 'flex', alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '0 20px',
-                flexShrink: 0,
+                padding: '0 18px', flexShrink: 0,
             }}>
-                {/* Period */}
+                {/* Period + status */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '16px',
-                        letterSpacing: '0.1em',
-                        color: '#fff',
-                    }}>
-                        {getPeriodLabel(clock.period)}
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontSize: 12, color: '#fff', letterSpacing: '0.15em' }}>
+                        {periodLabel}
                     </span>
-                    {/* Period dots */}
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                        {[1, 2, 3, 4].map((p) => (
-                            <div key={p} style={{
-                                width: '8px',
-                                height: '8px',
-                                borderRadius: '2px',
-                                background: p < clock.period ? '#22C55E'
-                                    : p === clock.period ? '#F59E0B'
-                                        : '#1a1a1a',
-                                border: `1px solid ${p <= clock.period ? 'transparent' : '#2a2a2a'}`,
-                            }} />
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                        {Array.from({ length: clock.totalPeriods || 4 }).map((_, i) => (
+                            <div key={i} style={{ width: 8, height: 4, borderRadius: 2, background: i < clock.period - 1 ? '#22C55E' : i === clock.period - 1 ? '#F59E0B' : '#222' }} />
                         ))}
                     </div>
                 </div>
 
-                {/* Clock status */}
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                }}>
-                    <div style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: clock.isRunning ? '#22C55E' : '#F59E0B',
-                        animation: clock.isRunning ? 'none' : 'dotPulse 1.5s infinite',
-                    }} />
-                    <span style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        color: clock.isRunning ? '#22C55E' : '#F59E0B',
-                        letterSpacing: '0.1em',
-                    }}>
-                        {clock.isRunning ? 'RUNNING' : 'STOPPED'}
-                    </span>
-                </div>
+                {/* Center — game code */}
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: '#333', letterSpacing: '0.2em' }}>
+                    THE BOX
+                </span>
 
-                {/* System indicator */}
-                <div style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '10px',
-                    color: '#2a2a2a',
-                    letterSpacing: '0.05em',
-                }}>
-                    TOUCH LOCKED
+                {/* Right — system status */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {/* Undo indicator */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: canUndo ? 1 : 0.3 }}>
+                        <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: canUndo ? '#3B82F6' : '#333' }}>↩ UNDO</span>
+                    </div>
+                    {/* Lock status */}
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: isTouchUnlocked ? '#F59E0B' : '#333', letterSpacing: '0.1em' }}>
+                        {isTouchUnlocked ? '🔓 UNLOCKED' : '🔒 LOCKED'}
+                    </span>
+                    {/* Daemon connection */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: isConnected ? '#22C55E' : '#EF4444', boxShadow: isConnected ? '0 0 6px #22C55E' : 'none' }} />
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: isConnected ? '#22C55E' : '#EF4444' }}>
+                            {isConnected ? 'LIVE' : 'OFFLINE'}
+                        </span>
+                    </div>
                 </div>
             </div>
 
-            {/* ── MAIN SCOREBOARD ── */}
-            <div style={{
-                flex: 1,
-                display: 'grid',
-                gridTemplateColumns: '1fr 240px 1fr',
-                minHeight: 0,
-            }}>
-                {/* TEAM A PANEL */}
+            {/* ── MAIN BODY ── */}
+            <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflow: 'hidden', minHeight: 0 }}>
+
+                {/* ── TEAM A PANEL ── */}
                 <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '16px',
-                    padding: '16px 24px',
-                    position: 'relative',
-                    overflow: 'hidden',
+                    flex: 1, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    padding: '16px 24px', gap: '16px',
+                    borderRight: '1px solid #111',
+                    background: possession === 'A' ? `${teamAColor}08` : 'transparent',
+                    transition: 'background 0.3s',
                 }}>
-                    {/* Team color glow */}
-                    <div style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        width: '6px',
-                        height: '100%',
-                        background: `linear-gradient(to bottom, transparent, ${teamAColor}, transparent)`,
-                    }} />
-                    <div style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: '200px',
-                        height: '200px',
-                        background: `radial-gradient(circle at 0% 50%, ${teamAColor}10 0%, transparent 70%)`,
-                        pointerEvents: 'none',
-                    }} />
+                    {/* Possession arrow */}
+                    <div style={{ height: 16, display: 'flex', alignItems: 'center' }}>
+                        {possession === 'A' && (
+                            <div style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 13, color: teamAColor, letterSpacing: '0.2em', animation: 'possessionPulse 1.5s ease-in-out infinite' }}>
+                                ▶ BALL
+                            </div>
+                        )}
+                    </div>
 
                     {/* Team name */}
-                    <div style={{
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '22px',
-                        letterSpacing: '0.12em',
-                        color: teamAColor,
-                        textTransform: 'uppercase',
-                    }}>
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 'clamp(14px, 2vw, 20px)', color: teamAColor, letterSpacing: '0.25em', textTransform: 'uppercase', textAlign: 'center' }}>
                         {teamA.name}
                     </div>
 
-                    {/* Score */}
-                    <ScoreNumber score={teamA.score} color={teamAColor} />
+                    {/* SCORE — hero element */}
+                    <ScoreDisplay score={teamA.score} color={teamAColor} size="clamp(80px, 14vw, 140px)" />
 
                     {/* Fouls */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                        <div style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '10px',
-                            color: '#444',
-                            letterSpacing: '0.2em',
-                        }}>
-                            FOULS
-                        </div>
-                        <FoulIndicator count={teamA.fouls} color={teamAColor} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.2em' }}>FOULS</span>
+                        <FoulDots count={teamA.fouls} color={teamAColor} />
                     </div>
 
                     {/* Timeouts */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                        <div style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '10px',
-                            color: '#444',
-                            letterSpacing: '0.2em',
-                        }}>
-                            TIMEOUTS
-                        </div>
-                        <TimeoutIndicator used={3 - teamA.timeouts} color={teamAColor} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.2em' }}>TIMEOUTS</span>
+                        <TimeoutDots used={3 - teamA.timeouts} total={3} color={teamAColor} />
                     </div>
                 </div>
 
-                {/* CENTER COLUMN — Clocks */}
+                {/* ── CENTER PANEL ── */}
                 <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '12px',
-                    borderLeft: '1px solid #1a1a1a',
-                    borderRight: '1px solid #1a1a1a',
-                    padding: '16px 0',
+                    width: 'clamp(160px, 22vw, 240px)', flexShrink: 0,
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    gap: '20px', padding: '16px 12px',
+                    borderRight: '1px solid #111',
                 }}>
-                    {/* Game Clock */}
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '4px',
-                    }}>
-                        <div style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '10px',
-                            color: '#444',
-                            letterSpacing: '0.2em',
-                        }}>
-                            GAME CLOCK
-                        </div>
+                    {/* Game clock */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.2em' }}>GAME CLOCK</span>
                         <div style={{
                             fontFamily: "'JetBrains Mono', monospace",
                             fontWeight: 700,
-                            fontSize: '52px',
-                            lineHeight: 1,
-                            color: isGameClockLow ? '#FF3030' : '#fff',
-                            animation: isGameClockLow ? 'clockCritical 0.5s infinite' : 'none',
-                            fontVariantNumeric: 'tabular-nums',
-                            letterSpacing: '-0.02em',
+                            fontSize: 'clamp(32px, 5vw, 56px)',
+                            color: isGameClockLow ? '#EF4444' : clock.isRunning ? '#fff' : '#666',
+                            letterSpacing: '0.05em',
+                            animation: isGameClockLow ? 'criticalPulse 1s ease-in-out infinite' : 'none',
                         }}>
                             {formatGameClock(clock.gameMs)}
                         </div>
+                        {/* Running indicator */}
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: clock.isRunning ? '#22C55E' : '#333', boxShadow: clock.isRunning ? '0 0 8px #22C55E' : 'none', transition: 'all 0.3s' }} />
                     </div>
 
-                    {/* Shot Clock */}
-                    <div style={{
-                        padding: '10px 28px',
-                        background: isShotClockCritical ? '#2a0000'
-                            : isShotClockWarning ? '#1a1400'
-                                : '#0a0a0a',
-                        border: `2px solid ${isShotClockCritical ? '#FF3030'
-                                : isShotClockWarning ? '#F59E0B'
-                                    : '#222'
-                            }`,
-                        borderRadius: '12px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px',
-                        transition: 'all 0.2s ease',
-                    }}>
-                        <div style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '9px',
-                            color: isShotClockCritical ? '#FF6060' : '#555',
-                            letterSpacing: '0.2em',
-                        }}>
-                            SHOT
-                        </div>
+                    {/* Divider */}
+                    <div style={{ width: '80%', height: 1, background: 'linear-gradient(to right, transparent, #222, transparent)' }} />
+
+                    {/* Shot clock */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.2em' }}>SHOT CLOCK</span>
                         <div style={{
                             fontFamily: "'JetBrains Mono', monospace",
                             fontWeight: 700,
-                            fontSize: '40px',
-                            lineHeight: 1,
-                            color: isShotClockCritical ? '#FF3030'
-                                : isShotClockWarning ? '#F59E0B'
-                                    : '#fff',
-                            fontVariantNumeric: 'tabular-nums',
-                            animation: isShotClockCritical ? 'clockCritical 0.3s infinite' : 'none',
+                            fontSize: 'clamp(48px, 8vw, 80px)',
+                            color: isShotCritical ? '#EF4444' : isShotWarning ? '#F97316' : '#F59E0B',
+                            animation: isShotCritical ? 'criticalPulse 0.5s ease-in-out infinite' : 'none',
+                            textShadow: isShotCritical ? '0 0 30px #EF4444' : isShotWarning ? '0 0 20px #F97316' : 'none',
                         }}>
-                            {String(shotClockValue).padStart(2, '0')}
+                            {shotVal}
                         </div>
                     </div>
 
-                    {/* Possession arrow */}
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        marginTop: '4px',
-                    }}>
-                        <svg width="24" height="16" viewBox="0 0 24 16"
-                            style={{ opacity: possession === 'A' ? 1 : 0.15, transition: 'opacity 0.2s' }}>
-                            <polygon points="24,8 8,0 8,16" fill={teamAColor} />
-                        </svg>
-                        <div style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '10px',
-                            color: '#444',
-                            letterSpacing: '0.15em',
-                        }}>
-                            POSS
+                    {/* Possession */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.2em' }}>POSSESSION</span>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: possession === 'A' ? teamAColor : '#222', boxShadow: possession === 'A' ? `0 0 10px ${teamAColor}` : 'none', transition: 'all 0.3s' }} />
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: possession === 'B' ? teamBColor : '#222', boxShadow: possession === 'B' ? `0 0 10px ${teamBColor}` : 'none', transition: 'all 0.3s' }} />
                         </div>
-                        <svg width="24" height="16" viewBox="0 0 24 16"
-                            style={{ opacity: possession === 'B' ? 1 : 0.15, transition: 'opacity 0.2s' }}>
-                            <polygon points="0,8 16,0 16,16" fill={teamBColor} />
-                        </svg>
                     </div>
                 </div>
 
-                {/* TEAM B PANEL */}
+                {/* ── TEAM B PANEL ── */}
                 <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '16px',
-                    padding: '16px 24px',
-                    position: 'relative',
-                    overflow: 'hidden',
+                    flex: 1, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    padding: '16px 24px', gap: '16px',
+                    background: possession === 'B' ? `${teamBColor}08` : 'transparent',
+                    transition: 'background 0.3s',
                 }}>
-                    {/* Team color glow */}
-                    <div style={{
-                        position: 'absolute',
-                        right: 0,
-                        top: 0,
-                        width: '6px',
-                        height: '100%',
-                        background: `linear-gradient(to bottom, transparent, ${teamBColor}, transparent)`,
-                    }} />
-                    <div style={{
-                        position: 'absolute',
-                        right: 0,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: '200px',
-                        height: '200px',
-                        background: `radial-gradient(circle at 100% 50%, ${teamBColor}10 0%, transparent 70%)`,
-                        pointerEvents: 'none',
-                    }} />
+                    {/* Possession arrow */}
+                    <div style={{ height: 16, display: 'flex', alignItems: 'center' }}>
+                        {possession === 'B' && (
+                            <div style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 13, color: teamBColor, letterSpacing: '0.2em', animation: 'possessionPulse 1.5s ease-in-out infinite' }}>
+                                BALL ◀
+                            </div>
+                        )}
+                    </div>
 
-                    <div style={{
-                        fontFamily: "'Oswald', sans-serif",
-                        fontWeight: 700,
-                        fontSize: '22px',
-                        letterSpacing: '0.12em',
-                        color: teamBColor,
-                        textTransform: 'uppercase',
-                    }}>
+                    {/* Team name */}
+                    <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 'clamp(14px, 2vw, 20px)', color: teamBColor, letterSpacing: '0.25em', textTransform: 'uppercase', textAlign: 'center' }}>
                         {teamB.name}
                     </div>
 
-                    <ScoreNumber score={teamB.score} color={teamBColor} />
+                    {/* SCORE — hero element */}
+                    <ScoreDisplay score={teamB.score} color={teamBColor} size="clamp(80px, 14vw, 140px)" />
 
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                        <div style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '10px',
-                            color: '#444',
-                            letterSpacing: '0.2em',
-                        }}>
-                            FOULS
-                        </div>
-                        <FoulIndicator count={teamB.fouls} color={teamBColor} />
+                    {/* Fouls */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.2em' }}>FOULS</span>
+                        <FoulDots count={teamB.fouls} color={teamBColor} />
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                        <div style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: '10px',
-                            color: '#444',
-                            letterSpacing: '0.2em',
-                        }}>
-                            TIMEOUTS
-                        </div>
-                        <TimeoutIndicator used={3 - teamB.timeouts} color={teamBColor} />
+                    {/* Timeouts */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#444', letterSpacing: '0.2em' }}>TIMEOUTS</span>
+                        <TimeoutDots used={3 - teamB.timeouts} total={3} color={teamBColor} />
                     </div>
                 </div>
             </div>
 
             {/* ── FOOTER BAR ── */}
             <div style={{
-                height: '36px',
-                background: '#080808',
-                borderTop: '1px solid #1a1a1a',
-                display: 'flex',
-                alignItems: 'center',
+                height: '32px', background: '#080808',
+                borderTop: '1px solid #111',
+                display: 'flex', alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '0 20px',
-                flexShrink: 0,
+                padding: '0 18px', flexShrink: 0,
             }}>
-                {/* Undo indicator */}
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                }}>
-                    <div style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        background: canUndo ? '#3B82F6' : '#1a1a1a',
-                    }} />
-                    <span style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '10px',
-                        color: canUndo ? '#3B82F6' : '#2a2a2a',
-                        letterSpacing: '0.05em',
-                    }}>
-                        {canUndo ? 'UNDO AVAILABLE' : 'NO HISTORY'}
-                    </span>
-                </div>
-
-                {/* Last action */}
-                <div style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '10px',
-                    color: '#333',
-                    letterSpacing: '0.05em',
-                    maxWidth: '400px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: '#333', letterSpacing: '0.05em', maxWidth: '50%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {lastAction || 'WAITING FOR INPUT'}
-                </div>
-
-                {/* Settings hint */}
-                <div style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '10px',
-                    color: '#1a1a1a',
-                    letterSpacing: '0.05em',
-                    padding: '3px 10px',
-                    border: '1px solid #1a1a1a',
-                    borderRadius: '4px',
-                }}>
-                    SETTINGS BTN → UNLOCK
-                </div>
+                </span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: '#222', letterSpacing: '0.1em' }}>
+                    {isTouchUnlocked ? 'TOUCH ACTIVE — PRESS SETTINGS TO LOCK' : 'PRESS SETTINGS BTN TO UNLOCK TOUCH'}
+                </span>
             </div>
+
+            <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Barlow+Condensed:wght@700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+                @keyframes criticalPulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+                @keyframes possessionPulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+                @keyframes settingsFlash { 0% { opacity:0; } 50% { opacity:1; } 100% { opacity:0; } }
+                @keyframes undoFlash { 0% { opacity:0; } 30% { opacity:1; } 100% { opacity:0; } }
+            `}</style>
         </div>
     );
 };

@@ -222,7 +222,6 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
             const zone = classifyZone(x, y);
             let points: 1 | 2 | 3 = 2;
             if (zone.includes('three') || zone.includes('corner')) points = 3;
-            if (zone === 'free_throw_line') points = 1;
             setDeferredShot({ x, y, zone, points, shotType: 'field_goal', teamSide });
             return;
         }

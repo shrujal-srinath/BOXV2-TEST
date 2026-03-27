@@ -1,27 +1,7 @@
-// src/hooks/useRefereeBox.ts
-// ═══════════════════════════════════════════════════════════════
-// THE BOX — Referee Hardware Hook v2
-//
-// Manages the Socket.io connection to the local Pi daemon on :3001.
-// Handles reconnection automatically with exponential backoff.
-//
-// Events sent TO daemon:
-//   setup_game  — start a new game with config
-//   ui_action   — score/foul edits (only when screen unlocked)
-//   end_game    — finish the current game
-//
-// Events received FROM daemon:
-//   state_update — full game state (on connect + after every action)
-//   clock_sync   — clock-only update (10x/sec while running)
-//   game_ready   — emitted after setup_game, carries { gameCode }
-//   game_ended   — emitted after end_game
-//   setup_error  — if game creation failed
-// ═══════════════════════════════════════════════════════════════
+// src/hooks/useRefereeBox.ts — THE BOX Referee Hardware Hook v3
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-
-// ─── Types ────────────────────────────────────────────────────
 
 export interface TeamState {
     name: string;
@@ -41,6 +21,12 @@ export interface ClockState {
     shotClockSeconds: number;
 }
 
+export interface Player {
+    id: string;
+    name: string;
+    number: string;
+}
+
 export interface GameState {
     teamA: TeamState;
     teamB: TeamState;
@@ -50,6 +36,8 @@ export interface GameState {
         gameCode: string | null;
         gameActive: boolean;
         periodType: 'quarter' | 'half';
+        gameMode: 'quick' | 'stats' | 'advanced';
+        players: { teamA: Player[]; teamB: Player[] };
     };
 }
 
@@ -63,17 +51,23 @@ export interface GameConfig {
     periods: number;
     periodType: 'quarter' | 'half';
     timeoutsPerTeam?: number;
-    /** Online path only — game already exists in Supabase, daemon adopts it instead of creating */
+    gameMode?: 'quick' | 'stats' | 'advanced';
+    playersA?: Player[];
+    playersB?: Player[];
     existingGameCode?: string;
 }
 
-// ─── Constants ────────────────────────────────────────────────
+// Emitted by daemon when a score button is pressed
+export interface ScorePendingEvent {
+    team: 'A' | 'B';
+    points: 1 | 2 | 3;
+    players: Player[];
+    gameMode: 'quick' | 'stats' | 'advanced';
+}
 
 const SOCKET_URL = 'http://localhost:3001';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
-
-// ─── Hook ─────────────────────────────────────────────────────
 
 export function useRefereeBox() {
     const [gameState, setGameState] = useState<GameState | null>(null);
@@ -82,44 +76,41 @@ export function useRefereeBox() {
     const [isSettingUp, setIsSettingUp] = useState(false);
     const [setupError, setSetupError] = useState<string | null>(null);
 
+    // Score pending — shown as popup overlay
+    const [scorePending, setScorePending] = useState<ScorePendingEvent | null>(null);
+
+    // Undo flash — brief animation on screen
+    const [undoFlash, setUndoFlash] = useState(false);
+
+    // Settings unlock flash
+    const [settingsFlash, setSettingsFlash] = useState<boolean | null>(null);
+
     const socketRef = useRef<Socket | null>(null);
     const reconnectAttemptRef = useRef(0);
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const mountedRef = useRef(true);
 
-    // ── Connection ──────────────────────────────────────────────
-
     const connect = useCallback(() => {
         if (!mountedRef.current) return;
         if (socketRef.current?.connected) return;
 
-        // Clean up any existing socket before creating a new one
         if (socketRef.current) {
             socketRef.current.removeAllListeners();
             socketRef.current.disconnect();
         }
 
-        const socket = io(SOCKET_URL, {
-            reconnection: false,    // We handle reconnection manually for full control
-            timeout: 5000,
-        });
-
+        const socket = io(SOCKET_URL, { reconnection: false, timeout: 5000 });
         socketRef.current = socket;
 
         socket.on('connect', () => {
             if (!mountedRef.current) return;
-            console.log('✅ Connected to BOX daemon');
             setIsConnected(true);
             reconnectAttemptRef.current = 0;
-            if (reconnectTimerRef.current) {
-                clearTimeout(reconnectTimerRef.current);
-                reconnectTimerRef.current = null;
-            }
+            if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
         });
 
-        socket.on('disconnect', (reason) => {
+        socket.on('disconnect', () => {
             if (!mountedRef.current) return;
-            console.warn('🔌 Daemon disconnected:', reason);
             setIsConnected(false);
             scheduleReconnect();
         });
@@ -132,16 +123,10 @@ export function useRefereeBox() {
 
         socket.on('state_update', (rawState: any) => {
             if (!mountedRef.current) return;
-            // Normalise: guarantee meta and ui always exist
-            // Guards against old daemon format that does not have these fields
             const newState: GameState = {
                 ...rawState,
                 ui: rawState.ui ?? { isTouchUnlocked: false },
-                meta: rawState.meta ?? {
-                    gameCode: null,
-                    gameActive: false,
-                    periodType: 'quarter',
-                },
+                meta: rawState.meta ?? { gameCode: null, gameActive: false, periodType: 'quarter', gameMode: 'quick', players: { teamA: [], teamB: [] } },
             };
             setGameState(newState);
             if (newState.meta?.gameCode) setGameCode(newState.meta.gameCode);
@@ -154,7 +139,6 @@ export function useRefereeBox() {
 
         socket.on('game_ready', ({ gameCode: code }: { gameCode: string }) => {
             if (!mountedRef.current) return;
-            console.log(`🎮 Game ready: ${code}`);
             setGameCode(code);
             setIsSettingUp(false);
             setSetupError(null);
@@ -162,29 +146,45 @@ export function useRefereeBox() {
 
         socket.on('game_ended', () => {
             if (!mountedRef.current) return;
-            console.log('🏁 Game ended');
             setGameCode(null);
+            setScorePending(null);
         });
 
         socket.on('setup_error', ({ message }: { message: string }) => {
             if (!mountedRef.current) return;
-            console.error('❌ Setup error:', message);
             setSetupError(message);
             setIsSettingUp(false);
         });
+
+        // Score button pressed — show popup based on mode
+        socket.on('score_pending', (event: ScorePendingEvent) => {
+            if (!mountedRef.current) return;
+            // In quick mode, score already updated, no popup needed
+            if (event.gameMode === 'quick') return;
+            setScorePending(event);
+        });
+
+        // Undo button pressed — flash the UI
+        socket.on('undo_triggered', () => {
+            if (!mountedRef.current) return;
+            setUndoFlash(true);
+            setTimeout(() => setUndoFlash(false), 600);
+        });
+
+        // Settings toggled — flash indicator
+        socket.on('settings_toggled', ({ unlocked }: { unlocked: boolean }) => {
+            if (!mountedRef.current) return;
+            setSettingsFlash(unlocked);
+            setTimeout(() => setSettingsFlash(null), 2000);
+        });
+
     }, []);
 
     const scheduleReconnect = useCallback(() => {
         if (!mountedRef.current) return;
-        if (reconnectTimerRef.current) return; // already scheduled
-
-        const attempt = reconnectAttemptRef.current;
-        // Exponential backoff: 1s, 2s, 4s, 8s, 15s, 15s, ...
-        const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt), RECONNECT_MAX_MS);
+        if (reconnectTimerRef.current) return;
+        const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttemptRef.current), RECONNECT_MAX_MS);
         reconnectAttemptRef.current += 1;
-
-        console.log(`🔄 Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
-
         reconnectTimerRef.current = setTimeout(() => {
             reconnectTimerRef.current = null;
             connect();
@@ -194,7 +194,6 @@ export function useRefereeBox() {
     useEffect(() => {
         mountedRef.current = true;
         connect();
-
         return () => {
             mountedRef.current = false;
             if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -204,37 +203,39 @@ export function useRefereeBox() {
         };
     }, [connect]);
 
-    // ── Actions ─────────────────────────────────────────────────
-
-    /**
-     * Called from SetupScreen when referee taps "Start Game".
-     * Daemon creates the Supabase game and responds with game_ready.
-     */
     const setupGame = useCallback((config: GameConfig) => {
-        if (!socketRef.current?.connected) {
-            setSetupError('Not connected to hardware daemon');
-            return;
-        }
+        if (!socketRef.current?.connected) { setSetupError('Not connected to hardware daemon'); return; }
         setIsSettingUp(true);
         setSetupError(null);
         socketRef.current.emit('setup_game', config);
     }, []);
 
-    /**
-     * Touch UI action — only works when screen is unlocked by physical button.
-     */
     const sendAction = useCallback((type: string, payload: Record<string, unknown> = {}) => {
         socketRef.current?.emit('ui_action', { type, payload });
     }, []);
 
-    /**
-     * Ends the current game — marks completed in Supabase and resets daemon.
-     */
     const endGame = useCallback(() => {
         socketRef.current?.emit('end_game');
     }, []);
 
-    // ── Formatters ──────────────────────────────────────────────
+    // Called when shot popup completes (player selected, court tapped, etc)
+    const attributeShot = useCallback((data: {
+        team: 'A' | 'B';
+        points: number;
+        playerId: string | null;
+        playerName: string | null;
+        zone?: string;
+        x?: number;
+        y?: number;
+    }) => {
+        socketRef.current?.emit('shot_attributed', data);
+        setScorePending(null);
+    }, []);
+
+    // Dismiss popup without attribution
+    const dismissScorePending = useCallback(() => {
+        setScorePending(null);
+    }, []);
 
     const formatGameClock = useCallback((ms: number): string => {
         const totalSeconds = Math.ceil(ms / 1000);
@@ -253,9 +254,14 @@ export function useRefereeBox() {
         gameCode,
         isSettingUp,
         setupError,
+        scorePending,
+        undoFlash,
+        settingsFlash,
         setupGame,
         sendAction,
         endGame,
+        attributeShot,
+        dismissScorePending,
         formatGameClock,
         formatShotClock,
     };
