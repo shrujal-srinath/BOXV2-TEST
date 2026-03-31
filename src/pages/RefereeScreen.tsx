@@ -11,7 +11,7 @@
 //   LIVE_GAME → END_GAME_CONFIRM → POST_GAME
 // ═══════════════════════════════════════════════════════════════
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRefereeBox } from '../hooks/useRefereeBox';
 import type { GameConfig } from '../hooks/useRefereeBox';
 import { getGameByCode } from '../services/supabaseGameService';
@@ -37,6 +37,7 @@ type Screen =
     | 'live_game'
     | 'settings'
     | 'end_game_confirm'
+    | 'quick_game_confirm'
     | 'post_game';
 
 // ═══════════════════════════════════════════════════════════════
@@ -66,6 +67,8 @@ export default function RefereeScreen() {
     const [isOnline, setIsOnline] = useState(false);
     const [boxCode, setBoxCode] = useState<string | null>(null);
     const [possession, setPossession] = useState<'A' | 'B' | null>(null);
+    const [modeSelectIndex, setModeSelectIndex] = useState(1); // 0=online, 1=offline (default offline)
+    const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [finalScore, setFinalScore] = useState<{
         a: number; b: number; teamA: string; teamB: string;
     } | null>(null);
@@ -95,6 +98,70 @@ export default function RefereeScreen() {
         const stored = localStorage.getItem('THE_BOX_UNIT_CODE');
         if (stored) setBoxCode(stored);
     }, []);
+
+    // ── Hardware button navigation ────────────────────────────
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const msg = (e as CustomEvent).detail as string;
+
+            // SPLASH — any button skips splash
+            if (screen === 'splash') {
+                handleSplashComplete();
+                return;
+            }
+
+            // MODE_SELECT — Score A/B toggle, Shot Clock confirms
+            if (screen === 'mode_select') {
+                if (msg === 'SCORE_A_PLUS1' || msg === 'SCORE_A_PLUS2' || msg === 'SCORE_A_PLUS3') {
+                    setModeSelectIndex(0); // online
+                } else if (msg === 'SCORE_B_PLUS1' || msg === 'SCORE_B_PLUS2' || msg === 'SCORE_B_PLUS3') {
+                    setModeSelectIndex(1); // offline
+                } else if (msg === 'SHOT_CLOCK_24' || msg === 'SHOT_CLOCK_14') {
+                    // Confirm selection
+                    if (modeSelectIndex === 0 && isOnline) {
+                        setScreen('online_setup');
+                    } else {
+                        setScreen('offline_setup');
+                    }
+                } else if (msg === 'SETTINGS') {
+                    // Long-press detection: start timer on SETTINGS press
+                    if (!settingsHoldTimer.current) {
+                        settingsHoldTimer.current = setTimeout(() => {
+                            settingsHoldTimer.current = null;
+                            setScreen('quick_game_confirm');
+                        }, 2000);
+                        // Also clear on any other message (acts as release)
+                    }
+                } else {
+                    // Any non-SETTINGS button clears the hold timer
+                    if (settingsHoldTimer.current) {
+                        clearTimeout(settingsHoldTimer.current);
+                        settingsHoldTimer.current = null;
+                    }
+                }
+                return;
+            }
+
+            // QUICK_GAME_CONFIRM — Shot Clock = start, Undo = cancel
+            if (screen === 'quick_game_confirm') {
+                if (msg === 'SHOT_CLOCK_24' || msg === 'SHOT_CLOCK_14') {
+                    handleQuickGameStart();
+                } else if (msg === 'UNDO') {
+                    setScreen('mode_select');
+                }
+                return;
+            }
+        };
+
+        window.addEventListener('pico_message', handler);
+        return () => {
+            window.removeEventListener('pico_message', handler);
+            if (settingsHoldTimer.current) {
+                clearTimeout(settingsHoldTimer.current);
+                settingsHoldTimer.current = null;
+            }
+        };
+    }, [screen, modeSelectIndex, isOnline]);
 
     // ── OFFLINE: CONNECTING → PRE_GAME ───────────────────────
     useEffect(() => {
@@ -225,8 +292,27 @@ export default function RefereeScreen() {
         setFinalScore(null);
         setActiveGameCode(null);
         setPossession(null);
+        setModeSelectIndex(1);
         setScreen('mode_select');
     }, []);
+
+    // ── Quick Game (hardware-only) ────────────────────────────
+    const handleQuickGameStart = useCallback(() => {
+        const quickConfig: GameConfig = {
+            teamAName: 'TEAM A',
+            teamBName: 'TEAM B',
+            teamAColor: '#3B82F6',
+            teamBColor: '#EF4444',
+            periodMinutes: 10,
+            periods: 4,
+            periodType: 'quarter',
+            shotClockSeconds: 24,
+            gameMode: 'quick',
+        };
+        setPendingConfig(quickConfig);
+        setScreen('connecting');
+        setupGame(quickConfig);
+    }, [setupGame]);
 
     const handleRetry = useCallback(() => {
         if (pendingConfig) {
@@ -254,6 +340,15 @@ export default function RefereeScreen() {
                     onSelectOnline={() => setScreen('online_setup')}
                     onSelectOffline={() => setScreen('offline_setup')}
                     isOnline={isOnline}
+                    selectedIndex={modeSelectIndex}
+                />
+            );
+
+        case 'quick_game_confirm':
+            return (
+                <QuickGameConfirmScreen
+                    onConfirm={handleQuickGameStart}
+                    onCancel={() => setScreen('mode_select')}
                 />
             );
 
@@ -347,6 +442,139 @@ export default function RefereeScreen() {
         default:
             return null;
     }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// QUICK GAME CONFIRMATION SCREEN
+// ═══════════════════════════════════════════════════════════════
+
+function QuickGameConfirmScreen({
+    onConfirm, onCancel,
+}: {
+    onConfirm: () => void;
+    onCancel: () => void;
+}) {
+    return (
+        <div style={{
+            width: '100vw', height: '100vh', background: '#000',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            gap: '28px', fontFamily: "'Oswald', sans-serif",
+            border: '3px solid #F59E0B',
+        }}>
+            {/* Header */}
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0,
+                height: '44px',
+                background: 'linear-gradient(90deg, #1a1400, #2a1800, #1a1400)',
+                borderBottom: '2px solid #F59E0B',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+            }}>
+                <div style={{
+                    width: '8px', height: '8px', borderRadius: '50%',
+                    background: '#F59E0B', animation: 'qgPulse 1s infinite',
+                }} />
+                <span style={{
+                    fontSize: '14px', fontWeight: 700, letterSpacing: '0.25em',
+                    color: '#F59E0B', fontFamily: "'JetBrains Mono', monospace",
+                }}>
+                    QUICK GAME
+                </span>
+                <div style={{
+                    width: '8px', height: '8px', borderRadius: '50%',
+                    background: '#F59E0B', animation: 'qgPulse 1s infinite',
+                }} />
+            </div>
+
+            {/* Teams */}
+            <div style={{ marginTop: '44px', textAlign: 'center' }}>
+                <div style={{ fontSize: '12px', letterSpacing: '0.2em', color: '#444', fontFamily: "'JetBrains Mono', monospace", marginBottom: '16px' }}>
+                    START A QUICK GAME?
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', letterSpacing: '0.15em', color: '#3B82F6', marginBottom: '6px' }}>TEAM A</div>
+                        <div style={{
+                            width: 60, height: 60, borderRadius: '12px',
+                            background: '#3B82F615', border: '2px solid #3B82F644',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '28px', fontWeight: 700, color: '#3B82F6',
+                        }}>
+                            A
+                        </div>
+                    </div>
+                    <div style={{ fontSize: '20px', color: '#222', fontWeight: 300 }}>VS</div>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', letterSpacing: '0.15em', color: '#EF4444', marginBottom: '6px' }}>TEAM B</div>
+                        <div style={{
+                            width: 60, height: 60, borderRadius: '12px',
+                            background: '#EF444415', border: '2px solid #EF444444',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '28px', fontWeight: 700, color: '#EF4444',
+                        }}>
+                            B
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Config summary */}
+            <div style={{
+                display: 'flex', gap: '20px',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '11px', color: '#444', letterSpacing: '0.1em',
+            }}>
+                <span>4 × 10 MIN</span>
+                <span style={{ color: '#222' }}>•</span>
+                <span>24s SHOT CLOCK</span>
+                <span style={{ color: '#222' }}>•</span>
+                <span>BASIC MODE</span>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
+                <div
+                    onClick={onCancel}
+                    style={{
+                        padding: '14px 36px', borderRadius: '10px',
+                        border: '1px solid #2a2a2a', background: '#0a0a0a',
+                        color: '#666', fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em',
+                        cursor: 'pointer', userSelect: 'none',
+                    }}
+                    onTouchStart={(e) => { (e.currentTarget as HTMLElement).style.background = '#1a1a1a'; }}
+                    onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.background = '#0a0a0a'; }}
+                >
+                    ← UNDO = CANCEL
+                </div>
+                <div
+                    onClick={onConfirm}
+                    style={{
+                        padding: '14px 36px', borderRadius: '10px',
+                        border: '2px solid #F59E0B', background: '#F59E0B',
+                        color: '#000', fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: '12px', fontWeight: 700, letterSpacing: '0.1em',
+                        cursor: 'pointer', userSelect: 'none',
+                    }}
+                    onTouchStart={(e) => { (e.currentTarget as HTMLElement).style.transform = 'scale(0.97)'; }}
+                    onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
+                >
+                    SHOT CLOCK = START →
+                </div>
+            </div>
+
+            <div style={{
+                fontSize: '9px', color: '#222', letterSpacing: '0.1em',
+                fontFamily: "'JetBrains Mono', monospace", textAlign: 'center',
+            }}>
+                OR TAP THE BUTTONS ABOVE
+            </div>
+
+            <style>{`
+                @keyframes qgPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+            `}</style>
+        </div>
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════

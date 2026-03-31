@@ -20,7 +20,12 @@ cd "$PROJECT_DIR"
 npm run dev -- --host &
 VITE_PID=$!
 
-# 3. Wait for servers
+# 3. Black screen + hide cursor while servers start
+echo "🖤 Setting black screen..."
+DISPLAY=:0 xsetroot -solid black 2>/dev/null || true
+DISPLAY=:0 unclutter -idle 0 &
+
+# 4. Wait for servers
 echo "⏳ Waiting for servers..."
 sleep 12
 

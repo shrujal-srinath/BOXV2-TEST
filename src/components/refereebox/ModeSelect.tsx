@@ -3,6 +3,7 @@
 // THE BOX — GAME MODE SELECTION
 // Two paths: Online (scan game from website) or Offline (standalone)
 // Design: Two large cards, impossible to mis-tap on 7" screen
+// Supports hardware-only navigation via selectedIndex prop
 // ═══════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -10,14 +11,15 @@ import React from 'react';
 interface ModeSelectProps {
     onSelectOnline: () => void;
     onSelectOffline: () => void;
-    isOnline: boolean; // has internet/supabase connection
+    isOnline: boolean;
+    selectedIndex?: number; // 0 = online, 1 = offline — driven by hardware buttons
 }
 
-const ModeSelect: React.FC<ModeSelectProps> = ({ onSelectOnline, onSelectOffline, isOnline }) => {
+const ModeSelect: React.FC<ModeSelectProps> = ({ onSelectOnline, onSelectOffline, isOnline, selectedIndex }) => {
     return (
         <div style={{
-            width: '1024px',
-            height: '600px',
+            width: '100vw',
+            height: '100vh',
             background: '#000',
             display: 'flex',
             flexDirection: 'column',
@@ -96,6 +98,8 @@ const ModeSelect: React.FC<ModeSelectProps> = ({ onSelectOnline, onSelectOffline
                         background: isOnline
                             ? 'linear-gradient(160deg, #0a1628 0%, #0a0f1a 100%)'
                             : '#0a0a0a',
+                        outline: selectedIndex === 0 ? '3px solid #3B82F6' : 'none',
+                        outlineOffset: '-3px',
                         border: `2px solid ${isOnline ? '#1a3a6a' : '#1a1a1a'}`,
                         borderRadius: '16px',
                         padding: '32px 28px',
@@ -189,6 +193,8 @@ const ModeSelect: React.FC<ModeSelectProps> = ({ onSelectOnline, onSelectOffline
                     style={{
                         background: 'linear-gradient(160deg, #1a1400 0%, #0f0d05 100%)',
                         border: '2px solid #3a3010',
+                        outline: selectedIndex === 1 ? '3px solid #F59E0B' : 'none',
+                        outlineOffset: '-3px',
                         borderRadius: '16px',
                         padding: '32px 28px',
                         display: 'flex',
@@ -271,6 +277,35 @@ const ModeSelect: React.FC<ModeSelectProps> = ({ onSelectOnline, onSelectOffline
                         FULLY STANDALONE →
                     </div>
                 </div>
+            </div>
+
+            {/* Hardware navigation hint */}
+            <div style={{
+                height: '36px', flexShrink: 0,
+                borderTop: '1px solid #1a1a1a',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px',
+                background: '#050505',
+            }}>
+                <span style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '10px', color: '#333', letterSpacing: '0.1em',
+                }}>
+                    SCORE A / B = SELECT
+                </span>
+                <span style={{ color: '#1a1a1a' }}>•</span>
+                <span style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '10px', color: '#333', letterSpacing: '0.1em',
+                }}>
+                    SHOT CLOCK = ENTER
+                </span>
+                <span style={{ color: '#1a1a1a' }}>•</span>
+                <span style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '10px', color: '#333', letterSpacing: '0.1em',
+                }}>
+                    HOLD SETTINGS = QUICK GAME
+                </span>
             </div>
         </div>
     );

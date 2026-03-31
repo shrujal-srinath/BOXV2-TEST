@@ -186,7 +186,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ isDaemonConnected, onComple
         .animate-breathe { animation: pulse-opacity 2s ease-in-out infinite; }
       `}</style>
 
-            <div className="w-[1024px] h-[600px] fui-bg text-[#00f3ff] font-mono overflow-hidden relative select-none flex items-center justify-center border-[4px] border-[#00f3ff]/20">
+            <div className="w-screen h-screen fui-bg text-[#00f3ff] font-mono overflow-hidden relative select-none flex items-center justify-center border-[4px] border-[#00f3ff]/20">
 
                 {/* Environment Layers */}
                 <div className="absolute inset-0 fui-grid opacity-30"></div>
