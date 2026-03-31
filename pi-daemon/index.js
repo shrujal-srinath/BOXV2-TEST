@@ -42,6 +42,7 @@ const getInitialState = (config = null) => ({
         shotClockSeconds: config?.shotClockSeconds || 24,
     },
     ui: { isTouchUnlocked: false },
+    possession: null, // 'A' | 'B' | null
     meta: {
         gameCode: null, gameActive: false,
         periodType: config?.periodType || 'quarter',
@@ -356,6 +357,12 @@ io.on('connection', (socket) => {
             case 'TIMEOUT_B':
                 saveHistory();
                 if (state.teamB.timeouts > 0) { state.teamB.timeouts -= 1; state.clock.isRunning = false; }
+                break;
+            case 'SET_POSSESSION':
+                state.possession = action.payload.team || null;
+                break;
+            case 'TRIGGER_BUZZER':
+                triggerBuzzer(action.payload?.type || 'SHORT');
                 break;
         }
         io.emit('state_update', state);

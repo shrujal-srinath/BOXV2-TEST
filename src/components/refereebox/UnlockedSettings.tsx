@@ -1,17 +1,13 @@
 // src/components/refereebox/UnlockedSettings.tsx
 // ═══════════════════════════════════════════════════════════════
-// THE BOX — SETTINGS / MANUAL OVERRIDE MODE v2
+// THE BOX — SETTINGS / MANUAL OVERRIDE MODE v3
 //
-// Accessible ONLY when physical SETTINGS button is pressed.
-// Orange border = visual alarm that touch is active.
-//
-// New in v2:
-//   - Period navigation panel (next / back / add OT)
-//   - Possession toggle
-//   - End Game moved to dedicated confirmation screen in RefereeScreen
+// Broadcast-grade control panel. All controls visible at once.
+// No hidden tabs. Quick-action buttons for fouls & timeouts.
+// Touch-active orange warning border.
 // ═══════════════════════════════════════════════════════════════
 
-import React, { useState } from 'react';
+import React from 'react';
 
 interface TeamState {
     name: string;
@@ -39,36 +35,40 @@ interface SettingsPanelProps {
     onEndGame?: () => void;
 }
 
-// ── Touch adjustment button ──────────────────────────────────
-const AdjustBtn: React.FC<{
+// ── Tactile button ──
+const TactileBtn: React.FC<{
     label: string;
     onClick: () => void;
-    color: string;
-    size?: 'normal' | 'large';
-    danger?: boolean;
-}> = ({ label, onClick, color, size = 'normal', danger = false }) => (
+    color?: string;
+    bg?: string;
+    borderColor?: string;
+    size?: number;
+    fontSize?: number;
+    disabled?: boolean;
+    fullWidth?: boolean;
+}> = ({ label, onClick, color = '#fff', bg = 'rgba(255,255,255,0.03)', borderColor = 'rgba(255,255,255,0.08)', size = 48, fontSize = 18, disabled = false, fullWidth = false }) => (
     <div
-        onClick={onClick}
+        onClick={disabled ? undefined : onClick}
         style={{
-            width: size === 'large' ? '52px' : '40px',
-            height: size === 'large' ? '52px' : '40px',
-            background: danger ? '#1a0000' : '#111',
-            border: `1.5px solid ${danger ? '#5a0000' : '#2a2a2a'}`,
-            borderRadius: '8px',
+            width: fullWidth ? '100%' : size,
+            height: size,
+            background: bg,
+            border: `1.5px solid ${borderColor}`,
+            borderRadius: '10px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: danger ? '#EF4444' : color,
+            color: disabled ? 'rgba(255,255,255,0.1)' : color,
             fontFamily: "'Barlow', sans-serif",
-            fontSize: size === 'large' ? '22px' : '18px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'transform 0.08s, background 0.1s',
+            fontSize, fontWeight: 700,
+            cursor: disabled ? 'default' : 'pointer',
             userSelect: 'none',
             WebkitTapHighlightColor: 'transparent',
+            transition: 'transform 0.06s, background 0.1s',
+            opacity: disabled ? 0.3 : 1,
         }}
         onTouchStart={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'scale(0.88)';
+            if (!disabled) (e.currentTarget as HTMLElement).style.transform = 'scale(0.9)';
         }}
         onTouchEnd={(e) => {
             (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
@@ -78,7 +78,7 @@ const AdjustBtn: React.FC<{
     </div>
 );
 
-// ── Stat row ──────────────────────────────────────────────────
+// ── Stat row ──
 const StatRow: React.FC<{
     label: string;
     value: number | string;
@@ -88,61 +88,25 @@ const StatRow: React.FC<{
     valueColor?: string;
     valueFontSize?: string;
 }> = ({ label, value, onDecrement, onIncrement, color, valueColor = '#fff', valueFontSize = '28px' }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <div style={{
             fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '10px', color: '#555',
-            letterSpacing: '0.12em', width: '56px', textAlign: 'right',
+            fontSize: '9px', color: 'rgba(255,255,255,0.25)',
+            letterSpacing: '0.12em', width: '48px', textAlign: 'right',
+            fontWeight: 600,
         }}>
             {label}
         </div>
-        <AdjustBtn label="−" onClick={onDecrement} color={color} />
+        <TactileBtn label="−" onClick={onDecrement} color={color} borderColor={`${color}33`} />
         <div style={{
             fontFamily: "'JetBrains Mono', monospace",
             fontWeight: 700, fontSize: valueFontSize,
-            color: valueColor, minWidth: '56px',
+            color: valueColor, minWidth: '52px',
             textAlign: 'center', fontVariantNumeric: 'tabular-nums',
         }}>
             {value}
         </div>
-        <AdjustBtn label="+" onClick={onIncrement} color={color} />
-    </div>
-);
-
-// ── Team column ───────────────────────────────────────────────
-const TeamColumn: React.FC<{
-    team: TeamState;
-    color: string;
-    sendAction: (type: string, payload?: Record<string, unknown>) => void;
-    teamKey: 'teamA' | 'teamB';
-}> = ({ team, color, sendAction, teamKey }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', flex: 1 }}>
-        <div style={{
-            fontFamily: "'Oswald', sans-serif", fontWeight: 700,
-            fontSize: '13px', letterSpacing: '0.2em',
-            color, textTransform: 'uppercase',
-            borderBottom: `2px solid ${color}33`, paddingBottom: '6px', width: '100%', textAlign: 'center',
-        }}>
-            {team.name}
-        </div>
-        <StatRow
-            label="SCORE" value={team.score}
-            onDecrement={() => sendAction('EDIT_SCORE', { team: teamKey, amount: -1 })}
-            onIncrement={() => sendAction('EDIT_SCORE', { team: teamKey, amount: 1 })}
-            color={color} valueColor={color} valueFontSize="32px"
-        />
-        <StatRow
-            label="FOULS" value={team.fouls}
-            onDecrement={() => sendAction('EDIT_FOULS', { team: teamKey, amount: -1 })}
-            onIncrement={() => sendAction('EDIT_FOULS', { team: teamKey, amount: 1 })}
-            color="#EF4444"
-        />
-        <StatRow
-            label="T.O." value={team.timeouts}
-            onDecrement={() => sendAction('EDIT_TIMEOUTS', { team: teamKey, amount: -1 })}
-            onIncrement={() => sendAction('EDIT_TIMEOUTS', { team: teamKey, amount: 1 })}
-            color="#F59E0B"
-        />
+        <TactileBtn label="+" onClick={onIncrement} color={color} borderColor={`${color}33`} />
     </div>
 );
 
@@ -168,30 +132,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     teamAColor = '#3B82F6', teamBColor = '#EF4444',
     sendAction, onEndGame,
 }) => {
-    // Which sub-panel is open in the center column
-    type CenterTab = 'clocks' | 'period' | 'possession';
-    const [centerTab, setCenterTab] = useState<CenterTab>('clocks');
-
     const currentPeriodLabel = getPeriodLabel(clock.period, clock.totalPeriods);
-    const isOT = clock.period > clock.totalPeriods;
     const canGoBack = clock.period > 1;
-
-    const handleNextPeriod = () => {
-        sendAction('NEXT_PERIOD', {});
-    };
-
-    const handlePrevPeriod = () => {
-        if (canGoBack) sendAction('EDIT_PERIOD', { amount: -1 });
-    };
-
-    const handleAddOT = () => {
-        // Advance past totalPeriods into OT
-        sendAction('NEXT_PERIOD', { forceOT: true });
-    };
-
-    const handleSetPossession = (team: 'A' | 'B') => {
-        sendAction('SET_POSSESSION', { team });
-    };
 
     return (
         <div style={{
@@ -202,35 +144,34 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
             {/* ── WARNING HEADER ── */}
             <div style={{
-                height: '40px',
+                height: '42px',
                 background: 'linear-gradient(90deg, #1a0800 0%, #2a1400 50%, #1a0800 100%)',
                 borderBottom: '2px solid #F97316',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '0 20px', flexShrink: 0,
+                padding: '0 16px', flexShrink: 0,
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{
                         width: '8px', height: '8px', borderRadius: '50%',
                         background: '#F97316', animation: 'dotPulse 1s infinite',
+                        boxShadow: '0 0 8px #F97316',
                     }} />
                     <span style={{
                         fontFamily: "'Oswald', sans-serif", fontWeight: 700,
-                        fontSize: '14px', letterSpacing: '0.2em', color: '#F97316',
+                        fontSize: '13px', letterSpacing: '0.2em', color: '#F97316',
                     }}>
-                        MANUAL OVERRIDE — TOUCH ACTIVE
+                        MANUAL OVERRIDE
                     </span>
                 </div>
 
-                {/* End Game button — top right corner */}
                 <div
                     onClick={onEndGame}
                     style={{
-                        padding: '4px 16px', border: '1px solid #5a0000',
+                        padding: '5px 16px', border: '1px solid #5a0000',
                         borderRadius: '6px', background: '#1a0000',
                         color: '#EF4444', fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em',
+                        fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em',
                         cursor: 'pointer', userSelect: 'none',
-                        WebkitTapHighlightColor: 'transparent',
                     }}
                     onTouchStart={(e) => { (e.currentTarget as HTMLElement).style.background = '#2a0000'; }}
                     onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.background = '#1a0000'; }}
@@ -243,266 +184,342 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <div style={{
                 flex: 1,
                 display: 'grid',
-                gridTemplateColumns: '1fr 260px 1fr',
+                gridTemplateColumns: '1fr 280px 1fr',
                 gap: '0',
                 overflow: 'hidden',
             }}>
 
-                {/* LEFT — Team A */}
+                {/* ─── LEFT: TEAM A ─── */}
                 <div style={{
                     display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center',
-                    padding: '16px 20px',
-                    borderRight: '1px solid #1a1a1a',
+                    padding: '12px 14px', gap: '10px',
+                    borderRight: '1px solid rgba(255,255,255,0.04)',
+                    position: 'relative',
                 }}>
-                    <TeamColumn team={teamA} color={teamAColor} sendAction={sendAction} teamKey="teamA" />
-                </div>
+                    {/* Team color accent */}
+                    <div style={{ position: 'absolute', left: 0, top: '10%', bottom: '10%', width: 3, background: `linear-gradient(to bottom, transparent, ${teamAColor}88, transparent)` }} />
 
-                {/* CENTER — tabs: clocks / period / possession */}
-                <div style={{
-                    display: 'flex', flexDirection: 'column',
-                    borderRight: '1px solid #1a1a1a',
-                }}>
-
-                    {/* Tab bar */}
+                    {/* Name */}
                     <div style={{
-                        display: 'flex', borderBottom: '1px solid #1a1a1a',
-                        flexShrink: 0,
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '13px', letterSpacing: '0.2em',
+                        color: teamAColor, textTransform: 'uppercase',
+                        borderBottom: `2px solid ${teamAColor}33`, paddingBottom: '4px',
+                        width: '100%', textAlign: 'center',
                     }}>
-                        {(['clocks', 'period', 'possession'] as CenterTab[]).map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setCenterTab(tab)}
-                                style={{
-                                    flex: 1, padding: '10px 0',
-                                    background: centerTab === tab ? '#111' : 'transparent',
-                                    border: 'none',
-                                    borderBottom: centerTab === tab ? '2px solid #F97316' : '2px solid transparent',
-                                    color: centerTab === tab ? '#fff' : '#444',
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '9px', fontWeight: 700,
-                                    letterSpacing: '0.12em', textTransform: 'uppercase',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                {tab}
-                            </button>
-                        ))}
+                        {teamA.name}
                     </div>
 
-                    {/* Tab content */}
+                    {/* Score */}
+                    <StatRow
+                        label="SCORE" value={teamA.score}
+                        onDecrement={() => sendAction('EDIT_SCORE', { team: 'teamA', amount: -1 })}
+                        onIncrement={() => sendAction('EDIT_SCORE', { team: 'teamA', amount: 1 })}
+                        color={teamAColor} valueColor={teamAColor} valueFontSize="36px"
+                    />
+                    <StatRow
+                        label="FOULS" value={teamA.fouls}
+                        onDecrement={() => sendAction('EDIT_FOULS', { team: 'teamA', amount: -1 })}
+                        onIncrement={() => sendAction('EDIT_FOULS', { team: 'teamA', amount: 1 })}
+                        color="#EF4444"
+                    />
+                    <StatRow
+                        label="T.O." value={teamA.timeouts}
+                        onDecrement={() => sendAction('EDIT_TIMEOUTS', { team: 'teamA', amount: -1 })}
+                        onIncrement={() => sendAction('EDIT_TIMEOUTS', { team: 'teamA', amount: 1 })}
+                        color="#F59E0B"
+                    />
+
+                    {/* Divider */}
+                    <div style={{ width: '80%', height: 1, background: 'rgba(255,255,255,0.04)', margin: '4px 0' }} />
+
+                    {/* Quick Actions */}
+                    <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                        <div
+                            onClick={() => sendAction('ADD_FOUL_A')}
+                            style={{
+                                flex: 1, height: 44, borderRadius: '8px',
+                                background: '#EF444410', border: '1.5px solid #EF444433',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                fontFamily: "'JetBrains Mono', monospace", fontSize: '10px',
+                                fontWeight: 700, color: '#EF4444', letterSpacing: '0.08em',
+                                cursor: 'pointer', userSelect: 'none',
+                            }}
+                            onTouchStart={(e) => { (e.currentTarget as HTMLElement).style.background = '#EF444420'; }}
+                            onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.background = '#EF444410'; }}
+                        >
+                            + FOUL
+                        </div>
+                        <div
+                            onClick={() => sendAction('TIMEOUT_A')}
+                            style={{
+                                flex: 1, height: 44, borderRadius: '8px',
+                                background: '#F59E0B10', border: '1.5px solid #F59E0B33',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                fontFamily: "'JetBrains Mono', monospace", fontSize: '10px',
+                                fontWeight: 700, color: '#F59E0B', letterSpacing: '0.08em',
+                                cursor: 'pointer', userSelect: 'none',
+                                opacity: teamA.timeouts > 0 ? 1 : 0.3,
+                            }}
+                            onTouchStart={(e) => { if (teamA.timeouts > 0) (e.currentTarget as HTMLElement).style.background = '#F59E0B20'; }}
+                            onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.background = '#F59E0B10'; }}
+                        >
+                            TIMEOUT
+                        </div>
+                    </div>
+                </div>
+
+                {/* ─── CENTER: ALL CONTROLS ─── */}
+                <div style={{
+                    display: 'flex', flexDirection: 'column',
+                    borderRight: '1px solid rgba(255,255,255,0.04)',
+                    overflow: 'auto',
+                }}>
                     <div style={{
                         flex: 1, display: 'flex', flexDirection: 'column',
                         alignItems: 'center', justifyContent: 'center',
-                        padding: '16px', gap: '14px',
+                        padding: '12px 14px', gap: '10px',
                     }}>
 
-                        {/* ── CLOCKS TAB ── */}
-                        {centerTab === 'clocks' && (
-                            <>
-                                <StatRow
-                                    label="GAME" value={formatClock(clock.gameMs)}
-                                    onDecrement={() => sendAction('EDIT_GAME_CLOCK', { amount: -1 })}
-                                    onIncrement={() => sendAction('EDIT_GAME_CLOCK', { amount: 1 })}
-                                    color="#22C55E" valueColor="#22C55E" valueFontSize="22px"
-                                />
-                                <StatRow
-                                    label="SHOT" value={Math.ceil(clock.shotMs / 1000)}
-                                    onDecrement={() => sendAction('EDIT_SHOT_CLOCK', { amount: -1 })}
-                                    onIncrement={() => sendAction('EDIT_SHOT_CLOCK', { amount: 1 })}
-                                    color="#F59E0B" valueColor="#F59E0B" valueFontSize="22px"
-                                />
-                                <div style={{ height: '1px', width: '80%', background: '#1a1a1a' }} />
-                                <div style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '9px', color: '#333', letterSpacing: '0.1em',
-                                }}>
-                                    ± 1 SECOND PER TAP
-                                </div>
-                            </>
-                        )}
+                        {/* ── CLOCKS ── */}
+                        <div style={{
+                            fontFamily: "'JetBrains Mono', monospace", fontSize: '8px',
+                            color: 'rgba(255,255,255,0.2)', letterSpacing: '0.2em', fontWeight: 600,
+                        }}>CLOCKS</div>
+                        <StatRow
+                            label="GAME" value={formatClock(clock.gameMs)}
+                            onDecrement={() => sendAction('EDIT_GAME_CLOCK', { amount: -1 })}
+                            onIncrement={() => sendAction('EDIT_GAME_CLOCK', { amount: 1 })}
+                            color="#22C55E" valueColor="#22C55E" valueFontSize="22px"
+                        />
+                        <StatRow
+                            label="SHOT" value={Math.ceil(clock.shotMs / 1000)}
+                            onDecrement={() => sendAction('EDIT_SHOT_CLOCK', { amount: -1 })}
+                            onIncrement={() => sendAction('EDIT_SHOT_CLOCK', { amount: 1 })}
+                            color="#F59E0B" valueColor="#F59E0B" valueFontSize="22px"
+                        />
+                        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', color: 'rgba(255,255,255,0.1)', letterSpacing: '0.08em' }}>±1 SEC PER TAP</div>
 
-                        {/* ── PERIOD TAB ── */}
-                        {centerTab === 'period' && (
-                            <>
-                                {/* Current period display */}
-                                <div style={{
-                                    fontFamily: "'Oswald', sans-serif", fontWeight: 700,
-                                    fontSize: '48px', color: '#fff', letterSpacing: '0.05em',
-                                    lineHeight: 1,
-                                }}>
-                                    {currentPeriodLabel}
-                                </div>
-                                <div style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '9px', color: '#333', letterSpacing: '0.15em',
-                                }}>
-                                    PERIOD {clock.period} OF {clock.totalPeriods}
-                                </div>
+                        {/* Divider */}
+                        <div style={{ width: '80%', height: 1, background: 'rgba(255,255,255,0.04)', margin: '2px 0' }} />
 
-                                <div style={{ height: '1px', width: '80%', background: '#1a1a1a' }} />
+                        {/* ── PERIOD ── */}
+                        <div style={{
+                            fontFamily: "'JetBrains Mono', monospace", fontSize: '8px',
+                            color: 'rgba(255,255,255,0.2)', letterSpacing: '0.2em', fontWeight: 600,
+                        }}>PERIOD</div>
 
-                                {/* Navigation buttons */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: '36px', color: '#fff', lineHeight: 1 }}>
+                                {currentPeriodLabel}
+                            </div>
+                            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '9px', color: 'rgba(255,255,255,0.15)', letterSpacing: '0.1em' }}>
+                                {clock.period} / {clock.totalPeriods}
+                            </div>
+                        </div>
 
-                                    {/* Back */}
-                                    <div
-                                        onClick={handlePrevPeriod}
-                                        style={{
-                                            padding: '12px', borderRadius: '8px',
-                                            border: `1px solid ${canGoBack ? '#2a2a2a' : '#111'}`,
-                                            background: canGoBack ? '#0a0a0a' : 'transparent',
-                                            color: canGoBack ? '#888' : '#222',
-                                            fontFamily: "'JetBrains Mono', monospace",
-                                            fontSize: '11px', fontWeight: 700,
-                                            letterSpacing: '0.1em', textAlign: 'center',
-                                            cursor: canGoBack ? 'pointer' : 'default',
-                                            userSelect: 'none',
-                                        }}
-                                        onTouchStart={(e) => {
-                                            if (canGoBack) (e.currentTarget as HTMLElement).style.background = '#1a1a1a';
-                                        }}
-                                        onTouchEnd={(e) => {
-                                            if (canGoBack) (e.currentTarget as HTMLElement).style.background = '#0a0a0a';
-                                        }}
-                                    >
-                                        ← BACK TO {canGoBack ? getPeriodLabel(clock.period - 1, clock.totalPeriods) : '—'}
-                                    </div>
-
-                                    {/* Next period (only if not past totalPeriods) */}
-                                    {clock.period <= clock.totalPeriods && (
-                                        <div
-                                            onClick={handleNextPeriod}
-                                            style={{
-                                                padding: '12px', borderRadius: '8px',
-                                                border: '1px solid #F59E0B44',
-                                                background: '#1a1000',
-                                                color: '#F59E0B',
-                                                fontFamily: "'JetBrains Mono', monospace",
-                                                fontSize: '11px', fontWeight: 700,
-                                                letterSpacing: '0.1em', textAlign: 'center',
-                                                cursor: 'pointer', userSelect: 'none',
-                                            }}
-                                            onTouchStart={(e) => {
-                                                (e.currentTarget as HTMLElement).style.background = '#2a1800';
-                                            }}
-                                            onTouchEnd={(e) => {
-                                                (e.currentTarget as HTMLElement).style.background = '#1a1000';
-                                            }}
-                                        >
-                                            NEXT → {getPeriodLabel(clock.period + 1, clock.totalPeriods)}
-                                        </div>
-                                    )}
-
-                                    {/* Add OT (only shown when at or past totalPeriods) */}
-                                    {clock.period >= clock.totalPeriods && (
-                                        <div
-                                            onClick={handleAddOT}
-                                            style={{
-                                                padding: '12px', borderRadius: '8px',
-                                                border: '1px solid #22C55E44',
-                                                background: '#001a08',
-                                                color: '#22C55E',
-                                                fontFamily: "'JetBrains Mono', monospace",
-                                                fontSize: '11px', fontWeight: 700,
-                                                letterSpacing: '0.1em', textAlign: 'center',
-                                                cursor: 'pointer', userSelect: 'none',
-                                            }}
-                                            onTouchStart={(e) => {
-                                                (e.currentTarget as HTMLElement).style.background = '#002812';
-                                            }}
-                                            onTouchEnd={(e) => {
-                                                (e.currentTarget as HTMLElement).style.background = '#001a08';
-                                            }}
-                                        >
-                                            + ADD OVERTIME
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '8px', color: '#222', letterSpacing: '0.1em',
-                                    textAlign: 'center',
-                                }}>
-                                    FOULS RESET ON NEXT PERIOD
-                                </div>
-                            </>
-                        )}
-
-                        {/* ── POSSESSION TAB ── */}
-                        {centerTab === 'possession' && (
-                            <>
-                                <div style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: '10px', color: '#444', letterSpacing: '0.15em',
-                                }}>
-                                    POSSESSION ARROW
-                                </div>
-
-                                <div style={{
-                                    fontFamily: "'Oswald', sans-serif", fontWeight: 700,
-                                    fontSize: '14px', letterSpacing: '0.1em', color: '#555',
-                                    textAlign: 'center',
-                                }}>
-                                    {possession === 'A'
-                                        ? `▶  ${teamA.name}`
-                                        : possession === 'B'
-                                            ? `${teamB.name}  ◀`
-                                            : 'NOT SET'}
-                                </div>
-
-                                <div style={{ height: '1px', width: '80%', background: '#1a1a1a' }} />
-
-                                {/* Team A possession */}
+                        <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                            {/* Back */}
+                            <div
+                                onClick={canGoBack ? () => sendAction('EDIT_PERIOD', { amount: -1 }) : undefined}
+                                style={{
+                                    flex: 1, height: 36, borderRadius: '6px',
+                                    border: `1px solid ${canGoBack ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)'}`,
+                                    background: canGoBack ? 'rgba(255,255,255,0.02)' : 'transparent',
+                                    color: canGoBack ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.08)',
+                                    fontFamily: "'JetBrains Mono', monospace", fontSize: '9px', fontWeight: 700,
+                                    letterSpacing: '0.08em', textAlign: 'center',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: canGoBack ? 'pointer' : 'default', userSelect: 'none',
+                                }}
+                            >
+                                ← BACK
+                            </div>
+                            {/* Next */}
+                            {clock.period <= clock.totalPeriods && (
                                 <div
-                                    onClick={() => handleSetPossession('A')}
+                                    onClick={() => sendAction('NEXT_PERIOD', {})}
                                     style={{
-                                        width: '100%', padding: '14px 12px',
-                                        borderRadius: '8px',
-                                        border: `2px solid ${possession === 'A' ? teamAColor : '#1a1a1a'}`,
-                                        background: possession === 'A' ? `${teamAColor}15` : '#0a0a0a',
-                                        color: possession === 'A' ? teamAColor : '#444',
-                                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
-                                        fontSize: '14px', letterSpacing: '0.15em',
-                                        textAlign: 'center', cursor: 'pointer',
-                                        userSelect: 'none', transition: 'all 0.15s',
-                                        WebkitTapHighlightColor: 'transparent',
+                                        flex: 1, height: 36, borderRadius: '6px',
+                                        border: '1px solid #F59E0B33', background: '#F59E0B08',
+                                        color: '#F59E0B',
+                                        fontFamily: "'JetBrains Mono', monospace", fontSize: '9px', fontWeight: 700,
+                                        letterSpacing: '0.08em', textAlign: 'center',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', userSelect: 'none',
                                     }}
                                 >
-                                    ▶  {teamA.name}
+                                    NEXT →
                                 </div>
-
-                                {/* Team B possession */}
+                            )}
+                            {/* OT */}
+                            {clock.period >= clock.totalPeriods && (
                                 <div
-                                    onClick={() => handleSetPossession('B')}
+                                    onClick={() => sendAction('NEXT_PERIOD', { forceOT: true })}
                                     style={{
-                                        width: '100%', padding: '14px 12px',
-                                        borderRadius: '8px',
-                                        border: `2px solid ${possession === 'B' ? teamBColor : '#1a1a1a'}`,
-                                        background: possession === 'B' ? `${teamBColor}15` : '#0a0a0a',
-                                        color: possession === 'B' ? teamBColor : '#444',
-                                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
-                                        fontSize: '14px', letterSpacing: '0.15em',
-                                        textAlign: 'center', cursor: 'pointer',
-                                        userSelect: 'none', transition: 'all 0.15s',
-                                        WebkitTapHighlightColor: 'transparent',
+                                        flex: 1, height: 36, borderRadius: '6px',
+                                        border: '1px solid #22C55E33', background: '#22C55E08',
+                                        color: '#22C55E',
+                                        fontFamily: "'JetBrains Mono', monospace", fontSize: '9px', fontWeight: 700,
+                                        letterSpacing: '0.08em', textAlign: 'center',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', userSelect: 'none',
                                     }}
                                 >
-                                    {teamB.name}  ◀
+                                    + OT
                                 </div>
-                            </>
-                        )}
+                            )}
+                        </div>
+
+                        {/* Divider */}
+                        <div style={{ width: '80%', height: 1, background: 'rgba(255,255,255,0.04)', margin: '2px 0' }} />
+
+                        {/* ── POSSESSION ── */}
+                        <div style={{
+                            fontFamily: "'JetBrains Mono', monospace", fontSize: '8px',
+                            color: 'rgba(255,255,255,0.2)', letterSpacing: '0.2em', fontWeight: 600,
+                        }}>POSSESSION</div>
+
+                        <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                            <div
+                                onClick={() => sendAction('SET_POSSESSION', { team: 'A' })}
+                                style={{
+                                    flex: 1, height: 40, borderRadius: '8px',
+                                    border: `2px solid ${possession === 'A' ? teamAColor : 'rgba(255,255,255,0.06)'}`,
+                                    background: possession === 'A' ? `${teamAColor}15` : 'rgba(255,255,255,0.02)',
+                                    color: possession === 'A' ? teamAColor : 'rgba(255,255,255,0.25)',
+                                    fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                                    fontSize: '12px', letterSpacing: '0.12em',
+                                    textAlign: 'center', cursor: 'pointer', userSelect: 'none',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                    transition: 'all 0.15s',
+                                }}
+                            >
+                                {possession === 'A' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: teamAColor, boxShadow: `0 0 6px ${teamAColor}` }} />}
+                                ▶ {teamA.name}
+                            </div>
+                            <div
+                                onClick={() => sendAction('SET_POSSESSION', { team: 'B' })}
+                                style={{
+                                    flex: 1, height: 40, borderRadius: '8px',
+                                    border: `2px solid ${possession === 'B' ? teamBColor : 'rgba(255,255,255,0.06)'}`,
+                                    background: possession === 'B' ? `${teamBColor}15` : 'rgba(255,255,255,0.02)',
+                                    color: possession === 'B' ? teamBColor : 'rgba(255,255,255,0.25)',
+                                    fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                                    fontSize: '12px', letterSpacing: '0.12em',
+                                    textAlign: 'center', cursor: 'pointer', userSelect: 'none',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                    transition: 'all 0.15s',
+                                }}
+                            >
+                                {teamB.name} ◀
+                                {possession === 'B' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: teamBColor, boxShadow: `0 0 6px ${teamBColor}` }} />}
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div style={{ width: '80%', height: 1, background: 'rgba(255,255,255,0.04)', margin: '2px 0' }} />
+
+                        {/* ── BUZZER ── */}
+                        <div
+                            onClick={() => sendAction('TRIGGER_BUZZER', { type: 'SHORT' })}
+                            style={{
+                                width: '100%', height: 40, borderRadius: '8px',
+                                background: 'linear-gradient(135deg, #1a0000, #2a0800)',
+                                border: '1.5px solid #F9731644',
+                                color: '#F97316',
+                                fontFamily: "'JetBrains Mono', monospace", fontSize: '10px',
+                                fontWeight: 700, letterSpacing: '0.15em',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                cursor: 'pointer', userSelect: 'none',
+                            }}
+                            onTouchStart={(e) => { (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, #2a0000, #4a1000)'; }}
+                            onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, #1a0000, #2a0800)'; }}
+                        >
+                            🔊 BUZZER
+                        </div>
                     </div>
                 </div>
 
-                {/* RIGHT — Team B */}
+                {/* ─── RIGHT: TEAM B ─── */}
                 <div style={{
                     display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center',
-                    padding: '16px 20px',
+                    padding: '12px 14px', gap: '10px',
+                    position: 'relative',
                 }}>
-                    <TeamColumn team={teamB} color={teamBColor} sendAction={sendAction} teamKey="teamB" />
+                    {/* Team color accent */}
+                    <div style={{ position: 'absolute', right: 0, top: '10%', bottom: '10%', width: 3, background: `linear-gradient(to bottom, transparent, ${teamBColor}88, transparent)` }} />
+
+                    {/* Name */}
+                    <div style={{
+                        fontFamily: "'Oswald', sans-serif", fontWeight: 700,
+                        fontSize: '13px', letterSpacing: '0.2em',
+                        color: teamBColor, textTransform: 'uppercase',
+                        borderBottom: `2px solid ${teamBColor}33`, paddingBottom: '4px',
+                        width: '100%', textAlign: 'center',
+                    }}>
+                        {teamB.name}
+                    </div>
+
+                    {/* Score */}
+                    <StatRow
+                        label="SCORE" value={teamB.score}
+                        onDecrement={() => sendAction('EDIT_SCORE', { team: 'teamB', amount: -1 })}
+                        onIncrement={() => sendAction('EDIT_SCORE', { team: 'teamB', amount: 1 })}
+                        color={teamBColor} valueColor={teamBColor} valueFontSize="36px"
+                    />
+                    <StatRow
+                        label="FOULS" value={teamB.fouls}
+                        onDecrement={() => sendAction('EDIT_FOULS', { team: 'teamB', amount: -1 })}
+                        onIncrement={() => sendAction('EDIT_FOULS', { team: 'teamB', amount: 1 })}
+                        color="#EF4444"
+                    />
+                    <StatRow
+                        label="T.O." value={teamB.timeouts}
+                        onDecrement={() => sendAction('EDIT_TIMEOUTS', { team: 'teamB', amount: -1 })}
+                        onIncrement={() => sendAction('EDIT_TIMEOUTS', { team: 'teamB', amount: 1 })}
+                        color="#F59E0B"
+                    />
+
+                    {/* Divider */}
+                    <div style={{ width: '80%', height: 1, background: 'rgba(255,255,255,0.04)', margin: '4px 0' }} />
+
+                    {/* Quick Actions */}
+                    <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                        <div
+                            onClick={() => sendAction('ADD_FOUL_B')}
+                            style={{
+                                flex: 1, height: 44, borderRadius: '8px',
+                                background: '#EF444410', border: '1.5px solid #EF444433',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                fontFamily: "'JetBrains Mono', monospace", fontSize: '10px',
+                                fontWeight: 700, color: '#EF4444', letterSpacing: '0.08em',
+                                cursor: 'pointer', userSelect: 'none',
+                            }}
+                            onTouchStart={(e) => { (e.currentTarget as HTMLElement).style.background = '#EF444420'; }}
+                            onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.background = '#EF444410'; }}
+                        >
+                            + FOUL
+                        </div>
+                        <div
+                            onClick={() => sendAction('TIMEOUT_B')}
+                            style={{
+                                flex: 1, height: 44, borderRadius: '8px',
+                                background: '#F59E0B10', border: '1.5px solid #F59E0B33',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                fontFamily: "'JetBrains Mono', monospace", fontSize: '10px',
+                                fontWeight: 700, color: '#F59E0B', letterSpacing: '0.08em',
+                                cursor: 'pointer', userSelect: 'none',
+                                opacity: teamB.timeouts > 0 ? 1 : 0.3,
+                            }}
+                            onTouchStart={(e) => { if (teamB.timeouts > 0) (e.currentTarget as HTMLElement).style.background = '#F59E0B20'; }}
+                            onTouchEnd={(e) => { (e.currentTarget as HTMLElement).style.background = '#F59E0B10'; }}
+                        >
+                            TIMEOUT
+                        </div>
+                    </div>
                 </div>
             </div>
 
