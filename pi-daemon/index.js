@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { OUTPUT_CONFIG } from './buttonMap.js';
 import {
     createGame, persistGameState, finishGame,
@@ -85,13 +86,14 @@ setInterval(() => {
     if (!state.meta.gameActive) return;
     const now = Date.now();
     const delta = now - lastTick;
+    const safeDelta = Math.min(delta, 200);
     lastTick = now;
 
     if (state.clock.isRunning) {
         const prevGame = state.clock.gameMs;
         const prevShot = state.clock.shotMs;
-        state.clock.gameMs = Math.max(0, state.clock.gameMs - delta);
-        state.clock.shotMs = Math.max(0, state.clock.shotMs - delta);
+        state.clock.gameMs = Math.max(0, state.clock.gameMs - safeDelta);
+        state.clock.shotMs = Math.max(0, state.clock.shotMs - safeDelta);
         let fullSync = false;
 
         if (state.clock.gameMs === 0 && prevGame > 0) {
@@ -121,19 +123,45 @@ setInterval(() => {
 }, 100);
 
 // ── 5. PICO UART ──────────────────────────────────────────────
+let picoPort = null;
+let picoReconnectTimer = null;
+let picoConnected = false;
+
 function initializePico() {
+    if (picoReconnectTimer) { clearTimeout(picoReconnectTimer); picoReconnectTimer = null; }
+
     console.log('🔌 Connecting to Pico via UART...');
     let port;
     try {
         port = new SerialPort({ path: '/dev/serial0', baudRate: 115200 });
     } catch (e) {
-        console.warn('⚠️  Could not open serial port:', e.message);
+        console.warn(`⚠️  Could not open serial port: ${e.message} — retrying in 3s`);
+        picoReconnectTimer = setTimeout(initializePico, 3000);
         return;
     }
 
+    picoPort = port;
+
     const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
-    port.on('open', () => console.log('✅ Pico UART connected'));
-    port.on('error', (e) => console.error('❌ UART error:', e.message));
+
+    port.on('open', () => {
+        picoConnected = true;
+        console.log('✅ Pico UART connected');
+        io.emit('pico_status', { connected: true });
+    });
+
+    port.on('error', (e) => {
+        console.error(`❌ UART error: ${e.message}`);
+    });
+
+    port.on('close', () => {
+        picoConnected = false;
+        picoPort = null;
+        console.warn('⚠️  Pico UART closed — reconnecting in 3s...');
+        io.emit('pico_status', { connected: false });
+        picoReconnectTimer = setTimeout(initializePico, 3000);
+    });
+
     parser.on('data', (line) => {
         const msg = line.trim();
         if (msg) handlePicoMessage(msg);
@@ -152,6 +180,7 @@ const SCORE_MESSAGES = {
 
 function handlePicoMessage(msg) {
     console.log(`📨 Pico: ${msg}`);
+    io.emit('pico_message_raw', msg);
 
     if (msg === 'PICO_READY') { console.log('✅ Pico handshake'); return; }
 
@@ -213,6 +242,8 @@ function handlePicoMessage(msg) {
                 state = history.pop();
                 console.log('> UNDO');
                 io.emit('undo_triggered'); // UI can animate this
+                broadcastToCloud(currentGameCode, state);
+                persistGameState(currentGameCode, state);
             }
             break;
         case 'SETTINGS':
@@ -236,7 +267,32 @@ const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.get('/api/state', (req, res) => res.json(state));
-app.get('/api/health', (req, res) => res.json({ status: 'ok', gameActive: state.meta.gameActive, gameCode: currentGameCode, gameMode: state.meta.gameMode }));
+app.get('/api/health', (req, res) => {
+    let cpuTemp = null;
+    try {
+        const raw = readFileSync('/sys/class/thermal/thermal_zone0/temp', 'utf8');
+        cpuTemp = (parseInt(raw.trim()) / 1000).toFixed(1) + '°C';
+    } catch (_) { }
+
+    const mem = process.memoryUsage();
+    res.json({
+        status: 'ok',
+        uptime: Math.floor(process.uptime()) + 's',
+        pico: { connected: picoConnected },
+        game: {
+            active: state.meta.gameActive,
+            code: currentGameCode,
+            period: state.clock.period,
+            score: `${state.teamA.score}-${state.teamB.score}`,
+        },
+        system: {
+            cpuTemp,
+            heapMb: (mem.heapUsed / 1024 / 1024).toFixed(1),
+            rssMb: (mem.rss / 1024 / 1024).toFixed(1),
+        },
+        ts: Date.now(),
+    });
+});
 app.get('/api/network-ip', (req, res) => {
     try { res.json({ ip: execSync("hostname -I | awk '{print $1}'").toString().trim() }); }
     catch (e) { res.json({ ip: 'localhost' }); }
@@ -310,6 +366,7 @@ io.on('connection', (socket) => {
     socket.on('end_game', async () => {
         if (!currentGameCode) return;
         state.clock.isRunning = false;
+        io.emit('score_pending_clear');
         await finishGame(currentGameCode);
         teardownChannel();
         const endedCode = currentGameCode;
@@ -335,6 +392,8 @@ server.listen(PORT, () => {
 
 process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down...');
+    if (picoReconnectTimer) clearTimeout(picoReconnectTimer);
+    if (picoPort) picoPort.close();
     if (buzzerPin) buzzerPin.digitalWrite(0);
     teardownChannel();
     process.exit(0);

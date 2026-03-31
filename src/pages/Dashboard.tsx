@@ -458,12 +458,12 @@ export const Dashboard: React.FC = () => {
             <span className="w-2 h-2 bg-[#C45832] dark:bg-red-600 rounded-full"></span> Initialize New Session
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <SportCard isSelected={selectedSport === 'basketball'} name="BASKETBALL" desc="FIBA / NBA Rules • Shot Clock" icon="🏀" onClick={() => startNewGame('basketball')} accent="red" />
-            <SportCard isSelected={selectedSport === 'badminton'} name="BADMINTON" desc="BWF Rules • Sets & Points" icon="🏸" onClick={() => startNewGame('badminton')} accent="green" />
-            <SportCard isSelected={selectedSport === 'volleyball'} name="VOLLEYBALL" desc="FIVB Rules • Rotation Track" icon="🏐" onClick={() => startNewGame('volleyball')} accent="yellow" />
-            <SportCard isSelected={selectedSport === 'kabaddi'} name="KABADDI" desc="PKL Style • Raid Timer" icon="🤼" onClick={() => startNewGame('kabaddi')} accent="orange" />
-            <SportCard isSelected={selectedSport === 'tabletennis'} name="TABLE TENNIS" desc="ITTF Rules • 11pt Sets" icon="🏓" onClick={() => startNewGame('tabletennis')} accent="blue" />
-            <SportCard isSelected={selectedSport === 'general'} name="GENERAL" desc="Universal Scoreboard • Simple" icon="⏱" onClick={() => startNewGame('general')} accent="purple" />
+            <SportCard isSelected={selectedSport === 'basketball'} name="BASKETBALL" desc="FIBA / NBA Rules • Shot Clock" icon="🏀" onClick={() => startNewGame('basketball')} accent="red" theme={theme} />
+            <SportCard isSelected={selectedSport === 'badminton'} name="BADMINTON" desc="BWF Rules • Sets & Points" icon="🏸" onClick={() => startNewGame('badminton')} accent="green" theme={theme} />
+            <SportCard isSelected={selectedSport === 'volleyball'} name="VOLLEYBALL" desc="FIVB Rules • Rotation Track" icon="🏐" onClick={() => startNewGame('volleyball')} accent="yellow" theme={theme} />
+            <SportCard isSelected={selectedSport === 'kabaddi'} name="KABADDI" desc="PKL Style • Raid Timer" icon="🤼" onClick={() => startNewGame('kabaddi')} accent="orange" theme={theme} />
+            <SportCard isSelected={selectedSport === 'tabletennis'} name="TABLE TENNIS" desc="ITTF Rules • 11pt Sets" icon="🏓" onClick={() => startNewGame('tabletennis')} accent="blue" theme={theme} />
+            <SportCard isSelected={selectedSport === 'general'} name="GENERAL" desc="Universal Scoreboard • Simple" icon="⏱" onClick={() => startNewGame('general')} accent="purple" theme={theme} />
           </div>
         </section>
 
@@ -624,7 +624,7 @@ const WatchByCodeCard = ({ onWatch }: { onWatch: (code: string) => void }) => {
 
       <div className="relative z-10 pl-2">
         <div className="flex items-center gap-2 mb-2">
-          <div className="text-[10px] font-bold text-[#6B5D4D] dark:text-zinc-400 uppercase tracking-widest bg-[#F0EAE2] dark:bg-black px-2 py-1 rounded-full">SPECTATOR</div>
+          <div className="text-[10px] font-bold text-[#6B5D4D] dark:text-zinc-400 uppercase tracking-widest bg-[#F0EAE2] dark:bg-black px-2 py-1 rounded">SPECTATOR</div>
           <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
         </div>
         <h2 className="text-[#2C2419] dark:text-white font-black italic text-xl uppercase tracking-tight mb-4 group-hover:text-[#C45832] dark:group-hover:text-blue-400 transition-colors">Find a Game</h2>
@@ -636,13 +636,13 @@ const WatchByCodeCard = ({ onWatch }: { onWatch: (code: string) => void }) => {
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder="ENTER CODE"
-          className="w-full bg-[#F0EAE2] dark:bg-black/50 border border-[#D4CCC3] dark:border-zinc-700 text-[#2C2419] dark:text-white text-center font-mono font-bold text-sm py-2 rounded-lg focus:outline-none focus:border-[#C45832] transition-colors placeholder:text-[#B8AD9F] dark:placeholder:text-zinc-700 uppercase shadow-inner dark:shadow-none"
+          className="w-full bg-[#F0EAE2] dark:bg-black/50 border border-[#D4CCC3] dark:border-zinc-700 text-[#2C2419] dark:text-white text-center font-mono font-bold text-sm py-2 rounded-lg focus:outline-none focus:border-[#C45832] dark:focus:border-blue-500 transition-colors placeholder:text-[#B8AD9F] dark:placeholder:text-zinc-700 uppercase shadow-inner dark:shadow-none"
           maxLength={6}
         />
         <button
           disabled={code.length < 4}
           onClick={() => onWatch(code)}
-          className="w-full bg-[#C45832] hover:bg-[#A84828] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-widest py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(196,88,50,0.2)] dark:shadow-[0_0_15px_rgba(37,99,235,0.3)] hover:shadow-[0_0_20px_rgba(196,88,50,0.4)] dark:hover:shadow-[0_0_20px_rgba(37,99,235,0.5)]"
+          className="w-full bg-[#C45832] dark:bg-blue-600 hover:bg-[#A84828] dark:hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-widest py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(196,88,50,0.2)] dark:shadow-[0_0_15px_rgba(37,99,235,0.3)] hover:shadow-[0_0_20px_rgba(196,88,50,0.4)] dark:hover:shadow-[0_0_20px_rgba(37,99,235,0.5)]"
         >
           Watch Now
         </button>
@@ -651,7 +651,7 @@ const WatchByCodeCard = ({ onWatch }: { onWatch: (code: string) => void }) => {
   )
 }
 
-const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
+const SportCard = ({ name, desc, icon, onClick, accent, isSelected, theme }: any) => {
   const accentConfig: any = {
     red: { border: 'group-[.is-selected]:border-red-600', text: 'group-[.is-selected]:text-red-600 dark:group-[.is-selected]:text-red-500', glow: 'group-[.is-selected]:drop-shadow-[0_0_30px_rgba(220,38,38,0.3)] dark:group-[.is-selected]:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]', hoverBorder: 'hover:border-red-600', hoverText: 'group-hover:text-red-600 dark:group-hover:text-red-500', hoverGlow: 'group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.3)] dark:group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]' },
     blue: { border: 'group-[.is-selected]:border-blue-600', text: 'group-[.is-selected]:text-blue-600 dark:group-[.is-selected]:text-blue-500', glow: 'group-[.is-selected]:drop-shadow-[0_0_30px_rgba(37,99,235,0.3)] dark:group-[.is-selected]:drop-shadow-[0_0_30px_rgba(37,99,235,0.8)]', hoverBorder: 'hover:border-blue-600', hoverText: 'group-hover:text-blue-600 dark:group-hover:text-blue-500', hoverGlow: 'group-hover:drop-shadow-[0_0_30px_rgba(37,99,235,0.3)] dark:group-hover:drop-shadow-[0_0_30px_rgba(37,99,235,0.8)]' },
@@ -661,6 +661,13 @@ const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
     purple: { border: 'group-[.is-selected]:border-purple-600', text: 'group-[.is-selected]:text-purple-600 dark:group-[.is-selected]:text-purple-500', glow: 'group-[.is-selected]:drop-shadow-[0_0_30px_rgba(147,51,234,0.3)] dark:group-[.is-selected]:drop-shadow-[0_0_30px_rgba(147,51,234,0.8)]', hoverBorder: 'hover:border-purple-600', hoverText: 'group-hover:text-purple-600 dark:group-hover:text-purple-500', hoverGlow: 'group-hover:drop-shadow-[0_0_30px_rgba(147,51,234,0.3)] dark:group-hover:drop-shadow-[0_0_30px_rgba(147,51,234,0.8)]' },
   };
   const config = accentConfig[accent] || accentConfig.red;
+
+  // Light mode: warm concrete accent colors for left border
+  // Dark mode: no left border color (returns undefined → no inline style)
+  const lightBorderColors: any = {
+    red: '#C45832', blue: '#2563EB', green: '#3D7A3C',
+    yellow: '#B8860B', orange: '#C5631C', purple: '#7C3AED',
+  };
 
   const borderClasses = `${config.hoverBorder} ${config.border}`;
   const textClasses = `${config.hoverText} ${config.text}`;
@@ -676,12 +683,12 @@ const SportCard = ({ name, desc, icon, onClick, accent, isSelected }: any) => {
     <button
       onClick={onClick}
       className={`
-        bg-white dark:bg-zinc-900/40 border border-[#D4CCC3] dark:border-zinc-800 border-l-[3px] p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between
-        hover:shadow-[0_2px_8px_rgba(44,36,25,0.06),0_8px_20px_rgba(44,36,25,0.04)] dark:hover:shadow-none shadow-[0_1px_3px_rgba(44,36,25,0.04)] dark:shadow-none
+        bg-white dark:bg-zinc-900/40 border border-[#D4CCC3] dark:border-zinc-800 p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between
+        ${theme === 'light' ? 'border-l-[3px] hover:shadow-[0_2px_8px_rgba(44,36,25,0.06),0_8px_20px_rgba(44,36,25,0.04)] shadow-[0_1px_3px_rgba(44,36,25,0.04)]' : 'hover:shadow-none shadow-none'}
         ${borderClasses}
-        ${isSelected ? 'is-selected shadow-[inset_0_2px_4px_rgba(44,36,25,0.08),0_1px_2px_rgba(44,36,25,0.04)] dark:shadow-lg scale-[1.02] !border-l-[4px]' : ''}
+        ${isSelected ? `is-selected ${theme === 'light' ? 'shadow-[inset_0_2px_4px_rgba(44,36,25,0.08),0_1px_2px_rgba(44,36,25,0.04)] !border-l-[4px]' : 'shadow-lg'} scale-[1.02]` : ''}
       `}
-      style={{ borderLeftColor: accent === 'red' ? '#C45832' : accent === 'blue' ? '#2563EB' : accent === 'green' ? '#3D7A3C' : accent === 'yellow' ? '#B8860B' : accent === 'orange' ? '#C5631C' : accent === 'purple' ? '#7C3AED' : '#C45832' }}
+      style={theme === 'light' ? { borderLeftColor: lightBorderColors[accent] || '#C45832' } : undefined}
     >
       <div className={`absolute -top-4 -right-4 text-[120px] transition-all duration-500 rotate-12 transform-gpu backface-hidden perspective-1000 ${iconStateClass} ${glowClasses}`}>
         {icon}

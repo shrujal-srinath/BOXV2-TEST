@@ -13,16 +13,13 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
 import {
     registerBoxUnit,
     startBoxHeartbeat,
     subscribeBoxUnit,
     subscribeBoxSignal,
 } from '../../services/boxUnitService';
-
-// ─── QR Code via free API (swap to qrcode.js if offline needed) ─
-const getQRUrl = (text: string): string =>
-    `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(text)}&bgcolor=000000&color=ffffff&margin=10`;
 
 // ─── Permanent box code stored in localStorage ────────────────
 const BOX_CODE_KEY = 'THE_BOX_UNIT_CODE';
@@ -66,6 +63,17 @@ const OnlineSetup: React.FC<OnlineSetupProps> = ({ onGameAssigned, onBack }) => 
     }, []);
 
     const setupUrl = `http://${networkIp}:5173/setup?box=${boxCode}`;
+
+    const [qrDataUrl, setQrDataUrl] = useState<string>('');
+
+    useEffect(() => {
+        if (!setupUrl || phase === 'registering') return;
+        QRCode.toDataURL(setupUrl, {
+            width: 200,
+            margin: 1,
+            color: { dark: '#ffffff', light: '#000000' },
+        }).then(setQrDataUrl).catch(console.error);
+    }, [setupUrl, phase]);
 
     const handleGameAssigned = (gameCode: string) => {
         if (handledRef.current) return;
@@ -163,12 +171,9 @@ const OnlineSetup: React.FC<OnlineSetupProps> = ({ onGameAssigned, onBack }) => 
                         ) : phase === 'assigned' ? (
                             <div style={{ fontSize: '72px', color: '#22C55E', animation: 'popIn 0.3s ease' }}>✓</div>
                         ) : (
-                            <img
-                                src={getQRUrl(setupUrl)}
-                                alt="Setup QR Code"
-                                width={200} height={200}
-                                style={{ imageRendering: 'pixelated' }}
-                            />
+                            qrDataUrl
+                                ? <img src={qrDataUrl} alt="Setup QR Code" width={200} height={200} style={{ imageRendering: 'pixelated' }} />
+                                : <div style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333', fontFamily: 'monospace', fontSize: 11 }}>GENERATING...</div>
                         )}
                     </div>
 

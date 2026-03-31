@@ -171,11 +171,22 @@ export function useRefereeBox() {
             setTimeout(() => setUndoFlash(false), 600);
         });
 
+        // Raw pico messages — forwarded to window for HardwareCheck
+        socket.on('pico_message_raw', (msg: string) => {
+            window.dispatchEvent(new CustomEvent('pico_message', { detail: msg }));
+        });
+
         // Settings toggled — flash indicator
         socket.on('settings_toggled', ({ unlocked }: { unlocked: boolean }) => {
             if (!mountedRef.current) return;
             setSettingsFlash(unlocked);
             setTimeout(() => setSettingsFlash(null), 2000);
+        });
+
+        // Game ended — clear any lingering score popup
+        socket.on('score_pending_clear', () => {
+            if (!mountedRef.current) return;
+            setScorePending(null);
         });
 
     }, []);
