@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { supabase } from '../services/supabase';
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ export type SignalHandler = (signal: HardwareSignal) => void;
 
 const WS_PORT = 81;
 const WS_CONNECT_TIMEOUT = 1500;   // ms — if no connect in 1.5s, don't wait longer
-const WS_RECONNECT_DELAY = 3000;   // ms — retry after disconnect
+const WS_RECONNECT_DELAY = 1500;   // ms — retry after disconnect (faster LAN recovery)
 const WS_PING_INTERVAL = 15000;  // ms — keep-alive ping to ESP32
 
 // ── Local IP fetcher ──────────────────────────────────────────────
@@ -60,6 +60,7 @@ export function useHardwareSignaling(
 ) {
     const wsRef = useRef<WebSocket | null>(null);
     const lanActiveRef = useRef(false);
+    const [lanConnected, setLanConnected] = useState(false);
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const mountedRef = useRef(true);
@@ -122,6 +123,7 @@ export function useHardwareSignaling(
             settled = true;
             clearTimeout(connectTimeout);
             lanActiveRef.current = true;
+            setLanConnected(true);
             console.log('[WS] LAN WebSocket connected —', url);
 
             // Keep-alive ping
@@ -145,6 +147,7 @@ export function useHardwareSignaling(
         ws.onclose = () => {
             if (!settled) { settled = true; clearTimeout(connectTimeout); }
             lanActiveRef.current = false;
+            setLanConnected(false);
             wsRef.current = null;
             if (pingTimerRef.current) { clearInterval(pingTimerRef.current); pingTimerRef.current = null; }
 
@@ -205,8 +208,17 @@ export function useHardwareSignaling(
         // but for display latency, LAN is the only path that matters.
     }, []);
 
+    // Manual LAN retry — call this when user wants to switch from cloud to LAN
+    const retryLan = useCallback(() => {
+        if (!localIpRef.current) return;
+        if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+        closeLanWs();
+        connectLanWs(localIpRef.current);
+    }, [closeLanWs, connectLanWs]);
+
     return {
         sendToHardware,
-        lanConnected: lanActiveRef.current,
+        lanConnected, // reactive useState — triggers re-renders on connect/disconnect
+        retryLan,     // force a new LAN connection attempt
     };
 }

@@ -344,23 +344,31 @@ export const useSupabaseBroadcast = ({
         period: number;
         gameRunning: boolean;
     }) => {
-        // Stop the host's own timer loop — ESP32 is driving the clock
-        stopHostLoop();
-        gameStartEpochRef.current = null;
-        shotStartEpochRef.current = null;
-
+        // ESP32 is authoritative — re-anchor our epochs from received values.
+        // If running: start the RAF loop from this point (smooth 60fps interpolation
+        // between ESP32 ticks, eliminates the 0-1s display freeze).
+        // If paused: set static values and stop the loop.
         const newGameMs = hw.minutes * 60_000 + hw.seconds * 1_000;
         const newShotMs = hw.shotClock * 1_000;
 
-        setGameTimeMs(newGameMs);
-        setShotClockMs(newShotMs);
+        gameStartMsRef.current = newGameMs;
+        shotStartMsRef.current = newShotMs;
         setPeriod(hw.period);
         setGameRunning(hw.gameRunning);
 
-        // Update refs so if web takes back control, it resumes from the right values
-        gameStartMsRef.current = newGameMs;
-        shotStartMsRef.current = newShotMs;
-    }, [stopHostLoop]);
+        if (hw.gameRunning) {
+            // Anchor epochs to NOW — RAF loop ticks forward from these values
+            gameStartEpochRef.current = Date.now();
+            shotStartEpochRef.current = Date.now();
+            runHostLoop(); // smooth interpolation at 60fps until next ESP32 update
+        } else {
+            stopHostLoop();
+            gameStartEpochRef.current = null;
+            shotStartEpochRef.current = null;
+            setGameTimeMs(newGameMs);
+            setShotClockMs(newShotMs);
+        }
+    }, [stopHostLoop, runHostLoop]);
 
     useEffect(() => { return () => { stopHostLoop(); if (tickIntervalRef.current) clearInterval(tickIntervalRef.current); }; }, [stopHostLoop]);
 

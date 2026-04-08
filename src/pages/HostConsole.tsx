@@ -321,7 +321,7 @@ export const HostConsole: React.FC = () => {
     }, [hwMode, updateScore, updateFouls, timer, togglePossession, game, dispatch, state.possession]);
 
     // Subscribe — stable channel, latest handler via ref inside the hook
-    const { sendToHardware } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
+    const { sendToHardware, lanConnected, retryLan } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
 
     // ── Feed live state back to ESP32 display ─────────────────────────────────────
     // Fires whenever scores, fouls, possession, or clock changes.
@@ -758,16 +758,45 @@ export const HostConsole: React.FC = () => {
                                 <span className="text-[10px] font-bold uppercase tracking-widest font-mono hidden md:block">
                                     {deviceOnline ? 'ESP-ONLINE' : 'ESP-OFFLINE'}
                                 </span>
+                                {deviceOnline && (
+                                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded hidden md:block ${
+                                        lanConnected
+                                            ? 'bg-green-900/60 text-green-300 border border-green-700'
+                                            : 'bg-yellow-900/60 text-yellow-300 border border-yellow-700'
+                                    }`}>
+                                        {lanConnected ? '● LAN' : '○ CLOUD'}
+                                    </span>
+                                )}
                             </button>
 
                             {isDeviceMenuOpen && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setIsDeviceMenuOpen(false)}></div>
-                                    <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-950 border border-zinc-800 rounded shadow-2xl overflow-hidden z-50">
+                                    <div className="absolute right-0 top-full mt-2 w-52 bg-zinc-950 border border-zinc-800 rounded shadow-2xl overflow-hidden z-50">
                                         <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
                                             <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Connected Device</div>
                                             <div className="font-mono text-sm text-white">CTRL-{hwDeviceId}</div>
                                         </div>
+                                        {/* Transport status row */}
+                                        <div className="px-4 py-2 flex items-center justify-between border-b border-zinc-800/60">
+                                            <span className="text-[10px] text-zinc-500 uppercase tracking-widest">Transport</span>
+                                            <span className={`text-[10px] font-mono font-bold ${lanConnected ? 'text-green-400' : 'text-yellow-400'}`}>
+                                                {lanConnected ? '● LAN <5ms' : '○ Cloud ~200ms'}
+                                            </span>
+                                        </div>
+                                        {/* Switch to LAN button — only when cloud-only */}
+                                        {deviceOnline && !lanConnected && (
+                                            <button
+                                                onClick={() => { retryLan(); setIsDeviceMenuOpen(false); }}
+                                                className="w-full px-4 py-2.5 text-left hover:bg-green-900/20 transition-colors flex items-center gap-2.5 border-b border-zinc-800/60"
+                                            >
+                                                <span className="text-base">⚡</span>
+                                                <div>
+                                                    <div className="text-xs font-semibold text-green-400">Switch to LAN</div>
+                                                    <div className="text-[10px] text-zinc-500">Connect directly, lower latency</div>
+                                                </div>
+                                            </button>
+                                        )}
                                         <button
                                             onClick={handleDisconnectDevice}
                                             className="w-full px-4 py-3 text-left text-sm text-red-500 hover:bg-red-900/20 transition-colors flex items-center gap-2"
