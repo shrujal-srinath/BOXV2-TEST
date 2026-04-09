@@ -59,13 +59,18 @@ const char* SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOi
 const char* FW_VERSION        = "10.0.0";
 
 // ─── Relay Config ─────────────────────────────────────────────────
-const char* RELAY_HOST = "thebox-relay.railway.app";
+const char* RELAY_HOST    = "thebox-relay.railway.app";
 const uint16_t RELAY_PORT = 443;
 // Path format: /device/XXXX — filled in at runtime
-static bool relayConnected = false;
-static WebSocketsClient relayClient;
-static unsigned long lastRelayReconnect = 0;
+static volatile bool      relayConnected  = false;
+static WebSocketsClient   relayClient;
+static TaskHandle_t       RelayTask       = NULL;
 #define RELAY_RECONNECT_INTERVAL 5000
+
+// Helper — true when any fast path is alive
+inline bool isLivePathActive(){
+  return (wsConnectedClients > 0) || relayConnected;
+}
 
 // ─── TFT ─────────────────────────────────────────────────────────
 #define TFT_CS   17
@@ -612,13 +617,15 @@ void m_drawStatusBar(int mode,bool connected=false,int signal=0,bool lanDot=fals
   // Transport mode dot + label
   uint16_t dotCol;
   const char* dotLabel;
-  if(transportMode==TRANSPORT_LAN){
-    dotCol=M_SUCCESS;dotLabel="LAN";
+  if(wsConnectedClients > 0){
+    dotCol=M_SUCCESS; dotLabel="LAN";
+  } else if(relayConnected){
+    dotCol=M_ONLINE;  dotLabel="RLY";
   } else if(transportMode==TRANSPORT_RECONNECTING){
     dotCol=((millis()/400)%2)?M_WARN:M_SURFACE;
     dotLabel="...";
   } else {
-    dotCol=M_WARN;dotLabel="CLD";
+    dotCol=M_WARN; dotLabel="CLD";
   }
   tft.fillCircle(DW-80,9,3,dotCol);
   tft.setTextColor(dotCol,M_SURFACE);
@@ -1975,11 +1982,14 @@ void onWsEvent(uint8_t num,WStype_t type,uint8_t* payload,size_t length){
   } else if(type==WStype_DISCONNECTED){
     if(wsConnectedClients>0)wsConnectedClients--;
     if(wsConnectedClients==0){
-      // Only go to RECONNECTING if relay also not connected
       if(!relayConnected){
-        transportMode=TRANSPORT_RECONNECTING;
+        transportMode   = TRANSPORT_RECONNECTING;
+        lastScoreChange = millis();
+        lastSupaBatch   = 0;
+      } else {
+        // Relay still alive — stay on LAN transport mode
+        transportMode = TRANSPORT_LAN;
       }
-      lastScoreChange=millis();  // triggers immediate Supabase push
     }
   } else if(type==WStype_TEXT){
     handleInboundWsMessage(num,payload,length);
@@ -2089,43 +2099,81 @@ void networkTaskCode_Online(void* parameter){
       if(relayConnected) relayClient.sendTXT(json);
     }
 
-    // ── Supabase smart batch ──────────────────────────────
-    // Fires IMMEDIATELY when score changes (for instant fallback)
-    // Fires every 3s for clock-only sync
-    bool scoreJustChanged=(lastScoreChange>0&&
-                           now-lastScoreChange<150&&
-                           now-lastSupaBatch>300);
-    bool clockDue=(now-lastSupaBatch>=3000&&
-                   activeGameId!="");
+    // ── Three-tier Supabase logic ─────────────────────────────────────────────
+    // When fast path (LAN/relay) is active:
+    //   Supabase = ledger only, write every 3s
+    // When fast path is DOWN:
+    //   Supabase = live channel, write immediately on
+    //   action + every 1s to keep clock alive
+    bool fastPathActive = isLivePathActive();
 
-    if((scoreJustChanged||clockDue)&&activeGameId!=""){
-      SignalOutbox snap=makeStateSnapshot(activeGameId,255);
-      String gid=String(snap.gameId);
-      String body=
-        "{\"messages\":[{\"topic\":\"hw-"+gid+"\","
-        "\"event\":\"signal\",\"payload\":{"
-        "\"action\":\"SCORE_STATE\","
-        "\"deviceId\":\""+deviceId+"\","
-        "\"gameId\":\""+gid+"\","
-        "\"scoreA\":"+String(snap.scoreA)+
-        ",\"scoreB\":"+String(snap.scoreB)+
-        ",\"minutes\":"+String(snap.mainMin)+
-        ",\"seconds\":"+String(snap.mainSec)+
-        ",\"shotClock\":"+String(snap.shotClock)+
-        ",\"period\":"+String(snap.period)+
-        ",\"gameRunning\":"+
-          String(!snap.paused?"true":"false")+
-        ",\"possession\":\""+
-          String(snap.poss?"B":"A")+"\""+
-        "}}]}";
-      supaPost(body);
-      lastSupaBatch=now;
-      lastScoreChange=0;
+    if(activeGameId != ""){
+      if(!fastPathActive){
+        // TIER 3 MODE — Supabase is the live channel
+        bool actionFired = (lastScoreChange > 0 &&
+                           now - lastScoreChange < 200 &&
+                           now - lastSupaBatch   > 100);
+        bool heartbeatDue = (now - lastSupaBatch >= 1000);
+
+        if(actionFired || heartbeatDue){
+          SignalOutbox snap = makeStateSnapshot(activeGameId, 255);
+          String gid  = String(snap.gameId);
+          String body =
+            "{\"messages\":[{\"topic\":\"hw-"+gid+"\","
+            "\"event\":\"signal\",\"payload\":{"
+            "\"action\":\"SCORE_STATE\","
+            "\"deviceId\":\""+deviceId+"\","
+            "\"gameId\":\""+gid+"\","
+            "\"scoreA\":"+String(snap.scoreA)+
+            ",\"scoreB\":"+String(snap.scoreB)+
+            ",\"minutes\":"+String(snap.mainMin)+
+            ",\"seconds\":"+String(snap.mainSec)+
+            ",\"shotClock\":"+String(snap.shotClock)+
+            ",\"period\":"+String(snap.period)+
+            ",\"gameRunning\":"+
+              String(!snap.paused?"true":"false")+
+            ",\"possession\":\""+
+              String(snap.poss?"B":"A")+"\""+
+            ",\"timestamp\":"+getTimestampStr()+
+            "}}]}";
+          supaPost(body);
+          lastSupaBatch   = now;
+          lastScoreChange = 0;
+        }
+      } else {
+        // TIER 1/2 MODE — Supabase is ledger only
+        bool ledgerDue = (now - lastSupaBatch >= 3000);
+        if(ledgerDue){
+          SignalOutbox snap = makeStateSnapshot(activeGameId, 255);
+          String gid  = String(snap.gameId);
+          String body =
+            "{\"messages\":[{\"topic\":\"hw-"+gid+"\","
+            "\"event\":\"signal\",\"payload\":{"
+            "\"action\":\"SCORE_STATE\","
+            "\"deviceId\":\""+deviceId+"\","
+            "\"gameId\":\""+gid+"\","
+            "\"scoreA\":"+String(snap.scoreA)+
+            ",\"scoreB\":"+String(snap.scoreB)+
+            ",\"minutes\":"+String(snap.mainMin)+
+            ",\"seconds\":"+String(snap.mainSec)+
+            ",\"shotClock\":"+String(snap.shotClock)+
+            ",\"period\":"+String(snap.period)+
+            ",\"gameRunning\":"+
+              String(!snap.paused?"true":"false")+
+            ",\"possession\":\""+
+              String(snap.poss?"B":"A")+"\""+
+            ",\"timestamp\":"+getTimestampStr()+
+            "}}]}";
+          supaPost(body);
+          lastSupaBatch = now;
+        }
+      }
     }
     if(now-lastPoll>30000){pollDeviceState_Online();lastPoll=now;}
     if(now-lastHeartbeat>5000){sendHeartbeat_Online();lastHeartbeat=now;}
   }
 }
+
 
 // ─── Online connect progress screen ──────────────────────────────
 void _drawConnectStep(int active,const char* detail=""){
@@ -2258,16 +2306,11 @@ void bootOnlineMode(){
   xTaskCreatePinnedToCore(networkTaskCode_Online,"NetTask",16384,NULL,1,&NetworkTask,0);
   if(WSTask!=NULL){vTaskDelete(WSTask);WSTask=NULL;delay(50);}
   xTaskCreatePinnedToCore(wsTaskCode,"WSTask",12288,NULL,2,&WSTask,1);
-  TaskHandle_t RelayTask = NULL;
-  xTaskCreatePinnedToCore(
-    relayTaskCode,
-    "RelayTask",
-    16384,        // relay needs more stack for TLS
-    NULL,
-    1,
-    &RelayTask,
-    0             // Core 0 — same as network task
-  );
+  if(RelayTask != NULL){
+    vTaskDelete(RelayTask); RelayTask = NULL; delay(50);
+  }
+  xTaskCreatePinnedToCore(relayTaskCode,"RelayTask",
+    16384,NULL,1,&RelayTask,0);
   if(xSemaphoreTake(stateMutex,portMAX_DELAY)){
     liveState.scoreA=0;liveState.scoreB=0;liveState.shotClock=24;
     liveState.mainMin=10;liveState.mainSec=0;liveState.paused=true;
@@ -2554,7 +2597,10 @@ bool checkModeSelectReturn(){
     if(NetworkTask!=NULL){vTaskDelete(NetworkTask);NetworkTask=NULL;}
     if(WSTask!=NULL){vTaskDelete(WSTask);WSTask=NULL;}
     relayClient.disconnect();
-    relayConnected = false;
+    relayConnected=false;
+    if(RelayTask!=NULL){
+      vTaskDelete(RelayTask);RelayTask=NULL;
+    }
     supaDisconnect();
     if(signalQueue!=NULL){vQueueDelete(signalQueue);signalQueue=NULL;}
     if(wsQueue!=NULL){vQueueDelete(wsQueue);wsQueue=NULL;}
