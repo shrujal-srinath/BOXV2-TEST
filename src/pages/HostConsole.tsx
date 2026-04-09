@@ -187,7 +187,7 @@ export const HostConsole: React.FC = () => {
     });
 
     // ── Hardware Control Mode ─────────────────────────────────────────────────────
-    const { deviceId: hwDeviceId, isConnected: deviceOnline, controlMode: hwMode, setMode, unpair } = useHardware();
+    const { deviceId: hwDeviceId, isConnected: deviceOnline, controlMode: hwMode, setMode, unpair, setWsOpen } = useHardware();
 
     const handleDisconnectDevice = async () => {
         if (hwDeviceId) {
@@ -202,11 +202,17 @@ export const HostConsole: React.FC = () => {
     const handleModeSwitch = async (mode: 'web' | 'hardware') => {
         if (!hwDeviceId || hwMode === mode) return;
         await setMode(mode, game?.teamA?.name, game?.teamB?.name);
+        sendPairingPush({
+            status: 'mode_change',
+            controlMode: mode,
+        });
     };
 
     // Refs to avoid hoisting issues within the useCallback hook
     const handleUndoRef = useRef<() => void>(() => { });
     const recordActionRef = useRef<(action: GameAction) => void>(() => { });
+    const liveScoreRef = useRef({ a: 0, b: 0 });
+    const lanConnectedRef = useRef(false);
 
     // ── REPLACE the existing useHardwareSignaling call with this ──────────────────
     // The useCallback here means cbRef inside useHardwareSignaling always gets
@@ -224,28 +230,34 @@ export const HostConsole: React.FC = () => {
             // ── Scoring: short press ──────────────────────────────────────────────
             case 'ADD_SCORE_A':
                 updateScore('A', 1);
+                liveScoreRef.current.a += 1;
                 recordActionRef.current({ type: 'score', team: 'A', value: 1, timestamp: Date.now() });
                 break;
             case 'ADD_SCORE_B':
                 updateScore('B', 1);
+                liveScoreRef.current.b += 1;
                 recordActionRef.current({ type: 'score', team: 'B', value: 1, timestamp: Date.now() });
                 break;
             case 'SUB_SCORE_A':
                 updateScore('A', -1);
+                liveScoreRef.current.a = Math.max(0, liveScoreRef.current.a - 1);
                 recordActionRef.current({ type: 'score', team: 'A', value: -1, timestamp: Date.now() });
                 break;
             case 'SUB_SCORE_B':
                 updateScore('B', -1);
+                liveScoreRef.current.b = Math.max(0, liveScoreRef.current.b - 1);
                 recordActionRef.current({ type: 'score', team: 'B', value: -1, timestamp: Date.now() });
                 break;
 
             // ── Scoring: hold press ───────────────────────────────────────────────
             case 'ADD_SCORE_A_2':
                 updateScore('A', 2);
+                liveScoreRef.current.a += 2;
                 recordActionRef.current({ type: 'score', team: 'A', value: 2, timestamp: Date.now() });
                 break;
             case 'ADD_SCORE_B_2':
                 updateScore('B', 2);
+                liveScoreRef.current.b += 2;
                 recordActionRef.current({ type: 'score', team: 'B', value: 2, timestamp: Date.now() });
                 break;
 
@@ -291,13 +303,25 @@ export const HostConsole: React.FC = () => {
             // ESP32 is the source of truth — we render its state directly.
             // This includes scores AND clock data so there's zero drift.
             case 'SCORE_STATE':
-                // Scores — set absolute values (avoid double-counting)
-                if (signal.scoreA !== undefined) updateScore('A', signal.scoreA - (game?.teamA?.score ?? 0));
-                if (signal.scoreB !== undefined) updateScore('B', signal.scoreB - (game?.teamB?.score ?? 0));
+                // Scores — delta against liveScoreRef (not stale game state)
+                if (signal.scoreA !== undefined) {
+                    const delta = signal.scoreA - liveScoreRef.current.a;
+                    if (delta !== 0) {
+                        updateScore('A', delta);
+                        liveScoreRef.current.a = signal.scoreA;
+                    }
+                }
+                if (signal.scoreB !== undefined) {
+                    const delta = signal.scoreB - liveScoreRef.current.b;
+                    if (delta !== 0) {
+                        updateScore('B', delta);
+                        liveScoreRef.current.b = signal.scoreB;
+                    }
+                }
 
-                // Clock — directly override the timer display when ESP32 is parent.
-                // timer.setFromHardware() is a new function we need to add.
-                if (signal.minutes !== undefined && signal.seconds !== undefined) {
+                // Clock — only sync from Supabase when LAN is NOT active
+                if (!lanConnectedRef.current && signal.minutes !== undefined &&
+                    signal.seconds !== undefined) {
                     timer.setFromHardware({
                         minutes: signal.minutes,
                         seconds: signal.seconds,
@@ -321,7 +345,30 @@ export const HostConsole: React.FC = () => {
     }, [hwMode, updateScore, updateFouls, timer, togglePossession, game, dispatch, state.possession]);
 
     // Subscribe — stable channel, latest handler via ref inside the hook
-    const { sendToHardware, lanConnected, retryLan } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
+    const { sendToHardware, lanConnected, retryLan, sendPairingPush } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
+
+    useEffect(() => { lanConnectedRef.current = lanConnected; }, [lanConnected]);
+
+    useEffect(() => {
+        setWsOpen(lanConnected);
+    }, [lanConnected, setWsOpen]);
+
+    // ── Push activation to ESP32 over WS when LAN connects (C8) ──────────────────
+    // Fires once when LAN first connects so ESP32 transitions to active state
+    // without waiting for the next Supabase poll cycle.
+    const activationPushedRef = useRef(false);
+    useEffect(() => {
+        if (!lanConnected || !hwDeviceId || !gameCode || !game) return;
+        if (activationPushedRef.current) return;
+        activationPushedRef.current = true;
+        sendPairingPush({
+            status:      'active',
+            gameId:      gameCode,
+            teamA:       game?.teamA?.name || 'TEAM A',
+            teamB:       game?.teamB?.name || 'TEAM B',
+            controlMode: hwMode,
+        });
+    }, [lanConnected, hwDeviceId, gameCode, game, hwMode, sendPairingPush]);
 
     // ── Feed live state back to ESP32 display ─────────────────────────────────────
     // Fires whenever scores, fouls, possession, or clock changes.
@@ -353,6 +400,17 @@ export const HostConsole: React.FC = () => {
         timer.gameRunning,
     ]);
 
+    // ── Sync liveScoreRef from DB on load (only when LAN is not active) ──────────
+    useEffect(() => {
+        if (lanConnected) return;
+        if (game?.teamA?.score !== undefined) {
+            liveScoreRef.current.a = game.teamA.score;
+        }
+        if (game?.teamB?.score !== undefined) {
+            liveScoreRef.current.b = game.teamB.score;
+        }
+    }, [game?.teamA?.score, game?.teamB?.score, lanConnected]);
+
     // ── WRAP web score buttons to record action history ────────────────────────────
     const showUndoToast = (label: string) => {
         if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
@@ -362,6 +420,8 @@ export const HostConsole: React.FC = () => {
 
     const handleWebScore = useCallback((team: 'A' | 'B', points: number, playerId?: string) => {
         updateScore(team, points);
+        if (team === 'A') liveScoreRef.current.a += points;
+        else liveScoreRef.current.b += points;
         recordActionRef.current({ type: 'score', team, value: points, playerId, timestamp: Date.now() });
         const teamName = team === 'A' ? game?.teamA?.name : game?.teamB?.name;
         showUndoToast(`+${points} ${teamName ?? team}`);
@@ -745,6 +805,21 @@ export const HostConsole: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Always-visible transport indicator */}
+                    {hwDeviceId && (
+                        <div className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded border text-[9px] font-mono font-bold ${
+                            lanConnected
+                                ? 'bg-green-950/40 border-green-800/50 text-green-400'
+                                : deviceOnline
+                                    ? 'bg-yellow-950/40 border-yellow-800/50 text-yellow-400'
+                                    : 'bg-zinc-900 border-zinc-700 text-zinc-500'
+                        }`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${
+                                lanConnected ? 'bg-green-400' : deviceOnline ? 'bg-yellow-400' : 'bg-zinc-500'
+                            }`} />
+                            {lanConnected ? 'LAN' : deviceOnline ? 'CLOUD' : 'OFFLINE'}
+                        </div>
+                    )}
                     {hwDeviceId && (
                         <div className="relative">
                             <button

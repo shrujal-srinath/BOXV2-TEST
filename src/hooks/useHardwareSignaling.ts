@@ -28,6 +28,11 @@ const WS_CONNECT_TIMEOUT = 1500;   // ms — if no connect in 1.5s, don't wait l
 const WS_RECONNECT_DELAY = 1500;   // ms — retry after disconnect (faster LAN recovery)
 const WS_PING_INTERVAL = 15000;  // ms — keep-alive ping to ESP32
 
+const RELAY_HOST = import.meta.env.VITE_RELAY_URL ||
+                   'wss://thebox-relay.railway.app';
+const RELAY_PATH = (deviceCode: string) =>
+                   `${RELAY_HOST}/device/${deviceCode}`;
+
 // ── Local IP fetcher ──────────────────────────────────────────────
 
 async function fetchEsp32LocalIp(deviceCode: string): Promise<string | null> {
@@ -66,6 +71,12 @@ export function useHardwareSignaling(
     const mountedRef = useRef(true);
     const onSignalRef = useRef(onSignal);
     const localIpRef = useRef<string | null>(null);
+    const mountTimeRef = useRef(Date.now());
+    const backoffRef = useRef(1500);
+    const lastKnownStateRef = useRef<any>(null);
+    const transportModeRef = useRef<'LAN' | 'FALLBACK' | 'RECOVERING'>('FALLBACK');
+    const relayWsRef = useRef<WebSocket | null>(null);
+    const relayActiveRef = useRef(false);
 
     // Keep signal handler ref fresh without resubscribing
     useEffect(() => { onSignalRef.current = onSignal; }, [onSignal]);
@@ -124,7 +135,14 @@ export function useHardwareSignaling(
             clearTimeout(connectTimeout);
             lanActiveRef.current = true;
             setLanConnected(true);
+            backoffRef.current = 1500;
+            transportModeRef.current = 'LAN';
             console.log('[WS] LAN WebSocket connected —', url);
+
+            // On reconnect, request full state from ESP32 immediately
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ event: 'requestState' }));
+            }
 
             // Keep-alive ping
             pingTimerRef.current = setInterval(() => {
@@ -135,7 +153,36 @@ export function useHardwareSignaling(
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data?.payload) handleSignal(data.payload);
+                if (!data?.payload) return;
+                const payload = data.payload;
+
+                // Always update lastKnownState from WS messages
+                if (payload.scoreA !== undefined ||
+                    payload.scoreB !== undefined) {
+                    lastKnownStateRef.current = {
+                        ...lastKnownStateRef.current,
+                        scoreA:      payload.scoreA,
+                        scoreB:      payload.scoreB,
+                        minutes:     payload.minutes,
+                        seconds:     payload.seconds,
+                        shotClock:   payload.shotClock,
+                        period:      payload.period,
+                        gameRunning: payload.gameRunning,
+                        receivedAt:  Date.now(),
+                    };
+                }
+
+                // In RECOVERING mode, only process SCORE_STATE
+                // to avoid applying stale individual signals
+                if (transportModeRef.current === 'RECOVERING') {
+                    if (payload.action === 'SCORE_STATE') {
+                        transportModeRef.current = 'LAN';
+                        handleSignal(payload);
+                    }
+                    return;
+                }
+
+                handleSignal(payload);
             } catch { /* ignore malformed */ }
         };
 
@@ -147,18 +194,77 @@ export function useHardwareSignaling(
         ws.onclose = () => {
             if (!settled) { settled = true; clearTimeout(connectTimeout); }
             lanActiveRef.current = false;
+            transportModeRef.current = 'FALLBACK';
             setLanConnected(false);
             wsRef.current = null;
-            if (pingTimerRef.current) { clearInterval(pingTimerRef.current); pingTimerRef.current = null; }
-
+            if (pingTimerRef.current) {
+                clearInterval(pingTimerRef.current);
+                pingTimerRef.current = null;
+            }
             if (!mountedRef.current) return;
-            // Auto-reconnect
-            console.log('[WS] LAN WebSocket closed, reconnecting in', WS_RECONNECT_DELAY, 'ms');
-            reconnectTimerRef.current = setTimeout(() => {
-                if (mountedRef.current && localIpRef.current) connectLanWs(localIpRef.current);
-            }, WS_RECONNECT_DELAY);
+
+            const delay = backoffRef.current;
+            backoffRef.current = Math.min(backoffRef.current * 2, 10000);
+
+            reconnectTimerRef.current = setTimeout(async () => {
+                if (!mountedRef.current) return;
+                transportModeRef.current = 'RECOVERING';
+                const freshIp = await fetchEsp32LocalIp(deviceCode);
+                if (freshIp) localIpRef.current = freshIp;
+                if (localIpRef.current) connectLanWs(localIpRef.current);
+            }, delay);
         };
     }, [closeLanWs, handleSignal]);
+
+    const connectRelayWs = useCallback((code: string) => {
+        if (!mountedRef.current) return;
+        if (relayWsRef.current) {
+            relayWsRef.current.onopen = null;
+            relayWsRef.current.onmessage = null;
+            relayWsRef.current.onerror = null;
+            relayWsRef.current.onclose = null;
+            relayWsRef.current.close();
+            relayWsRef.current = null;
+        }
+
+        const url = RELAY_PATH(code);
+        console.log('[RELAY] Connecting to relay:', url);
+        const ws = new WebSocket(url);
+        relayWsRef.current = ws;
+
+        ws.onopen = () => {
+            if (!mountedRef.current) { ws.close(); return; }
+            relayActiveRef.current = true;
+            console.log('[RELAY] Connected');
+            // Request full state from ESP32
+            ws.send(JSON.stringify({ event: 'requestState' }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (!data?.payload) return;
+                // If LAN WS is also active, relay is backup — still process
+                // because relay carries the same messages.
+                // Use dedup by timestamp to prevent double processing.
+                handleSignal(data.payload as HardwareSignal);
+            } catch { }
+        };
+
+        ws.onclose = () => {
+            relayActiveRef.current = false;
+            relayWsRef.current = null;
+            if (!mountedRef.current) return;
+            // Reconnect relay after 3s
+            setTimeout(() => {
+                if (mountedRef.current) connectRelayWs(code);
+            }, 3000);
+        };
+
+        ws.onerror = () => {
+            console.log('[RELAY] Connection error');
+        };
+    }, [handleSignal]);
 
     // ── Supabase channel ───────────────────────────────────────────
 
@@ -177,13 +283,22 @@ export function useHardwareSignaling(
             }
         });
 
+        // Always connect to relay regardless of LAN
+        connectRelayWs(deviceCode);
+
         // 2. Always subscribe to Supabase channel (backup + non-LAN fallback)
         const channel = supabase
             .channel(`hw-${gameCode}`)
             .on('broadcast', { event: 'signal' }, ({ payload }) => {
-                // If LAN WS is active, skip Supabase duplicate
-                // (ESP32 sends to both — avoid double-processing)
-                if (lanActiveRef.current) return;
+                // Drop all signals during LAN connect window (first 2s)
+                if (Date.now() - mountTimeRef.current < 2000) return;
+                // Drop if either direct path is active
+                if (lanActiveRef.current || relayActiveRef.current) return;
+                // In FALLBACK mode: only process SCORE_STATE, never
+                // individual action signals — prevents double-counting
+                if (payload?.action && payload.action !== 'SCORE_STATE') {
+                    return;
+                }
                 handleSignal(payload as HardwareSignal);
             })
             .subscribe((status) => {
@@ -194,18 +309,28 @@ export function useHardwareSignaling(
             mountedRef.current = false;
             if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
             closeLanWs();
+            // Close relay
+            if (relayWsRef.current) {
+                relayWsRef.current.onopen = null;
+                relayWsRef.current.onmessage = null;
+                relayWsRef.current.onerror = null;
+                relayWsRef.current.onclose = null;
+                relayWsRef.current.close();
+                relayWsRef.current = null;
+            }
             supabase.removeChannel(channel);
         };
-    }, [gameCode, deviceCode, connectLanWs, closeLanWs, handleSignal]);
+    }, [gameCode, deviceCode, connectLanWs, connectRelayWs, closeLanWs, handleSignal]);
 
     // ── sendToHardware — feedback from website → ESP32 display ────
-    // Sends via LAN WS if available, otherwise skip (non-critical)
+    // Sends via LAN WS if available, relay as fallback
     const sendToHardware = useCallback((state: object) => {
+        const msg = JSON.stringify({ event: 'feedback', payload: state });
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ event: 'feedback', payload: state }));
+            wsRef.current.send(msg);
+        } else if (relayWsRef.current?.readyState === WebSocket.OPEN) {
+            relayWsRef.current.send(msg);
         }
-        // Could also POST to Supabase broadcast here if you want cloud feedback,
-        // but for display latency, LAN is the only path that matters.
     }, []);
 
     // Manual LAN retry — call this when user wants to switch from cloud to LAN
@@ -216,9 +341,20 @@ export function useHardwareSignaling(
         connectLanWs(localIpRef.current);
     }, [closeLanWs, connectLanWs]);
 
+    // Push pairing/activation events directly to ESP32 over WS
+    const sendPairingPush = useCallback((pushPayload: object) => {
+        const msg = JSON.stringify({ event: 'pairing', payload: pushPayload });
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(msg);
+        } else if (relayWsRef.current?.readyState === WebSocket.OPEN) {
+            relayWsRef.current.send(msg);
+        }
+    }, []);
+
     return {
         sendToHardware,
         lanConnected, // reactive useState — triggers re-renders on connect/disconnect
         retryLan,     // force a new LAN connection attempt
+        sendPairingPush,
     };
 }

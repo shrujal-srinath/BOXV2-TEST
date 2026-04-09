@@ -44,6 +44,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <WebSocketsServer.h>
+#include <WebSocketsClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/queue.h>
@@ -55,7 +56,16 @@
 // ─── Supabase Config ─────────────────────────────────────────────
 const char* SUPABASE_HOST     = "eoowagimooxsqcrrihbw.supabase.co";
 const char* SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvb3dhZ2ltb294c3FjcnJpaGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0MDIwOTAsImV4cCI6MjA4Njk3ODA5MH0.goB7TMo3Sv3RQhez4kjvGLzikBz37XB3OZV-cRmUXn0";
-const char* FW_VERSION        = "9.2.0";
+const char* FW_VERSION        = "10.0.0";
+
+// ─── Relay Config ─────────────────────────────────────────────────
+const char* RELAY_HOST = "thebox-relay.railway.app";
+const uint16_t RELAY_PORT = 443;
+// Path format: /device/XXXX — filled in at runtime
+static bool relayConnected = false;
+static WebSocketsClient relayClient;
+static unsigned long lastRelayReconnect = 0;
+#define RELAY_RECONNECT_INTERVAL 5000
 
 // ─── TFT ─────────────────────────────────────────────────────────
 #define TFT_CS   17
@@ -223,6 +233,16 @@ unsigned long tSec   = 0;
 // [N1] Local-Only mode — skip Supabase when ON
 static bool localOnlyMode = false;
 
+enum TransportMode {
+  TRANSPORT_LAN,
+  TRANSPORT_CLOUD,
+  TRANSPORT_RECONNECTING
+};
+static volatile TransportMode transportMode = TRANSPORT_CLOUD;
+static unsigned long lastSupaBatch   = 0;
+static unsigned long lastScoreChange = 0;
+#define WS_QUEUE_SIZE 32
+
 // [N2] WS client counter — drives LAN dot in status bar
 static volatile int wsConnectedClients = 0;
 
@@ -352,7 +372,7 @@ void tickLocalClock(){
   static int _prevSc = -1;
   if(liveState.paused)return;
   if(millis()-tSec<1000)return;
-  tSec=millis();
+  tSec+=1000;
   if(liveState.mainMin>0||liveState.mainSec>0){
     if(liveState.mainSec>0)liveState.mainSec--;
     else{liveState.mainMin--;liveState.mainSec=59;}
@@ -589,19 +609,24 @@ void m_drawStatusBar(int mode,bool connected=false,int signal=0,bool lanDot=fals
   tft.setTextSize(1);
   if(mode>0){tft.setTextColor(mc[mode],M_SURFACE);tft.setCursor(8,6);tft.print(ml[mode]);}
 
-  // LAN / CLOUD dot (left of wifi bars)
-  if(connected){
-    uint16_t dotCol = lanDot ? M_SUCCESS : M_WARN;
-    tft.fillCircle(DW-62,9,3,dotCol);
+  // Transport mode dot + label
+  uint16_t dotCol;
+  const char* dotLabel;
+  if(transportMode==TRANSPORT_LAN){
+    dotCol=M_SUCCESS;dotLabel="LAN";
+  } else if(transportMode==TRANSPORT_RECONNECTING){
+    dotCol=((millis()/400)%2)?M_WARN:M_SURFACE;
+    dotLabel="...";
+  } else {
+    dotCol=M_WARN;dotLabel="CLD";
   }
+  tft.fillCircle(DW-80,9,3,dotCol);
+  tft.setTextColor(dotCol,M_SURFACE);
+  tft.setCursor(DW-74,6);
+  tft.setTextSize(1);
+  tft.print(dotLabel);
 
-  // LOCAL ONLY badge (tiny)
-  if(localOnlyMode){
-    tft.setTextColor(M_SUCCESS,M_SURFACE);
-    tft.setCursor(DW-120,6);tft.print("LAN");
-  }
-
-  tft.setTextColor(M_MUTED,M_SURFACE);tft.setCursor(DW-24,6);tft.print("FW9");
+  tft.setTextColor(M_MUTED,M_SURFACE);tft.setCursor(DW-24,6);tft.print("FW10");
   if(connected){
     int bars=signal>0?signal:4;
     for(int i=0;i<4;i++){
@@ -654,7 +679,7 @@ void showSplash(){
   tft.setTextSize(7);tft.setTextColor(M_TEXT,M_BG);tft.setCursor(88,88);tft.print("BOX");
   tft.fillRect(136,158,48,3,M_BBALL);
   tft.setTextSize(1);tft.setTextColor(M_MUTED,M_BG);tft.setCursor(78,172);tft.print("BMSCE SPORTS TECH");
-  tft.setCursor(116,186);tft.print("BOXFW-9.2");
+  tft.setCursor(116,186);tft.print(FW_VERSION);
   int barY=214,barX=60,barW=200;
   tft.fillRect(barX,barY,barW,2,M_SURFACE);
   for(int i=0;i<=barW;i+=4){
@@ -1703,27 +1728,76 @@ bool supaPost(const String& body){
 }
 
 bool registerDevice_Online(){
-  WiFiClientSecure cli;cli.setInsecure();cli.setTimeout(10000);
-  HTTPClient http;http.setTimeout(15000);
-  String url=String("https://")+SUPABASE_HOST+"/rest/v1/rpc/register_esp32_device";
-  if(!http.begin(cli,url))return false;
-  http.addHeader("Content-Type","application/json");
-  http.addHeader("apikey",SUPABASE_ANON_KEY);
-  http.addHeader("Authorization",String("Bearer ")+SUPABASE_ANON_KEY);
-  String body="{\"p_id\":\""+deviceId+"\",\"p_firmware_version\":\""+FW_VERSION+"\",\"p_local_ip\":\""+WiFi.localIP().toString()+"\"}";
-  int code=http.POST(body);bool ok=false;
-  if(code==200){DynamicJsonDocument doc(256);if(!deserializeJson(doc,http.getString()))ok=doc["registered"]|false;}
-  http.end();return ok;
+  const int MAX_ATTEMPTS = 3;
+  for(int attempt = 0; attempt < MAX_ATTEMPTS; attempt++){
+    if(attempt > 0){
+      Serial.printf("[REG] Retry %d/%d\n", attempt+1, MAX_ATTEMPTS);
+      delay(1500);
+    }
+    WiFiClientSecure cli;
+    cli.setInsecure();
+    cli.setTimeout(15);        // 15 seconds — Core 3.x uses seconds
+    HTTPClient http;
+    http.setTimeout(20000);    // 20s HTTP timeout in ms
+    String url = String("https://") + SUPABASE_HOST +
+                 "/rest/v1/rpc/register_esp32_device";
+    if(!http.begin(cli, url)){ http.end(); continue; }
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("apikey", SUPABASE_ANON_KEY);
+    http.addHeader("Authorization",
+      String("Bearer ") + SUPABASE_ANON_KEY);
+    String body = "{\"p_id\":\"" + deviceId +
+                  "\",\"p_firmware_version\":\"" + FW_VERSION +
+                  "\",\"p_local_ip\":\"" +
+                  WiFi.localIP().toString() + "\"}";
+    int code = http.POST(body);
+    Serial.printf("[REG] HTTP code: %d\n", code);
+    if(code == 200 || code == 201){
+      String resp = http.getString();
+      http.end();
+      DynamicJsonDocument doc(256);
+      if(!deserializeJson(doc, resp)){
+        bool ok = doc["registered"] | false;
+        if(ok) return true;
+        // registered=false means device already exists — still ok
+        // Supabase upsert may return registered=false on re-register
+        return true;
+      }
+    }
+    http.end();
+  }
+  return false;
 }
 
 void sendHeartbeat_Online(){
-  WiFiClientSecure cli;cli.setInsecure();cli.setTimeout(3);HTTPClient http;http.setTimeout(4000);
-  http.begin(cli,String("https://")+SUPABASE_HOST+"/rest/v1/rpc/send_esp32_heartbeat");
-  http.addHeader("Content-Type","application/json");
-  http.addHeader("apikey",SUPABASE_ANON_KEY);
-  http.addHeader("Authorization",String("Bearer ")+SUPABASE_ANON_KEY);
-  http.POST("{\"p_id\":\""+deviceId+"\",\"p_firmware_version\":\""+FW_VERSION+"\",\"p_local_ip\":\""+WiFi.localIP().toString()+"\"}");
-  http.end();
+  if(!supaEnsureConnected())return;
+  // 1. Broadcast heartbeat (reuses persistent connection)
+  String bcast="{\"messages\":[{\"topic\":\"hw-hb-"+deviceId+"\","
+    "\"event\":\"heartbeat\",\"payload\":{"
+    "\"deviceId\":\""+deviceId+"\","
+    "\"ip\":\""+WiFi.localIP().toString()+"\","
+    "\"fw\":\""+FW_VERSION+"\"}}]}";
+  supaPost(bcast);
+
+  // Reuse persistent connection for heartbeat PATCH
+  // Build a minimal REST PATCH using the existing supaClient
+  if(supaConnected && supaClient && supaHttp){
+    HTTPClient patchHttp;
+    patchHttp.setTimeout(3000);
+    String patchUrl = String("https://") + SUPABASE_HOST +
+      "/rest/v1/hardware_terminals?id=eq." + deviceId;
+    if(patchHttp.begin(*supaClient, patchUrl)){
+      patchHttp.addHeader("Content-Type","application/json");
+      patchHttp.addHeader("apikey", SUPABASE_ANON_KEY);
+      patchHttp.addHeader("Authorization",
+        String("Bearer ") + SUPABASE_ANON_KEY);
+      patchHttp.addHeader("Prefer","return=minimal");
+      patchHttp.PATCH("{\"last_heartbeat\":" +
+        getTimestampStr() + "}");
+      patchHttp.end();
+      lastSupaUse = millis(); // reset keepalive timer
+    }
+  }
 }
 
 void pollDeviceState_Online(){
@@ -1751,8 +1825,8 @@ void pollDeviceState_Online(){
           if(dbStatus=="active"&&dbGameId!=""){
             if(activeGameId!=dbGameId){
               activeGameId=dbGameId;
-              liveState.scoreA=0;liveState.scoreB=0;liveState.shotClock=24;
-              liveState.mainMin=10;liveState.mainSec=0;liveState.paused=true;
+              liveState.scoreA=0;liveState.scoreB=0;liveState.shotClock=cfg.shotClockDur;
+              liveState.mainMin=cfg.quarterMin;liveState.mainSec=0;liveState.paused=true;
               liveState.period=1;liveState.isLocked=false;
               liveState.setsA=0;liveState.setsB=0;liveState.currentSet=1;
               resetPrevState();
@@ -1806,35 +1880,109 @@ void pushQueue(QueueHandle_t q,const SignalOutbox& msg){
   if(xQueueSend(q,&msg,0)!=pdTRUE){SignalOutbox d;xQueueReceive(q,&d,0);xQueueSend(q,&msg,0);}
 }
 
-// [N1] Local-Only aware signal queue — skips Supabase when localOnlyMode=true
 void queueSignal_Online(uint8_t action,const String& gameId){
   if(action==ACT_NONE||gameId=="")return;
-  SignalOutbox msg;msg.action=action;msg.scoreA=0;msg.scoreB=0;msg.paused=true;
-  msg.mainMin=0;msg.mainSec=0;msg.shotClock=0;msg.period=1;msg.poss=false;
-  strncpy(msg.gameId,gameId.c_str(),11);msg.gameId[11]='\0';
+  SignalOutbox msg;
+  msg.action=action;msg.scoreA=0;msg.scoreB=0;
+  msg.paused=true;msg.mainMin=0;msg.mainSec=0;
+  msg.shotClock=0;msg.period=1;msg.poss=false;
+  strncpy(msg.gameId,gameId.c_str(),11);
+  msg.gameId[11]='\0';
   pushQueue(wsQueue,msg);
-  if(!localOnlyMode)pushQueue(signalQueue,msg);
 }
 
-// [N1] Local-Only aware full state sync
 void queueFullStateSync(const String& gameId){
   if(gameId=="")return;
-  SignalOutbox msg=makeStateSnapshot(gameId,255);
-  pushQueue(wsQueue,msg);
-  if(!localOnlyMode)pushQueue(signalQueue,msg);
+  SignalOutbox snap=makeStateSnapshot(gameId,255);
+  pushQueue(wsQueue,snap);
+}
+
+void handleInboundWsMessage(uint8_t num,uint8_t* payload,size_t length){
+  if(length==0||payload[0]!='{')return;
+  DynamicJsonDocument doc(512);
+  if(deserializeJson(doc,payload,length))return;
+  const char* event=doc["event"]|"";
+  if(strcmp(event,"pairing")!=0)return;
+  JsonObject p=doc["payload"];
+  if(p.isNull())return;
+  const char* status=p["status"]|"";
+
+  if(strcmp(status,"paired")==0){
+    if(deviceState!=1){
+      deviceState=1;
+      _waitingDrawn=false;
+      _pairedDrawn=false;
+      buz.beep(120);
+    }
+    return;
+  }
+
+  if(strcmp(status,"active")==0){
+    const char* gid=p["gameId"]|"";
+    if(strlen(gid)==0)return;
+    String newGameId=String(gid);
+    bool isNew=(activeGameId!=newGameId);
+    const char* mode=p["controlMode"]|"hardware";
+    if(xSemaphoreTake(stateMutex,portMAX_DELAY)){
+      const char* tA=p["teamA"]|"";
+      const char* tB=p["teamB"]|"";
+      if(strlen(tA)>0)strncpy(cfg.teamAName,tA,11);
+      if(strlen(tB)>0)strncpy(cfg.teamBName,tB,11);
+      liveState.isLocked=(strcmp(mode,"web")==0);
+      if(isNew){
+        activeGameId=newGameId;
+        liveState.scoreA=0;liveState.scoreB=0;
+        liveState.shotClock=cfg.shotClockDur;
+        liveState.mainMin=cfg.quarterMin;
+        liveState.mainSec=0;liveState.paused=true;
+        liveState.period=1;liveState.setsA=0;
+        liveState.setsB=0;liveState.currentSet=1;
+        possession=false;tSec=millis();
+        lastScoreChange=0;lastSupaBatch=0;
+        saveAtomicState();resetPrevState();
+      }
+      deviceState=2;
+      xSemaphoreGive(stateMutex);
+    }
+    if(isNew){
+      buz.pattern(2);
+      _waitingDrawn=false;
+      _pairedDrawn=false;
+    }
+    return;
+  }
+
+  if(strcmp(status,"mode_change")==0){
+    const char* mode=p["controlMode"]|"hardware";
+    bool locked=(strcmp(mode,"web")==0);
+    if(xSemaphoreTake(stateMutex,portMAX_DELAY)){
+      bool wasLocked=liveState.isLocked;
+      liveState.isLocked=locked;
+      xSemaphoreGive(stateMutex);
+      if(locked!=wasLocked){resetPrevState();buz.beep(60);}
+    }
+    return;
+  }
 }
 
 void onWsEvent(uint8_t num,WStype_t type,uint8_t* payload,size_t length){
   if(type==WStype_CONNECTED){
     wsConnectedClients++;
+    transportMode=TRANSPORT_LAN;
+    lastSupaBatch=0;  // force immediate state sync to Supabase
     String gameId=activeGameId;
     if(gameId!=""){SignalOutbox snap=makeStateSnapshot(gameId,255);String js=wsStateJson(snap);wsServer.sendTXT(num,js);}
   } else if(type==WStype_DISCONNECTED){
     if(wsConnectedClients>0)wsConnectedClients--;
-    // LAN dropped — push full state to Supabase so website recovers via cloud
-    if(wsConnectedClients==0&&activeGameId!=""&&!localOnlyMode){
-      queueFullStateSync(activeGameId);
+    if(wsConnectedClients==0){
+      // Only go to RECONNECTING if relay also not connected
+      if(!relayConnected){
+        transportMode=TRANSPORT_RECONNECTING;
+      }
+      lastScoreChange=millis();  // triggers immediate Supabase push
     }
+  } else if(type==WStype_TEXT){
+    handleInboundWsMessage(num,payload,length);
   }
 }
 
@@ -1850,15 +1998,72 @@ String wsClockJson(const SignalOutbox& msg){
     ",\"timestamp\":"+getTimestampStr()+"}}";
 }
 
+void onRelayEvent(WStype_t type, uint8_t* payload, size_t length){
+  switch(type){
+    case WStype_CONNECTED:
+      relayConnected = true;
+      transportMode = TRANSPORT_LAN; // relay counts as LAN-quality
+      Serial.println("[RELAY] Connected to relay server");
+      // Send full state immediately on connect
+      if(activeGameId != ""){
+        SignalOutbox snap = makeStateSnapshot(activeGameId, 255);
+        String js = wsStateJson(snap);
+        relayClient.sendTXT(js);
+      }
+      break;
+
+    case WStype_DISCONNECTED:
+      relayConnected = false;
+      if(wsConnectedClients == 0){
+        transportMode = TRANSPORT_RECONNECTING;
+      }
+      Serial.println("[RELAY] Disconnected from relay");
+      break;
+
+    case WStype_TEXT:
+      // Inbound from website via relay — handle same as local WS
+      handleInboundWsMessage(0, payload, length);
+      break;
+
+    case WStype_PING:
+    case WStype_PONG:
+      break;
+
+    default:
+      break;
+  }
+}
+
 void wsTaskCode(void* parameter){
   wsServer.begin();wsServer.onEvent(onWsEvent);
+  wsServer.enableHeartbeat(15000,3000,2);
   for(;;){wsServer.loop();vTaskDelay(pdMS_TO_TICKS(1));}
+}
+
+void relayTaskCode(void* parameter){
+  // Wait for WiFi to be ready
+  vTaskDelay(pdMS_TO_TICKS(3000));
+
+  String path = "/device/" + deviceId;
+  relayClient.beginSSL(
+    RELAY_HOST,
+    RELAY_PORT,
+    path.c_str()
+  );
+  relayClient.onEvent(onRelayEvent);
+  relayClient.setReconnectInterval(RELAY_RECONNECT_INTERVAL);
+  relayClient.enableHeartbeat(15000, 3000, 2);
+
+  for(;;){
+    relayClient.loop();
+    vTaskDelay(pdMS_TO_TICKS(1));
+  }
 }
 
 void networkTaskCode_Online(void* parameter){
   vTaskDelay(pdMS_TO_TICKS(2000));
   if(WiFi.status()==WL_CONNECTED)supaConnect();
-  unsigned long lastHeartbeat=0,lastPoll=0,lastWifiCheck=0,lastAbsState=0;
+  unsigned long lastHeartbeat=0,lastPoll=0,lastWifiCheck=0;
   bool wifiWasDown=false;
   for(;;){
     unsigned long now=millis();
@@ -1878,28 +2083,47 @@ void networkTaskCode_Online(void* parameter){
       if(wsMsg.action==254)     json=wsClockJson(wsMsg);
       else if(wsMsg.action==255)json=wsStateJson(wsMsg);
       else                      json=wsSignalJson(wsMsg.action,String(wsMsg.gameId));
-      wsServer.broadcastTXT(json);
+      // Send to local WS clients (LAN)
+      if(wsConnectedClients > 0) wsServer.broadcastTXT(json);
+      // Send to relay (WSS cloud path)
+      if(relayConnected) relayClient.sendTXT(json);
     }
 
-    // Drain Supabase queue — cloud path (skipped entirely when localOnlyMode)
-    if(!localOnlyMode){
-      SignalOutbox netMsg;
-      if(xQueueReceive(signalQueue,&netMsg,pdMS_TO_TICKS(5))==pdTRUE){
-        if(netMsg.action==255)broadcastAbsoluteState_Online(netMsg);
-        else if(netMsg.action!=254)sendSignal_Online(netMsg.action,String(netMsg.gameId));
-        while(xQueueReceive(signalQueue,&netMsg,0)==pdTRUE){
-          if(netMsg.action==255)broadcastAbsoluteState_Online(netMsg);
-          else if(netMsg.action!=254)sendSignal_Online(netMsg.action,String(netMsg.gameId));
-        }
-        lastAbsState=now;
-      }
-      if(now-lastAbsState>5000&&activeGameId!=""){
-        queueFullStateSync(activeGameId);
-        lastAbsState=now;
-      }
+    // ── Supabase smart batch ──────────────────────────────
+    // Fires IMMEDIATELY when score changes (for instant fallback)
+    // Fires every 3s for clock-only sync
+    bool scoreJustChanged=(lastScoreChange>0&&
+                           now-lastScoreChange<150&&
+                           now-lastSupaBatch>300);
+    bool clockDue=(now-lastSupaBatch>=3000&&
+                   activeGameId!="");
+
+    if((scoreJustChanged||clockDue)&&activeGameId!=""){
+      SignalOutbox snap=makeStateSnapshot(activeGameId,255);
+      String gid=String(snap.gameId);
+      String body=
+        "{\"messages\":[{\"topic\":\"hw-"+gid+"\","
+        "\"event\":\"signal\",\"payload\":{"
+        "\"action\":\"SCORE_STATE\","
+        "\"deviceId\":\""+deviceId+"\","
+        "\"gameId\":\""+gid+"\","
+        "\"scoreA\":"+String(snap.scoreA)+
+        ",\"scoreB\":"+String(snap.scoreB)+
+        ",\"minutes\":"+String(snap.mainMin)+
+        ",\"seconds\":"+String(snap.mainSec)+
+        ",\"shotClock\":"+String(snap.shotClock)+
+        ",\"period\":"+String(snap.period)+
+        ",\"gameRunning\":"+
+          String(!snap.paused?"true":"false")+
+        ",\"possession\":\""+
+          String(snap.poss?"B":"A")+"\""+
+        "}}]}";
+      supaPost(body);
+      lastSupaBatch=now;
+      lastScoreChange=0;
     }
-    if(now-lastPoll>2000){pollDeviceState_Online();lastPoll=now;}
-    if(now-lastHeartbeat>8000){sendHeartbeat_Online();lastHeartbeat=now;}
+    if(now-lastPoll>30000){pollDeviceState_Online();lastPoll=now;}
+    if(now-lastHeartbeat>5000){sendHeartbeat_Online();lastHeartbeat=now;}
   }
 }
 
@@ -1910,7 +2134,7 @@ void _drawConnectStep(int active,const char* detail=""){
   tft.drawFastHLine(0,22,DW,M_ONLINE);
   tft.setTextSize(1);tft.setTextColor(M_ONLINE,M_SURFACE);
   tft.setCursor(8,8);tft.print("ONLINE MODE");
-  tft.setTextColor(M_MUTED,M_SURFACE);tft.setCursor(DW-24,8);tft.print("FW9");
+  tft.setTextColor(M_MUTED,M_SURFACE);tft.setCursor(DW-24,8);tft.print(FW_VERSION);
 
   const char* labels[]={"WIFI","REGISTER","READY"};
   int pillW=84,pillH=28,pillGap=8,startX=(DW-3*pillW-2*pillGap)/2;
@@ -1984,6 +2208,7 @@ void bootOnlineMode(){
 
   // Part A: try saved credentials first (avoids config portal restart)
   WiFi.begin();
+  WiFi.setSleep(false);
   {unsigned long t0=millis();
   while(WiFi.status()!=WL_CONNECTED&&millis()-t0<8000){delay(100);}}
 
@@ -1997,6 +2222,7 @@ void bootOnlineMode(){
     wm.autoConnect("THE_BOX_SETUP");
     // Portal returns false after save — attempt direct connect
     WiFi.begin();
+    WiFi.setSleep(false);
     {unsigned long t0=millis();
     while(WiFi.status()!=WL_CONNECTED&&millis()-t0<10000){delay(100);}}
     connected=(WiFi.status()==WL_CONNECTED);
@@ -2027,11 +2253,21 @@ void bootOnlineMode(){
   }
 
   if(signalQueue==NULL)signalQueue=xQueueCreate(SIGNAL_QUEUE_SIZE,sizeof(SignalOutbox));
-  if(wsQueue==NULL)wsQueue=xQueueCreate(SIGNAL_QUEUE_SIZE,sizeof(SignalOutbox));
+  if(wsQueue==NULL)wsQueue=xQueueCreate(WS_QUEUE_SIZE,sizeof(SignalOutbox));
   if(NetworkTask!=NULL){vTaskDelete(NetworkTask);NetworkTask=NULL;delay(50);}
   xTaskCreatePinnedToCore(networkTaskCode_Online,"NetTask",16384,NULL,1,&NetworkTask,0);
   if(WSTask!=NULL){vTaskDelete(WSTask);WSTask=NULL;delay(50);}
-  xTaskCreatePinnedToCore(wsTaskCode,"WSTask",8192,NULL,2,&WSTask,1);
+  xTaskCreatePinnedToCore(wsTaskCode,"WSTask",12288,NULL,2,&WSTask,1);
+  TaskHandle_t RelayTask = NULL;
+  xTaskCreatePinnedToCore(
+    relayTaskCode,
+    "RelayTask",
+    16384,        // relay needs more stack for TLS
+    NULL,
+    1,
+    &RelayTask,
+    0             // Core 0 — same as network task
+  );
   if(xSemaphoreTake(stateMutex,portMAX_DELAY)){
     liveState.scoreA=0;liveState.scoreB=0;liveState.shotClock=24;
     liveState.mainMin=10;liveState.mainSec=0;liveState.paused=true;
@@ -2071,11 +2307,11 @@ void loopOnlineMode(){
     xSemaphoreGive(stateMutex);
   }
   if(action!=ACT_NONE){
-    queueSignal_Online(action,localGameId);
+    lastScoreChange=millis();
     SignalOutbox snap=makeStateSnapshot(localGameId,255);
     pushQueue(wsQueue,snap);
   }
-  if(millis()-tUI>=150){drawBB();tUI=millis();}
+  if(millis()-tUI>=150){drawGameScreen();tUI=millis();}
 }
 
 void bootPiConnectMode(){
@@ -2181,6 +2417,7 @@ void bootPiCodeMode(){
 
   // Part A: try saved credentials first
   WiFi.begin();
+  WiFi.setSleep(false);
   {unsigned long t0=millis();
   while(WiFi.status()!=WL_CONNECTED&&millis()-t0<8000){delay(100);}}
 
@@ -2192,6 +2429,7 @@ void bootPiCodeMode(){
     wm.setAPCallback(configModeCallback);wm.setBreakAfterConfig(true);
     wm.autoConnect("THE_BOX_SETUP");
     WiFi.begin();
+    WiFi.setSleep(false);
     {unsigned long t0=millis();
     while(WiFi.status()!=WL_CONNECTED&&millis()-t0<10000){delay(100);}}
     piConnected=(WiFi.status()==WL_CONNECTED);
@@ -2238,7 +2476,7 @@ void loopPiCodeMode(){
     if(dirty)saveAtomicState();xSemaphoreGive(stateMutex);
   }
   if(action!=ACT_NONE){
-    queueSignal_Online(action,localGameId);
+    lastScoreChange=millis();
     SignalOutbox snap=makeStateSnapshot(localGameId,255);
     pushQueue(wsQueue,snap);
   }
@@ -2315,6 +2553,8 @@ bool checkModeSelectReturn(){
   if(currentMode==MODE_ONLINE||currentMode==MODE_PI_CODE){
     if(NetworkTask!=NULL){vTaskDelete(NetworkTask);NetworkTask=NULL;}
     if(WSTask!=NULL){vTaskDelete(WSTask);WSTask=NULL;}
+    relayClient.disconnect();
+    relayConnected = false;
     supaDisconnect();
     if(signalQueue!=NULL){vQueueDelete(signalQueue);signalQueue=NULL;}
     if(wsQueue!=NULL){vQueueDelete(wsQueue);wsQueue=NULL;}

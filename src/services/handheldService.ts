@@ -431,7 +431,7 @@ export const activateGameOnDevice = async (
     teamBName: string,
     initialMode: ControlMode = 'hardware',
     userId?: string
-): Promise<void> => {
+): Promise<{ gameCode: string; teamAName: string; teamBName: string }> => {
     // Get userId from stored pairing if not provided
     const storedUserId = userId || getStoredPairing()?.userId;
     if (!storedUserId) {
@@ -455,6 +455,8 @@ export const activateGameOnDevice = async (
     if (data && !data.success) {
         throw new Error(`Failed to activate device ${code}: ${data.error}`);
     }
+
+    return { gameCode, teamAName, teamBName };
 };
 
 // ─── Legacy stubs (kept for callers that import these) ────────────────────────

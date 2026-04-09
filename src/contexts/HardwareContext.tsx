@@ -89,7 +89,10 @@ interface HardwareActions {
     autoReconnect: (userId: string) => Promise<void>;
 }
 
-type HardwareContextValue = HardwareState & HardwareActions;
+type HardwareContextValue = HardwareState & HardwareActions & {
+    wsOpen: boolean;
+    setWsOpen: (open: boolean) => void;
+};
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -103,6 +106,7 @@ interface HardwareProviderProps {
 }
 
 export const HardwareProvider: React.FC<HardwareProviderProps> = ({ userId, children }) => {
+    const [wsOpen, setWsOpen] = useState(false);
     const [state, setState] = useState<HardwareState>({
         deviceId: getDeviceId(),
         isConnected: false,
@@ -261,13 +265,18 @@ export const HardwareProvider: React.FC<HardwareProviderProps> = ({ userId, chil
         }));
     }, []);
 
+    const isConnected = state.isConnected || wsOpen;
+
     const value: HardwareContextValue = {
         ...state,
+        isConnected,
         pair,
         unpair,
         setMode,
         activateGame,
         autoReconnect,
+        wsOpen,
+        setWsOpen,
     };
 
     return (
