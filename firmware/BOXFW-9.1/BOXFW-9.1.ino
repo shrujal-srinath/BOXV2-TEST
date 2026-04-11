@@ -67,11 +67,6 @@ static WebSocketsClient   relayClient;
 static TaskHandle_t       RelayTask       = NULL;
 #define RELAY_RECONNECT_INTERVAL 5000
 
-// Helper — true when any fast path is alive
-inline bool isLivePathActive(){
-  return (wsConnectedClients > 0) || relayConnected;
-}
-
 // ─── TFT ─────────────────────────────────────────────────────────
 #define TFT_CS   17
 #define TFT_DC   22
@@ -250,6 +245,11 @@ static unsigned long lastScoreChange = 0;
 
 // [N2] WS client counter — drives LAN dot in status bar
 static volatile int wsConnectedClients = 0;
+
+// Helper — true when any fast path is alive
+inline bool isLivePathActive(){
+  return (wsConnectedClients > 0) || relayConnected;
+}
 
 // Prev-state trackers
 static int  prev_sA=-1,prev_sB=-1,prev_sc=-1,prev_mm=-1,prev_ms=-1,prev_per=-1;
@@ -1738,40 +1738,56 @@ bool registerDevice_Online(){
   const int MAX_ATTEMPTS = 3;
   for(int attempt = 0; attempt < MAX_ATTEMPTS; attempt++){
     if(attempt > 0){
-      Serial.printf("[REG] Retry %d/%d\n", attempt+1, MAX_ATTEMPTS);
-      delay(1500);
+      Serial.printf("[REG] Retry %d of %d\n",
+        attempt + 1, MAX_ATTEMPTS);
+      delay(2000);
     }
+
     WiFiClientSecure cli;
     cli.setInsecure();
-    cli.setTimeout(15);        // 15 seconds — Core 3.x uses seconds
+    cli.setTimeout(15);
     HTTPClient http;
-    http.setTimeout(20000);    // 20s HTTP timeout in ms
+    http.setTimeout(20000);
+
     String url = String("https://") + SUPABASE_HOST +
-                 "/rest/v1/rpc/register_esp32_device";
-    if(!http.begin(cli, url)){ http.end(); continue; }
+      "/rest/v1/rpc/register_esp32_device";
+
+    if(!http.begin(cli, url)){
+      http.end();
+      continue;
+    }
+
     http.addHeader("Content-Type", "application/json");
     http.addHeader("apikey", SUPABASE_ANON_KEY);
     http.addHeader("Authorization",
       String("Bearer ") + SUPABASE_ANON_KEY);
-    String body = "{\"p_id\":\"" + deviceId +
-                  "\",\"p_firmware_version\":\"" + FW_VERSION +
-                  "\",\"p_local_ip\":\"" +
-                  WiFi.localIP().toString() + "\"}";
-    int code = http.POST(body);
-    Serial.printf("[REG] HTTP code: %d\n", code);
-    if(code == 200 || code == 201){
-      String resp = http.getString();
-      http.end();
-      DynamicJsonDocument doc(256);
-      if(!deserializeJson(doc, resp)){
-        bool ok = doc["registered"] | false;
-        if(ok) return true;
-        // registered=false means device already exists — still ok
-        // Supabase upsert may return registered=false on re-register
-        return true;
-      }
-    }
+    http.addHeader("Prefer", "return=representation");
+
+    String body =
+      "{\"p_id\":\"" + deviceId +
+      "\",\"p_firmware_version\":\"" + FW_VERSION +
+      "\",\"p_local_ip\":\"" +
+      WiFi.localIP().toString() + "\"}";
+
+    int httpCode = http.POST(body);
+    Serial.printf("[REG] HTTP %d\n", httpCode);
+
     http.end();
+
+    // Accept any 2xx response — both 200 and 201 mean success
+    // registered=false just means device already existed (upsert)
+    // Either way the device row is now in the DB
+    if(httpCode >= 200 && httpCode < 300){
+      return true;
+    }
+
+    // 4xx = bad request (wrong key, bad body) — no point retrying
+    if(httpCode >= 400 && httpCode < 500){
+      Serial.printf("[REG] Client error %d, not retrying\n",
+        httpCode);
+      return false;
+    }
+    // 5xx or negative = server/network error, retry
   }
   return false;
 }
