@@ -59,7 +59,7 @@ const char *SUPABASE_ANON_KEY =
 const char *FW_VERSION = "10.0.0";
 
 // ─── Relay Config ─────────────────────────────────────────────────
-const char *RELAY_HOST = "thebox-relay.railway.app";
+const char *RELAY_HOST = "boxv2-test-production.up.railway.app";
 const uint16_t RELAY_PORT = 443;
 // Path format: /device/XXXX — filled in at runtime
 static volatile bool relayConnected = false;

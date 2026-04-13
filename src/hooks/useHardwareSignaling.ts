@@ -11,12 +11,18 @@ export interface HardwareSignal {
     // Absolute state fields (SCORE_STATE action)
     scoreA?: number;
     scoreB?: number;
+    foulsA?: number;
+    foulsB?: number;
     minutes?: number;
     seconds?: number;
     shotClock?: number;
     period?: number;
     gameRunning?: boolean;
     possession?: 'A' | 'B';
+    clockStartedAt?: number;
+    clockValueAtStart?: number;
+    shotStartedAt?: number;
+    shotValueAtStart?: number;
 }
 
 export type SignalHandler = (signal: HardwareSignal) => void;
@@ -28,10 +34,9 @@ const WS_CONNECT_TIMEOUT = 1500;   // ms — if no connect in 1.5s, don't wait l
 const WS_RECONNECT_DELAY = 1500;   // ms — retry after disconnect (faster LAN recovery)
 const WS_PING_INTERVAL = 15000;  // ms — keep-alive ping to ESP32
 
-const RELAY_HOST = import.meta.env.VITE_RELAY_URL ||
-                   'wss://thebox-relay.railway.app';
+const RELAY_HOST = 'wss://thebox-relay-production.up.railway.app';
 const RELAY_PATH = (deviceCode: string) =>
-                   `${RELAY_HOST}/device/${deviceCode}`;
+    `${RELAY_HOST}/?role=browser&id=${deviceCode}`;
 
 // ── Local IP fetcher ──────────────────────────────────────────────
 
@@ -153,37 +158,26 @@ export function useHardwareSignaling(
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (!data?.payload) return;
-                const payload = data.payload;
-
-                // Always update lastKnownState from WS messages
-                if (payload.scoreA !== undefined ||
-                    payload.scoreB !== undefined) {
-                    lastKnownStateRef.current = {
-                        ...lastKnownStateRef.current,
-                        scoreA:      payload.scoreA,
-                        scoreB:      payload.scoreB,
-                        minutes:     payload.minutes,
-                        seconds:     payload.seconds,
-                        shotClock:   payload.shotClock,
-                        period:      payload.period,
-                        gameRunning: payload.gameRunning,
-                        receivedAt:  Date.now(),
-                    };
-                }
-
-                // In RECOVERING mode, only process SCORE_STATE
-                // to avoid applying stale individual signals
-                if (transportModeRef.current === 'RECOVERING') {
-                    if (payload.action === 'SCORE_STATE') {
-                        transportModeRef.current = 'LAN';
-                        handleSignal(payload);
-                    }
-                    return;
-                }
-
-                handleSignal(payload);
-            } catch { /* ignore malformed */ }
+                if (!data || data.t !== 'state') return;
+                // Map firmware state to HardwareSignal format
+                const signal: HardwareSignal = {
+                    action: 'SCORE_STATE',
+                    scoreA: data.score?.[0] ?? 0,
+                    scoreB: data.score?.[1] ?? 0,
+                    foulsA: data.fouls?.[0] ?? 0,
+                    foulsB: data.fouls?.[1] ?? 0,
+                    period: data.period ?? 1,
+                    gameRunning: data.clockSync?.running ?? false,
+                    possession: data.poss === 0 ? 'A' : 'B',
+                    // Pass clock sync anchors through for browser-side clock calculation
+                    clockStartedAt: data.clockSync?.startedAt ?? 0,
+                    clockValueAtStart: data.clockSync?.valueAtStart ?? 600,
+                    shotStartedAt: data.shotSync?.startedAt ?? 0,
+                    shotValueAtStart: data.shotSync?.valueAtStart ?? 24,
+                    timestamp: data.seq,
+                };
+                handleSignal(signal);
+            } catch { }
         };
 
         ws.onerror = () => {
@@ -243,11 +237,25 @@ export function useHardwareSignaling(
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (!data?.payload) return;
-                // If LAN WS is also active, relay is backup — still process
-                // because relay carries the same messages.
-                // Use dedup by timestamp to prevent double processing.
-                handleSignal(data.payload as HardwareSignal);
+                if (!data || data.t !== 'state') return;
+                // Map firmware state to HardwareSignal format
+                const signal: HardwareSignal = {
+                    action: 'SCORE_STATE',
+                    scoreA: data.score?.[0] ?? 0,
+                    scoreB: data.score?.[1] ?? 0,
+                    foulsA: data.fouls?.[0] ?? 0,
+                    foulsB: data.fouls?.[1] ?? 0,
+                    period: data.period ?? 1,
+                    gameRunning: data.clockSync?.running ?? false,
+                    possession: data.poss === 0 ? 'A' : 'B',
+                    // Pass clock sync anchors through for browser-side clock calculation
+                    clockStartedAt: data.clockSync?.startedAt ?? 0,
+                    clockValueAtStart: data.clockSync?.valueAtStart ?? 600,
+                    shotStartedAt: data.shotSync?.startedAt ?? 0,
+                    shotValueAtStart: data.shotSync?.valueAtStart ?? 24,
+                    timestamp: data.seq,
+                };
+                handleSignal(signal);
             } catch { }
         };
 
@@ -323,7 +331,10 @@ export function useHardwareSignaling(
     }, [gameCode, deviceCode, connectLanWs, connectRelayWs, closeLanWs, handleSignal]);
 
     // ── sendToHardware — feedback from website → ESP32 display ────
-    // Sends via LAN WS if available, relay as fallback
+    // Sends via LAN WS if available, relay as fallback.
+    // NOTE: The firmware's handleInboundWsMessage only accepts event="pairing".
+    // Feedback is currently display-only via Supabase realtime; the local WS
+    // feedback path is kept for future firmware support.
     const sendToHardware = useCallback((state: object) => {
         const msg = JSON.stringify({ event: 'feedback', payload: state });
         if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -341,13 +352,46 @@ export function useHardwareSignaling(
         connectLanWs(localIpRef.current);
     }, [closeLanWs, connectLanWs]);
 
-    // Push pairing/activation events directly to ESP32 over WS
-    const sendPairingPush = useCallback((pushPayload: object) => {
-        const msg = JSON.stringify({ event: 'pairing', payload: pushPayload });
+    // Push pairing/activation events directly to ESP32 over WS.
+    // The firmware listens for event="pairing" with payload.status:
+    //   "paired"      → device acknowledged
+    //   "active"      → game started (gameId, teamA, teamB, controlMode)
+    //   "mode_change" → controlMode switched
+    // The payload shape here must match handleInboundWsMessage in the firmware.
+    const sendPairingPush = useCallback((pushPayload: any) => {
+        let msg = JSON.stringify({ event: 'pairing', payload: pushPayload });
+        
+        if (pushPayload.status === 'active') {
+            msg = JSON.stringify({
+                t: 'cmd',
+                action: 'activate',
+                teamA: pushPayload.teamA || 'HOME',
+                teamB: pushPayload.teamB || 'AWAY',
+                colorA: pushPayload.colorA || '#ffffff',
+                colorB: pushPayload.colorB || '#ffffff'
+            });
+        }
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(msg);
         } else if (relayWsRef.current?.readyState === WebSocket.OPEN) {
             relayWsRef.current.send(msg);
+        }
+    }, []);
+
+    const sendActivate = useCallback((teamA: string, teamB: string, colorA: string, colorB: string) => {
+        const msg = JSON.stringify({
+            t: 'cmd',
+            action: 'activate',
+            teamA,
+            teamB,
+            colorA,
+            colorB,
+        });
+        if (relayWsRef.current?.readyState === WebSocket.OPEN) {
+            relayWsRef.current.send(msg);
+        }
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(msg);
         }
     }, []);
 
@@ -356,5 +400,6 @@ export function useHardwareSignaling(
         lanConnected, // reactive useState — triggers re-renders on connect/disconnect
         retryLan,     // force a new LAN connection attempt
         sendPairingPush,
+        sendActivate,
     };
 }

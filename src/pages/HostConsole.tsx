@@ -319,9 +319,26 @@ export const HostConsole: React.FC = () => {
                     }
                 }
 
-                // Clock — only sync from Supabase when LAN is NOT active
-                if (!lanConnectedRef.current && signal.minutes !== undefined &&
-                    signal.seconds !== undefined) {
+                // Clock — Browser calculates display time locally from firmware anchors
+                if (signal.clockValueAtStart !== undefined && signal.clockStartedAt !== undefined) {
+                    let currentSeconds = signal.clockValueAtStart;
+                    let currentShot = signal.shotValueAtStart ?? timer.shotClock;
+
+                    if (signal.gameRunning && signal.clockStartedAt > 0) {
+                        currentSeconds = Math.max(0, Math.floor(signal.clockValueAtStart - ((Date.now() - signal.clockStartedAt) / 1000)));
+                        if (signal.shotStartedAt !== undefined && signal.shotValueAtStart !== undefined && signal.shotStartedAt > 0) {
+                            currentShot = Math.max(0, Math.floor(signal.shotValueAtStart - ((Date.now() - signal.shotStartedAt) / 1000)));
+                        }
+                    }
+
+                    timer.setFromHardware({
+                        minutes: Math.floor(currentSeconds / 60),
+                        seconds: Math.floor(currentSeconds % 60),
+                        shotClock: currentShot,
+                        period: signal.period ?? timer.period,
+                        gameRunning: signal.gameRunning ?? timer.gameRunning,
+                    });
+                } else if (!lanConnectedRef.current && signal.minutes !== undefined && signal.seconds !== undefined) {
                     timer.setFromHardware({
                         minutes: signal.minutes,
                         seconds: signal.seconds,
@@ -345,7 +362,7 @@ export const HostConsole: React.FC = () => {
     }, [hwMode, updateScore, updateFouls, timer, togglePossession, game, dispatch, state.possession]);
 
     // Subscribe — stable channel, latest handler via ref inside the hook
-    const { sendToHardware, lanConnected, retryLan, sendPairingPush } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
+    const { sendToHardware, lanConnected, retryLan, sendPairingPush, sendActivate } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
 
     useEffect(() => { lanConnectedRef.current = lanConnected; }, [lanConnected]);
 
@@ -366,9 +383,21 @@ export const HostConsole: React.FC = () => {
             gameId:      gameCode,
             teamA:       game?.teamA?.name || 'TEAM A',
             teamB:       game?.teamB?.name || 'TEAM B',
+            colorA:      game?.teamA?.color || '#FF0000',
+            colorB:      game?.teamB?.color || '#0000FF',
             controlMode: hwMode,
         });
-    }, [lanConnected, hwDeviceId, gameCode, game, hwMode, sendPairingPush]);
+        
+        const teamAColor = game?.teamA?.color || '#c0392b';
+        const teamBColor = game?.teamB?.color || '#eab308';
+        sendActivate(
+            game?.teamA?.name || 'TEAM A', 
+            game?.teamB?.name || 'TEAM B',
+            teamAColor, 
+            teamBColor
+        );
+
+    }, [lanConnected, hwDeviceId, gameCode, game, hwMode, sendPairingPush, sendActivate]);
 
     // ── Feed live state back to ESP32 display ─────────────────────────────────────
     // Fires whenever scores, fouls, possession, or clock changes.
