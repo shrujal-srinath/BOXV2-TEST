@@ -72,6 +72,7 @@ export function useHardwareSignaling(
     const lanActiveRef = useRef(false);
     const [lanConnected, setLanConnected] = useState(false);
     const [relayConnected, setRelayConnected] = useState(false);
+    const relayReadyCallbackRef = useRef<(() => void) | null>(null);
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const mountedRef = useRef(true);
@@ -236,6 +237,12 @@ export function useHardwareSignaling(
             relayActiveRef.current = true;
             setRelayConnected(true);
             console.log('[RELAY] Connected');
+
+            if (relayReadyCallbackRef.current) {
+                relayReadyCallbackRef.current();
+                relayReadyCallbackRef.current = null;
+            }
+
             // Request full state from ESP32
             ws.send(JSON.stringify({ event: 'requestState' }));
         };
@@ -413,5 +420,6 @@ export function useHardwareSignaling(
         retryLan,     // force a new LAN connection attempt
         sendPairingPush,
         sendActivateCommand,
+        relayReadyCallbackRef,
     };
 }
