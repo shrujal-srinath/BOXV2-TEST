@@ -362,7 +362,7 @@ export const HostConsole: React.FC = () => {
     }, [hwMode, updateScore, updateFouls, timer, togglePossession, game, dispatch, state.possession]);
 
     // Subscribe — stable channel, latest handler via ref inside the hook
-    const { sendToHardware, lanConnected, retryLan, sendPairingPush, sendActivate } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
+    const { sendToHardware, lanConnected, relayConnected, retryLan, sendPairingPush, sendActivateCommand } = useHardwareSignaling(gameCode || '', hwDeviceId || '', handleHwSignal);
 
     useEffect(() => { lanConnectedRef.current = lanConnected; }, [lanConnected]);
 
@@ -374,8 +374,14 @@ export const HostConsole: React.FC = () => {
     // Fires once when LAN first connects so ESP32 transitions to active state
     // without waiting for the next Supabase poll cycle.
     const activationPushedRef = useRef(false);
+
     useEffect(() => {
-        if (!lanConnected || !hwDeviceId || !gameCode || !game) return;
+        activationPushedRef.current = false;
+    }, [gameCode]);
+
+    useEffect(() => {
+        const hwConnected = lanConnected || relayConnected;
+        if (!hwConnected || !hwDeviceId || !gameCode || !game) return;
         if (activationPushedRef.current) return;
         activationPushedRef.current = true;
         sendPairingPush({
@@ -388,16 +394,16 @@ export const HostConsole: React.FC = () => {
             controlMode: hwMode,
         });
         
-        const teamAColor = game?.teamA?.color || '#c0392b';
-        const teamBColor = game?.teamB?.color || '#eab308';
-        sendActivate(
+        const teamAColor = game?.teamA?.color;
+        const teamBColor = game?.teamB?.color;
+        sendActivateCommand(
             game?.teamA?.name || 'TEAM A', 
             game?.teamB?.name || 'TEAM B',
             teamAColor, 
             teamBColor
         );
 
-    }, [lanConnected, hwDeviceId, gameCode, game, hwMode, sendPairingPush, sendActivate]);
+    }, [lanConnected, relayConnected, hwDeviceId, gameCode, game, hwMode, sendPairingPush, sendActivateCommand]);
 
     // ── Feed live state back to ESP32 display ─────────────────────────────────────
     // Fires whenever scores, fouls, possession, or clock changes.

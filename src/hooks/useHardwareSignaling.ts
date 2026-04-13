@@ -71,6 +71,7 @@ export function useHardwareSignaling(
     const wsRef = useRef<WebSocket | null>(null);
     const lanActiveRef = useRef(false);
     const [lanConnected, setLanConnected] = useState(false);
+    const [relayConnected, setRelayConnected] = useState(false);
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const mountedRef = useRef(true);
@@ -157,26 +158,30 @@ export function useHardwareSignaling(
 
         ws.onmessage = (event) => {
             try {
-                const data = JSON.parse(event.data);
-                if (!data || data.t !== 'state') return;
-                // Map firmware state to HardwareSignal format
-                const signal: HardwareSignal = {
-                    action: 'SCORE_STATE',
-                    scoreA: data.score?.[0] ?? 0,
-                    scoreB: data.score?.[1] ?? 0,
-                    foulsA: data.fouls?.[0] ?? 0,
-                    foulsB: data.fouls?.[1] ?? 0,
-                    period: data.period ?? 1,
-                    gameRunning: data.clockSync?.running ?? false,
-                    possession: data.poss === 0 ? 'A' : 'B',
-                    // Pass clock sync anchors through for browser-side clock calculation
-                    clockStartedAt: data.clockSync?.startedAt ?? 0,
-                    clockValueAtStart: data.clockSync?.valueAtStart ?? 600,
-                    shotStartedAt: data.shotSync?.startedAt ?? 0,
-                    shotValueAtStart: data.shotSync?.valueAtStart ?? 24,
-                    timestamp: data.seq,
-                };
-                handleSignal(signal);
+                const raw = JSON.parse(event.data);
+                // New firmware sends { t: "state", seq, score, fouls, period, poss, 
+                // paused, clockSync, shotSync }
+                if (raw?.t === 'state') {
+                    const signal: HardwareSignal = {
+                        action: 'SCORE_STATE',
+                        scoreA: raw.score?.[0] ?? 0,
+                        scoreB: raw.score?.[1] ?? 0,
+                        foulsA: raw.fouls?.[0] ?? 0,
+                        foulsB: raw.fouls?.[1] ?? 0,
+                        period: raw.period ?? 1,
+                        gameRunning: raw.clockSync?.running ?? false,
+                        possession: raw.poss === 0 ? 'A' : 'B',
+                        clockStartedAt: raw.clockSync?.startedAt ?? 0,
+                        clockValueAtStart: raw.clockSync?.valueAtStart ?? 600,
+                        shotStartedAt: raw.shotSync?.startedAt ?? 0,
+                        shotValueAtStart: raw.shotSync?.valueAtStart ?? 24,
+                        timestamp: raw.seq,
+                    };
+                    handleSignal(signal);
+                    return;
+                }
+                // Legacy format fallback
+                if (raw?.payload) handleSignal(raw.payload as HardwareSignal);
             } catch { }
         };
 
@@ -229,6 +234,7 @@ export function useHardwareSignaling(
         ws.onopen = () => {
             if (!mountedRef.current) { ws.close(); return; }
             relayActiveRef.current = true;
+            setRelayConnected(true);
             console.log('[RELAY] Connected');
             // Request full state from ESP32
             ws.send(JSON.stringify({ event: 'requestState' }));
@@ -236,32 +242,37 @@ export function useHardwareSignaling(
 
         ws.onmessage = (event) => {
             try {
-                const data = JSON.parse(event.data);
-                if (!data || data.t !== 'state') return;
-                // Map firmware state to HardwareSignal format
-                const signal: HardwareSignal = {
-                    action: 'SCORE_STATE',
-                    scoreA: data.score?.[0] ?? 0,
-                    scoreB: data.score?.[1] ?? 0,
-                    foulsA: data.fouls?.[0] ?? 0,
-                    foulsB: data.fouls?.[1] ?? 0,
-                    period: data.period ?? 1,
-                    gameRunning: data.clockSync?.running ?? false,
-                    possession: data.poss === 0 ? 'A' : 'B',
-                    // Pass clock sync anchors through for browser-side clock calculation
-                    clockStartedAt: data.clockSync?.startedAt ?? 0,
-                    clockValueAtStart: data.clockSync?.valueAtStart ?? 600,
-                    shotStartedAt: data.shotSync?.startedAt ?? 0,
-                    shotValueAtStart: data.shotSync?.valueAtStart ?? 24,
-                    timestamp: data.seq,
-                };
-                handleSignal(signal);
+                const raw = JSON.parse(event.data);
+                // New firmware sends { t: "state", seq, score, fouls, period, poss, 
+                // paused, clockSync, shotSync }
+                if (raw?.t === 'state') {
+                    const signal: HardwareSignal = {
+                        action: 'SCORE_STATE',
+                        scoreA: raw.score?.[0] ?? 0,
+                        scoreB: raw.score?.[1] ?? 0,
+                        foulsA: raw.fouls?.[0] ?? 0,
+                        foulsB: raw.fouls?.[1] ?? 0,
+                        period: raw.period ?? 1,
+                        gameRunning: raw.clockSync?.running ?? false,
+                        possession: raw.poss === 0 ? 'A' : 'B',
+                        clockStartedAt: raw.clockSync?.startedAt ?? 0,
+                        clockValueAtStart: raw.clockSync?.valueAtStart ?? 600,
+                        shotStartedAt: raw.shotSync?.startedAt ?? 0,
+                        shotValueAtStart: raw.shotSync?.valueAtStart ?? 24,
+                        timestamp: raw.seq,
+                    };
+                    handleSignal(signal);
+                    return;
+                }
+                // Legacy format fallback
+                if (raw?.payload) handleSignal(raw.payload as HardwareSignal);
             } catch { }
         };
 
         ws.onclose = () => {
             relayActiveRef.current = false;
             relayWsRef.current = null;
+            setRelayConnected(false);
             if (!mountedRef.current) return;
             // Reconnect relay after 3s
             setTimeout(() => {
@@ -378,7 +389,7 @@ export function useHardwareSignaling(
         }
     }, []);
 
-    const sendActivate = useCallback((teamA: string, teamB: string, colorA: string, colorB: string) => {
+    const sendActivateCommand = useCallback((teamA: string, teamB: string, colorA = '#c0392b', colorB = '#eab308') => {
         const msg = JSON.stringify({
             t: 'cmd',
             action: 'activate',
@@ -398,8 +409,9 @@ export function useHardwareSignaling(
     return {
         sendToHardware,
         lanConnected, // reactive useState — triggers re-renders on connect/disconnect
+        relayConnected,
         retryLan,     // force a new LAN connection attempt
         sendPairingPush,
-        sendActivate,
+        sendActivateCommand,
     };
 }
