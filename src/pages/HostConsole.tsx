@@ -377,44 +377,29 @@ export const HostConsole: React.FC = () => {
 
     useEffect(() => {
         activationPushedRef.current = false;
-    }, [gameCode]);
+        relayReadyCallbackRef.current = null;
+    }, [gameCode, hwDeviceId]);
 
     useEffect(() => {
         if (!hwDeviceId || !gameCode || !game) return;
-        if (activationPushedRef.current) return;
-        activationPushedRef.current = true;
-        sendPairingPush({
-            status:      'active',
-            gameId:      gameCode,
-            teamA:       game?.teamA?.name || 'TEAM A',
-            teamB:       game?.teamB?.name || 'TEAM B',
-            colorA:      game?.teamA?.color || '#FF0000',
-            colorB:      game?.teamB?.color || '#0000FF',
-            controlMode: hwMode,
-        });
         
-        const teamAColor = game?.teamA?.color;
-        const teamBColor = game?.teamB?.color;
-        
-        relayReadyCallbackRef.current = () => {
-            sendActivateCommand(
-                game?.teamA?.name || 'TEAM A', 
-                game?.teamB?.name || 'TEAM B',
-                teamAColor, 
-                teamBColor
-            );
-        };
-        
-        if (lanConnected || relayConnected) {
-            sendActivateCommand(
-                game?.teamA?.name || 'TEAM A', 
-                game?.teamB?.name || 'TEAM B',
-                teamAColor, 
-                teamBColor
-            );
-        }
+        const teamA = game?.teamA?.name || 'TEAM A';
+        const teamB = game?.teamB?.name || 'TEAM B';
+        const colorA = game?.teamA?.color || '#c0392b';
+        const colorB = game?.teamB?.color || '#eab308';
 
-    }, [hwDeviceId, gameCode, game, hwMode, sendPairingPush, sendActivateCommand, relayReadyCallbackRef, lanConnected, relayConnected]);
+        // Always set the relay-ready callback so it fires when relay opens
+        relayReadyCallbackRef.current = () => {
+            sendActivateCommand(teamA, teamB, colorA, colorB);
+            activationPushedRef.current = true;
+        };
+
+        // If relay is already open, send immediately
+        if ((lanConnected || relayConnected) && !activationPushedRef.current) {
+            sendActivateCommand(teamA, teamB, colorA, colorB);
+            activationPushedRef.current = true;
+        }
+    }, [hwDeviceId, gameCode, game, lanConnected, relayConnected, sendActivateCommand, relayReadyCallbackRef]);
 
     // ── Feed live state back to ESP32 display ─────────────────────────────────────
     // Fires whenever scores, fouls, possession, or clock changes.
