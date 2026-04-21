@@ -140,6 +140,60 @@ export const initializeNewGame = async (
     return gameCode;
 };
 
+/**
+ * Create a game for any non-basketball sport.
+ * Uses the generic BaseGameSchema (passthrough) — no basketball-specific fields required.
+ */
+export const initializeGenericGame = async (params: {
+    gameName: string;
+    sportId: string;
+    rules: Record<string, unknown>;
+    settings: Record<string, unknown>;
+    initialState: Record<string, unknown>;
+    teamA: { name: string; color: string; players?: any[] };
+    teamB: { name: string; color: string; players?: any[] };
+    hostId: string;
+}): Promise<string> => {
+    const { validateGenericGame } = await import('../validation/gameSchema');
+    const gameCode = await generateGameCode();
+
+    const gameData = {
+        code: gameCode,
+        hostId: params.hostId,
+        sportId: params.sportId,
+        sport: params.sportId,
+        status: 'live' as const,
+        createdAt: Date.now(),
+        lastUpdate: Date.now(),
+        rules: params.rules,
+        settings: { gameName: params.gameName, ...params.settings },
+        state: params.initialState,
+        teamA: { name: params.teamA.name, color: params.teamA.color, score: 0, players: params.teamA.players ?? [] },
+        teamB: { name: params.teamB.name, color: params.teamB.color, score: 0, players: params.teamB.players ?? [] },
+    };
+
+    const validation = validateGenericGame(gameData);
+    if (!validation.success) {
+        throw new Error(`Invalid game data: ${validation.errors?.join(', ')}`);
+    }
+
+    const { error } = await supabase
+        .from('games')
+        .insert({
+            code: gameCode,
+            hostId: params.hostId,
+            sportId: params.sportId,
+            status: 'live',
+            gameType: 'online',
+            data: gameData,
+            lastUpdate: Date.now(),
+        });
+
+    if (error) throw new Error(`Failed to create game: ${error.message}`);
+    console.log(`[Supabase] Generic game ${gameCode} (${params.sportId}) created`);
+    return gameCode;
+};
+
 // ============================================
 // SUPABASE POSTGRES OPERATIONS (COLD DATA)
 // ============================================
@@ -465,6 +519,41 @@ import type { Game } from '../core/types/Game';
  *
  * This becomes unnecessary once all pages migrate to the v2 Game<T,R> shape.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// FINALIZE GAME (atomic: game + bracket in one RPC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Atomically complete a game and optionally advance the tournament bracket.
+ * Replaces the previous pattern of calling finishGame() + a separate
+ * tournament_fixtures update from the client (two round-trips, partial failure risk).
+ *
+ * When fixtureId + winnerSide are provided the RPC also:
+ *   - marks the fixture 'completed' with winnerSide
+ *   - propagates the winner name to the next bracket slot
+ *
+ * Falls back to the simple finishGame() call if the RPC fails.
+ */
+export const finalizeGameWithResult = async (
+    gameCode: string,
+    finalData: BasketballGame,
+    fixtureId?: string | null,
+    winnerSide?: 'A' | 'B' | null
+): Promise<boolean> => {
+    const { error } = await supabase.rpc('finalize_game_with_result', {
+        p_game_code:   gameCode,
+        p_final_data:  finalData,
+        p_fixture_id:  fixtureId  ?? null,
+        p_winner_side: winnerSide ?? null,
+    });
+
+    if (error) {
+        console.error('[GameService] finalizeGameWithResult RPC failed, falling back:', error);
+        return finishGame(gameCode);
+    }
+    return true;
+};
+
 export const toGenericGame = (bg: BasketballGame): Game<any, any> => ({
     id: bg.code,
     code: bg.code,

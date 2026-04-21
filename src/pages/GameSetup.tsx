@@ -9,6 +9,7 @@ import { useHardware } from '../contexts/HardwareContext';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Player } from '../types';
 import type { User } from '@supabase/supabase-js';
+import { SPORT_REGISTRY } from '../sports/registry';
 
 const TEAM_COLORS = [
   '#DC2626', '#2563EB', '#16A34A', '#F59E0B', '#FFFFFF', '#9333EA', '#EA580C', '#000000',
@@ -21,6 +22,18 @@ export const GameSetup: React.FC = () => {
   const [searchParams] = useSearchParams();
   const boxCodeParam = searchParams.get('box');
   const sportType = location.state?.sport || 'basketball';
+
+  // If this sport has its own setup page, delegate to it immediately.
+  const manifest = SPORT_REGISTRY[sportType];
+  if (manifest?.setupPage) {
+    const SportSetupPage = manifest.setupPage;
+    return (
+      <SportSetupPage
+        onLaunch={(code) => navigate(`/host/${code}`)}
+        onBack={() => navigate(-1)}
+      />
+    );
+  }
 
   // --- STATE ---
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -252,7 +265,7 @@ export const GameSetup: React.FC = () => {
         <button
           key={c}
           onClick={() => onSelect(c)}
-          className={`w-8 h-8 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 ${selected === c ? `scale-110 ring-2 ring-offset-2 ${theme === 'light' ? 'ring-[#2C2419] ring-offset-white' : 'ring-white ring-offset-black'}` : 'opacity-40 hover:opacity-100'}`}
+          className={`w-8 h-8 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 ${selected === c ? `scale-110 ring-2 ring-offset-2 ${theme === 'light' ? 'ring-slate-900 ring-offset-white' : 'ring-white ring-offset-black'}` : 'opacity-40 hover:opacity-100'}`}
           style={{ backgroundColor: c, border: c === '#000000' ? '1px solid #333' : 'none' }}
         />
       ))}
@@ -264,18 +277,18 @@ export const GameSetup: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen font-sans flex items-center justify-center p-4 md:p-8 ${theme === 'light' ? 'bg-[#F5F0EB] text-[#2C2419]' : 'bg-zinc-950 text-zinc-100'}`}>
+    <div className={`min-h-screen font-sans flex items-center justify-center p-4 md:p-8 ${theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-zinc-950 text-zinc-100'}`}>
       {/* Container */}
-      <div className={`w-full max-w-6xl rounded-2xl overflow-hidden flex flex-col h-[90vh] max-h-[850px] ${theme === 'light' ? 'bg-white border border-[#D4CCC3] shadow-[0_4px_16px_rgba(44,36,25,0.08),0_16px_48px_rgba(44,36,25,0.12)]' : 'bg-zinc-900 border border-zinc-800 shadow-2xl'}`}>
+      <div className={`w-full max-w-6xl rounded-2xl overflow-hidden flex flex-col h-[90vh] max-h-[850px] ${theme === 'light' ? 'bg-white border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,0.08),0_16px_48px_rgba(0,0,0,0.1)]' : 'bg-zinc-900 border border-zinc-800 shadow-2xl'}`}>
 
         {/* Header */}
-        <div className={`px-6 py-5 flex justify-between items-center shrink-0 ${theme === 'light' ? 'bg-[#FAFAF7] border-b border-[#E2DAD0]' : 'bg-zinc-950 border-b border-zinc-800'}`}>
+        <div className={`px-6 py-5 flex justify-between items-center shrink-0 ${theme === 'light' ? 'bg-slate-50 border-b border-slate-100' : 'bg-zinc-950 border-b border-zinc-800'}`}>
           <div className="flex items-center gap-6">
-            <button onClick={() => navigate(-1)} className={`w-10 h-10 rounded-full flex items-center justify-center transition-all text-xl active:scale-95 ${theme === 'light' ? 'bg-[#EDE5DA] border border-[#D4CCC3] text-[#8B7355] hover:bg-[#C45832] hover:text-white hover:border-[#C45832]' : 'bg-zinc-900 border border-zinc-700 text-zinc-400 hover:bg-white hover:text-black hover:border-white'}`}>←</button>
+            <button onClick={() => navigate(-1)} className={`w-10 h-10 rounded-full flex items-center justify-center transition-all text-xl active:scale-95 ${theme === 'light' ? 'bg-slate-100 border border-slate-200 text-slate-500 hover:bg-red-600 hover:text-white hover:border-red-600' : 'bg-zinc-900 border border-zinc-700 text-zinc-400 hover:bg-white hover:text-black hover:border-white'}`}>←</button>
             <div>
-              <h1 className={`text-xl font-black tracking-tight uppercase italic leading-none ${theme === 'light' ? 'text-[#2C2419]' : 'text-white'}`}>{sportType} CONFIG</h1>
+              <h1 className={`text-xl font-black tracking-tight uppercase italic leading-none ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>{sportType} CONFIG</h1>
               <div className="flex items-center gap-2 mt-1">
-                <div className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme === 'light' ? 'text-[#8B7355]' : 'text-zinc-500'}`}>
+                <div className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>
                   {step === 1 ? "Step 1: Match Settings" : "Step 2: Team Rosters"}
                 </div>
                 {/* Authority Switcher */}
@@ -303,7 +316,7 @@ export const GameSetup: React.FC = () => {
 
         {/* Step 1 Content */}
         {step === 1 && (
-          <div className={`flex-1 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-y-auto custom-scrollbar ${theme === 'light' ? 'bg-[#F5F0EB]/50' : 'bg-black/20'}`}>
+          <div className={`flex-1 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 overflow-y-auto custom-scrollbar ${theme === 'light' ? 'bg-slate-50/50' : 'bg-black/20'}`}>
 
             {/* Rules Section */}
             <div className="lg:col-span-7 flex flex-col gap-8">
@@ -313,8 +326,8 @@ export const GameSetup: React.FC = () => {
 
 
               {/* Match Details */}
-              <section className={`p-6 rounded-xl ${theme === 'light' ? 'bg-[#FAFAF7] border border-[#E2DAD0]' : 'bg-zinc-900/50 border border-zinc-800'}`}>
-                <h2 className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'light' ? 'text-[#8B7355]' : 'text-zinc-400'}`}><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> Match Details</h2>
+              <section className={`p-6 rounded-xl ${theme === 'light' ? 'bg-slate-50 border border-slate-100' : 'bg-zinc-900/50 border border-zinc-800'}`}>
+                <h2 className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> Match Details</h2>
                 <div className="space-y-6">
                   {/* AUTHORITY & STATUS BANNER */}
                   {isConnected && (
@@ -357,7 +370,7 @@ export const GameSetup: React.FC = () => {
                     <input
                       value={gameName}
                       onChange={(e) => setGameName(e.target.value)}
-                      className={`w-full p-4 text-base font-bold outline-none rounded-lg focus:ring-1 transition-all uppercase ${theme === 'light' ? 'bg-white border border-[#D4CCC3] text-[#2C2419] placeholder-[#B8AD9F] focus:border-[#C45832] focus:ring-[#C45832]' : 'bg-black border border-zinc-800 text-white placeholder-zinc-700 focus:border-blue-500 focus:ring-blue-500'}`}
+                      className={`w-full p-4 text-base font-bold outline-none rounded-lg focus:ring-1 transition-all uppercase ${theme === 'light' ? 'bg-white border border-slate-200 text-slate-900 placeholder-slate-300 focus:border-red-600 focus:ring-red-600' : 'bg-black border border-zinc-800 text-white placeholder-zinc-700 focus:border-blue-500 focus:ring-blue-500'}`}
                       placeholder="E.G. CHAMPIONSHIP FINAL"
                     />
                   </div>
@@ -397,8 +410,8 @@ export const GameSetup: React.FC = () => {
               </section>
 
               {/* Game Rules */}
-              <section className={`p-6 rounded-xl ${theme === 'light' ? 'bg-[#FAFAF7] border border-[#E2DAD0]' : 'bg-zinc-900/50 border border-zinc-800'}`}>
-                <h2 className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'light' ? 'text-[#8B7355]' : 'text-zinc-400'}`}><span className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></span> Rules</h2>
+              <section className={`p-6 rounded-xl ${theme === 'light' ? 'bg-slate-50 border border-slate-100' : 'bg-zinc-900/50 border border-zinc-800'}`}>
+                <h2 className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}><span className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></span> Rules</h2>
                 <div className="grid grid-cols-2 gap-8 items-stretch">
                   <div className="flex flex-col gap-6">
                     <div>
@@ -436,32 +449,32 @@ export const GameSetup: React.FC = () => {
 
             {/* Teams Section */}
             <div className="lg:col-span-5 flex flex-col gap-8">
-              <section className={`p-6 rounded-xl h-full flex flex-col ${theme === 'light' ? 'bg-[#FAFAF7] border border-[#E2DAD0]' : 'bg-zinc-900/50 border border-zinc-800'}`}>
-                <h2 className={`text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-2 ${theme === 'light' ? 'text-[#8B7355]' : 'text-zinc-400'}`}><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> Teams</h2>
+              <section className={`p-6 rounded-xl h-full flex flex-col ${theme === 'light' ? 'bg-slate-50 border border-slate-100' : 'bg-zinc-900/50 border border-zinc-800'}`}>
+                <h2 className={`text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-2 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> Teams</h2>
                 <div className="flex-1 flex flex-col gap-6">
-                  <div className={`p-5 rounded-xl group transition-colors ${theme === 'light' ? 'bg-[#FAFAF7] border border-[#D4CCC3] hover:border-[#B8AD9F]' : 'bg-black border border-zinc-700 hover:border-zinc-500'}`}>
-                    <label className={`text-[9px] font-bold tracking-widest block uppercase mb-2 ${theme === 'light' ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Home Team</label>
-                    <div className={`flex gap-4 mb-2 items-center p-3 rounded-lg transition-colors ${theme === 'light' ? 'bg-white border border-[#D4CCC3] focus-within:border-[#C45832]' : 'bg-zinc-900 border border-zinc-800 focus-within:border-white'}`}>
+                  <div className={`p-5 rounded-xl group transition-colors ${theme === 'light' ? 'bg-slate-50 border border-slate-200 hover:border-slate-300' : 'bg-black border border-zinc-700 hover:border-zinc-500'}`}>
+                    <label className={`text-[9px] font-bold tracking-widest block uppercase mb-2 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Home Team</label>
+                    <div className={`flex gap-4 mb-2 items-center p-3 rounded-lg transition-colors ${theme === 'light' ? 'bg-white border border-slate-200 focus-within:border-red-600' : 'bg-zinc-900 border border-zinc-800 focus-within:border-white'}`}>
                       <div className="w-10 h-10 rounded-full border-2 border-zinc-700 shadow-sm" style={{ background: teamAColor }}></div>
-                      <input value={teamAName} onChange={(e) => setTeamAName(e.target.value)} className={`flex-1 bg-transparent text-lg font-bold uppercase outline-none ${theme === 'light' ? 'text-[#2C2419] placeholder-[#B8AD9F]' : 'text-white placeholder-zinc-700'}`} placeholder="TEAM A" />
+                      <input value={teamAName} onChange={(e) => setTeamAName(e.target.value)} className={`flex-1 bg-transparent text-lg font-bold uppercase outline-none ${theme === 'light' ? 'text-slate-900 placeholder-slate-300' : 'text-white placeholder-zinc-700'}`} placeholder="TEAM A" />
                     </div>
                     <ColorPalette selected={teamAColor} onSelect={setTeamAColor} />
                   </div>
 
                   <div className="flex items-center justify-center text-zinc-700 font-black italic text-lg opacity-50">VS</div>
 
-                  <div className={`p-5 rounded-xl group transition-colors ${theme === 'light' ? 'bg-[#FAFAF7] border border-[#D4CCC3] hover:border-[#B8AD9F]' : 'bg-black border border-zinc-700 hover:border-zinc-500'}`}>
-                    <label className={`text-[9px] font-bold tracking-widest block uppercase mb-2 ${theme === 'light' ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Guest Team</label>
-                    <div className={`flex gap-4 mb-2 items-center p-3 rounded-lg transition-colors ${theme === 'light' ? 'bg-white border border-[#D4CCC3] focus-within:border-[#C45832]' : 'bg-zinc-900 border border-zinc-800 focus-within:border-white'}`}>
+                  <div className={`p-5 rounded-xl group transition-colors ${theme === 'light' ? 'bg-slate-50 border border-slate-200 hover:border-slate-300' : 'bg-black border border-zinc-700 hover:border-zinc-500'}`}>
+                    <label className={`text-[9px] font-bold tracking-widest block uppercase mb-2 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Guest Team</label>
+                    <div className={`flex gap-4 mb-2 items-center p-3 rounded-lg transition-colors ${theme === 'light' ? 'bg-white border border-slate-200 focus-within:border-red-600' : 'bg-zinc-900 border border-zinc-800 focus-within:border-white'}`}>
                       <div className="w-10 h-10 rounded-full border-2 border-zinc-700 shadow-sm" style={{ background: teamBColor }}></div>
-                      <input value={teamBName} onChange={(e) => setTeamBName(e.target.value)} className={`flex-1 bg-transparent text-lg font-bold uppercase outline-none ${theme === 'light' ? 'text-[#2C2419] placeholder-[#B8AD9F]' : 'text-white placeholder-zinc-700'}`} placeholder="TEAM B" />
+                      <input value={teamBName} onChange={(e) => setTeamBName(e.target.value)} className={`flex-1 bg-transparent text-lg font-bold uppercase outline-none ${theme === 'light' ? 'text-slate-900 placeholder-slate-300' : 'text-white placeholder-zinc-700'}`} placeholder="TEAM B" />
                     </div>
                     <ColorPalette selected={teamBColor} onSelect={setTeamBColor} />
                   </div>
                 </div>
                 <button
                   onClick={() => trackStats ? setStep(2) : finalizeAndLaunch()}
-                  className={`mt-8 w-full font-black py-4 rounded-xl uppercase tracking-widest text-xs shadow-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all ${theme === 'light' ? 'bg-[#C45832] hover:bg-[#A84828] text-white' : 'bg-white hover:bg-zinc-200 text-black'}`}
+                  className={`mt-8 w-full font-black py-4 rounded-xl uppercase tracking-widest text-xs shadow-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all ${theme === 'light' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-white hover:bg-zinc-200 text-black'}`}
                 >
                   {trackStats ? "Next: Rosters" : "Initialize Console"} <span className="text-xl">→</span>
                 </button>

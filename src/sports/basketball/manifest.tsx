@@ -152,6 +152,11 @@ const WallCard: React.FC<WallCardProps<BasketballState>> = ({ state, context }) 
 export const basketballManifest: SportManifest<BasketballState, BasketballAction, BasketballRules> = {
     id: 'basketball',
     label: 'Basketball',
+    icon: '🏀',
+    description: 'Live quarter scoring with shot clock & fouls',
+    category: 'core',
+    accent: 'bg-orange-500',
+    devStatus: 'live',
     scoringMode: 'timer-points',
     rules: {
         periods: 4,

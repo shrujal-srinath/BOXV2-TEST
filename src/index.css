@@ -6,6 +6,29 @@
   font-family: Inter, system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+
+  /* ── Light mode design tokens ── */
+  --surface:        #F8FAFC;
+  --surface-card:   #FFFFFF;
+  --surface-raised: #F1F5F9;
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #94A3B8;
+  --border:         #E2E8F0;
+  --border-subtle:  #F1F5F9;
+  --brand-red:      #DC2626;
+  --accent-blue:    #1D4ED8;
+}
+
+.dark {
+  --surface:        #09090B;
+  --surface-card:   #18181B;
+  --surface-raised: #27272A;
+  --text-primary:   #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-muted:     #52525B;
+  --border:         #27272A;
+  --border-subtle:  #18181B;
 }
 
 /* === UTILITY: Sharp Corners & Scrollbars === */
@@ -13,6 +36,20 @@ input,
 button,
 .rounded-sm {
   border-radius: 2px !important;
+}
+
+/* Pill-shaped and circular buttons must keep their full radius */
+button.rounded-full {
+  border-radius: 9999px !important;
+}
+button.rounded-2xl {
+  border-radius: 1rem !important;
+}
+button.rounded-xl {
+  border-radius: 0.75rem !important;
+}
+button.rounded-lg {
+  border-radius: 0.5rem !important;
 }
 
 ::-webkit-scrollbar {
@@ -125,22 +162,35 @@ button,
   animation-play-state: paused;
 }
 
-/* === SAFETY OVERRIDE FOR MOBILE === */
-@media screen and (orientation: portrait) {
+@keyframes scroll-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(8px); opacity: 1; }
+}
 
+.animate-bounce-slow {
+  animation: scroll-bounce 2s ease-in-out infinite;
+}
+
+/* === SAFARI SCROLL FIX === */
+/* overflow-x: hidden on html breaks vertical scroll in Safari — use clip instead */
+html {
+  overflow-x: clip;
+}
+
+/* === SAFETY OVERRIDE FOR MOBILE === */
+@media screen and (orientation: portrait),
+       screen and (orientation: landscape) and (max-width: 1024px) {
   html,
   body,
   #root {
     display: block !important;
     position: relative !important;
     overflow-y: auto !important;
-    overflow-x: hidden !important;
     width: 100% !important;
     height: auto !important;
     min-height: 100vh !important;
     transform: none !important;
     visibility: visible !important;
     @apply bg-gray-50 dark:bg-black;
-    /* Dynamic background */
   }
 }

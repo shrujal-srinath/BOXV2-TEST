@@ -28,7 +28,10 @@ export const TournamentSetup: React.FC = () => {
     const [tempImageSrc, setTempImageSrc] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const availableSports: SchedulableSport[] = ['basketball', 'badminton', 'volleyball', 'kabaddi', 'football', 'cricket'];
+    const availableSports: SchedulableSport[] = [
+      'basketball', 'badminton', 'volleyball', 'kabaddi', 'tabletennis', 'general',
+      'cricket', 'football', 'hockey', 'khokho', 'netball', 'tennis', 'handball', 'throwball', 'chess', 'carrom', 'athletics',
+    ];
 
     // HANDLERS
     const toggleSport = (sport: SchedulableSport) => {

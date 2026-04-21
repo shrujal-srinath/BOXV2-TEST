@@ -70,6 +70,20 @@ export interface WallCardProps<TState> {
 
 // ─── The Sport Manifest Contract ───────────────────────────────────────────
 
+/** Development status of a sport in the registry */
+export type SportDevStatus = 'live' | 'beta' | 'under-development';
+
+/** Props passed into every sport-specific setup page component */
+export interface SportSetupPageProps {
+    /** Called with the new game code after the game is created in Supabase */
+    onLaunch: (gameCode: string) => void;
+    /** Called when the user wants to go back to Dashboard */
+    onBack: () => void;
+}
+
+/** Registry category — controls Dashboard placement */
+export type SportCategory = 'core' | 'extended';
+
 /**
  * THE SPORT MANIFEST CONTRACT
  * Every sport folder (e.g., src/sports/basketball/manifest.tsx) must export
@@ -79,6 +93,11 @@ export interface SportManifest<TState, TAction, TRules> {
     // 1. Metadata
     id: string;                  // Must match the folder name / DB sportId
     label: string;               // e.g., "Basketball"
+    icon: string;                // Emoji icon for the sport card
+    description: string;         // Short one-line description shown on sport card
+    category: SportCategory;     // 'core' = always visible, 'extended' = "More Sports"
+    accent: string;              // Tailwind bg class for the sport card accent strip
+    devStatus: SportDevStatus;   // 'live' | 'beta' | 'under-development'
     scoringMode: ScoringMode;    // Tells the UI which scoring family this belongs to
 
     // 2. State & Logic Management (Redux Pattern)
@@ -100,4 +119,7 @@ export interface SportManifest<TState, TAction, TRules> {
         WallCard: React.FC<WallCardProps<TState>>;
         SpectatorView: React.FC<SpectatorProps<TState>>;
     };
+
+    // 6. Optional sport-specific setup page (replaces the generic GameSetup flow)
+    setupPage?: React.FC<SportSetupPageProps>;
 }

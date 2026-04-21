@@ -26,6 +26,8 @@ import { ThemeProvider } from './contexts/ThemeContext';
 
 // ── Website pages ──────────────────────────────────────────
 import { LandingPage } from './pages/LandingPage';
+import { HomePage } from './pages/HomePage';
+import { WatchPage } from './pages/WatchPage';
 import { Dashboard } from './pages/Dashboard';
 import { GameSetup } from './pages/GameSetup';
 import { HostConsole } from './pages/HostConsole';
@@ -37,6 +39,7 @@ import { TournamentDashboard } from './pages/TournamentDashboard';
 import { TournamentSetup } from './pages/TournamentSetup';
 import { TournamentManager } from './pages/TournamentManager';
 import { TournamentViewer } from './pages/TournamentViewer';
+import { PlayerPassportPage } from './pages/PlayerPassportPage';
 import { VolunteerConsole } from './pages/VolunteerConsole';
 import RefereeScreen from './pages/RefereeScreen'; // <-- Added Referee Route
 import ArenaView from './pages/ArenaView';         // <-- Added Arena Route
@@ -67,22 +70,55 @@ const isPWA =
 // When the same URL is opened from the home screen icon,
 // they get redirected to the tablet UI immediately.
 // ─────────────────────────────────────────────────────────────
-const RootRedirect: React.FC = () =>
-  isPWA ? <Navigate to="/tablet/standalone" replace /> : <LandingPage />;
+// RootRedirect is now auth-aware.
+// Rendered inside App so it can receive userId + authLoading as props.
+const RootRedirect: React.FC<{ userId: string | null; authLoading: boolean }> = ({ userId, authLoading }) => {
+  if (isPWA) return <Navigate to="/tablet/standalone" replace />;
+  if (authLoading) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="animate-pulse text-zinc-600 font-mono text-xs uppercase tracking-widest">Loading...</div>
+    </div>
+  );
+  return userId ? <HomePage /> : <LandingPage />;
+};
 
 // ─────────────────────────────────────────────────────────────
+// Read cached Supabase session from localStorage synchronously so the root
+// route never flickers on "Loading..." when the user is already signed in.
+function getCachedUserId(): string | null {
+  try {
+    const key = Object.keys(localStorage).find(
+      (k) => k.startsWith('sb-') && k.endsWith('-auth-token')
+    );
+    if (!key) return null;
+    const session = JSON.parse(localStorage.getItem(key) || '{}');
+    return session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function App() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(getCachedUserId);
+  // If we already have a cached user, skip the loading screen entirely.
+  const [authLoading, setAuthLoading] = useState(() => getCachedUserId() === null);
 
   useEffect(() => {
-    return subscribeToAuth((u) => setUserId(u?.id || null));
+    // Safety net: never block the UI for more than 3 s waiting for Supabase auth.
+    const timeout = setTimeout(() => setAuthLoading(false), 3000);
+    const unsub = subscribeToAuth((u) => {
+      setUserId(u?.id || null);
+      setAuthLoading(false);
+      clearTimeout(timeout);
+    });
+    return () => { unsub(); clearTimeout(timeout); };
   }, []);
 
   return (
     <ThemeProvider>
       <Router>
         <HardwareProvider userId={userId}>
-          <div className="min-h-screen bg-gray-50 text-zinc-900 dark:bg-black dark:text-white font-sans transition-colors duration-300">
+          <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-black dark:text-white font-sans transition-colors duration-300">
             <Routes>
 
               {/* ══════════════════════════════════════════════
@@ -97,7 +133,8 @@ function App() {
               {/* ══════════════════════════════════════════════
               WEBSITE — PUBLIC ROUTES
               ══════════════════════════════════════════════ */}
-              <Route path="/" element={<RootRedirect />} />
+              <Route path="/" element={<RootRedirect userId={userId} authLoading={authLoading} />} />
+              <Route path="/watch-live" element={<WatchPage />} />
               <Route path="/watch/:gameCode" element={<SpectatorView />} />
               <Route path="/game/:code/shots" element={<ShotChartView />} />
               <Route path="/tv" element={<TvKiosk />} />
@@ -135,6 +172,10 @@ function App() {
               } />
               <Route path="/tournament/:id/manage" element={
                 <ProtectedHostRoute><TournamentManager /></ProtectedHostRoute>
+              } />
+
+              <Route path="/player/register" element={
+                <ProtectedHostRoute><PlayerPassportPage /></ProtectedHostRoute>
               } />
 
               {/* ══════════════════════════════════════════════

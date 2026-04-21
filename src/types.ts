@@ -39,6 +39,9 @@ export type {
   SportComponentProps,
   SpectatorProps,
   WallCardProps,
+  SportDevStatus,
+  SportCategory,
+  SportSetupPageProps,
 } from './core/types/Manifest';
 
 // ╔════════════════════════════════════════════════════════════════════════════╗
@@ -155,14 +158,25 @@ export interface BasketballGame {
 
 /** All sports that can be scheduled in a tournament */
 export type SchedulableSport =
+  // ── Core sports (always shown on Dashboard) ──────────────────────────────
   | 'basketball'
   | 'badminton'
   | 'volleyball'
-  | 'football'
   | 'kabaddi'
   | 'tabletennis'
+  | 'general'
+  // ── Extended sports ("More Sports" section) ───────────────────────────────
   | 'cricket'
-  | 'general';
+  | 'football'
+  | 'hockey'
+  | 'khokho'
+  | 'netball'
+  | 'tennis'
+  | 'handball'
+  | 'throwball'
+  | 'chess'
+  | 'carrom'
+  | 'athletics';
 
 /**
  * Alias kept for import compatibility across the codebase.
@@ -307,3 +321,107 @@ export interface TournamentConfig {
     };
   };
 }
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  10. PLAYER PASSPORT — full athlete identity system                      ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+export interface PlayerProfile {
+  id: string;
+  auth_user_id: string | null;
+
+  // Identity
+  full_name: string;
+  display_name: string | null;
+  date_of_birth: string | null;       // ISO date 'YYYY-MM-DD'
+  gender: 'male' | 'female' | 'other' | 'prefer_not_to_say' | null;
+
+  // Contact
+  phone_number: string | null;
+  email: string | null;
+
+  // Academic
+  usn: string | null;
+  college_name: string | null;
+  college_roll_no: string | null;
+
+  // Physical
+  height_cm: number | null;
+  weight_kg: number | null;
+  dominant_hand: 'left' | 'right' | 'ambidextrous' | null;
+
+  // Athletic defaults
+  primary_position: string | null;
+  jersey_number: string | null;
+  sport_ids: string[];
+
+  // Profile
+  bio: string | null;
+  profile_photo_url: string | null;
+
+  // Passport
+  player_code: string;
+  is_verified: boolean;
+  is_claimed: boolean;
+  registered_by: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlayerTeam {
+  id: string;
+  player_id: string;
+  team_type: 'college' | 'club' | 'school' | 'state' | 'national' | 'pickup';
+  team_name: string;
+  jersey_number: string | null;
+  position: string | null;
+  role: 'player' | 'captain' | 'vice_captain' | 'coach' | null;
+  season_from: string | null;
+  season_to: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PlayerSportStats {
+  id: string;
+  player_id: string;
+  sport_id: string;
+  games_played: number;
+  total_score: number;
+  stats: Record<string, any>;
+  last_played_at: string | null;
+  updated_at: string;
+}
+
+export interface PlayerGameLog {
+  id: string;
+  player_id: string;
+  game_code: string;
+  sport_id: string;
+  tournament_id: string | null;
+  team_side: 'A' | 'B' | null;
+  team_name: string | null;
+  score_contribution: number;
+  sport_stats: Record<string, any>;
+  input_method: string;
+  created_at: string;
+}
+
+export interface PlayerLeaderboardRow {
+  player_id: string;
+  full_name: string;
+  display_name: string | null;
+  jersey_number: string | null;
+  player_code: string;
+  college_name: string | null;
+  profile_photo_url: string | null;
+  sport_ids: string[];
+  sport_id: string;
+  games_played: number;
+  total_score: number;
+  stats: Record<string, any>;
+}
+
+/** @deprecated — alias kept for any code that may still reference PlayerPassport */
+export type PlayerPassport = PlayerProfile;

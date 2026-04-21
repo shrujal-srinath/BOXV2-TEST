@@ -16,10 +16,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGameEngine } from '../core/engine/useGameEngine';
-import { SPORT_REGISTRY } from '../sports/registry';
+import { SPORT_REGISTRY, isSportSupported } from '../sports/registry';
 import { deleteGame, subscribeToGame } from '../services/supabaseGameService';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 import { usePersistEngine } from '../hooks/usePersistEngine';
+import { useGenericPersistEngine } from '../hooks/useGenericPersistEngine';
+import type { GameContext } from '../core/types/Manifest';
 
 import { useHardwareSignaling } from '../hooks/useHardwareSignaling';
 import { useHardware } from '../contexts/HardwareContext';
@@ -143,18 +145,25 @@ export const HostConsole: React.FC = () => {
     }, [gameCode]);
 
     // --- 2. ENGINE SWAP ---
-    const manifest = SPORT_REGISTRY['basketball'];
+    const sportId = dbGame?.sportId || dbGame?.sport || 'basketball';
+    const manifest = isSportSupported(sportId) ? SPORT_REGISTRY[sportId] : SPORT_REGISTRY['basketball'];
 
-    // Synthesize the engine state from the DB data, or use defaults
-    const engineInitialState = dbGame ? {
-        scoreA: dbGame.teamA?.score ?? 0,
-        scoreB: dbGame.teamB?.score ?? 0,
-        foulsA: dbGame.teamA?.fouls ?? 0,
-        foulsB: dbGame.teamB?.fouls ?? 0,
-        timeoutsA: dbGame.teamA?.timeouts ?? 0,
-        timeoutsB: dbGame.teamB?.timeouts ?? 0,
-        possession: dbGame.gameState?.possession ?? 'A'
-    } : manifest.createInitialState(manifest.rules);
+    // Synthesize the engine state from the DB data, or use defaults.
+    // Non-basketball sports store full state in dbGame.state — use it directly.
+    // Basketball synthesizes from team-level fields (legacy flat schema).
+    const engineInitialState = dbGame ? (
+        sportId !== 'basketball' && dbGame.state
+            ? dbGame.state
+            : {
+                scoreA: dbGame.teamA?.score ?? 0,
+                scoreB: dbGame.teamB?.score ?? 0,
+                foulsA: dbGame.teamA?.fouls ?? 0,
+                foulsB: dbGame.teamB?.fouls ?? 0,
+                timeoutsA: dbGame.teamA?.timeouts ?? 0,
+                timeoutsB: dbGame.teamB?.timeouts ?? 0,
+                possession: dbGame.gameState?.possession ?? 'A',
+            }
+    ) : manifest.createInitialState(manifest.rules);
 
     // Pass the synthesized state into the engine
     const { state, dispatch } = useGameEngine(
@@ -164,7 +173,11 @@ export const HostConsole: React.FC = () => {
         true
     );
 
-    usePersistEngine(gameCode || null, dbGame, state, !!dbGame && !!gameCode);
+    // Basketball uses the typed adapter-based persist hook.
+    // All other sports use the generic state-passthrough persist hook.
+    const isBasketball = sportId === 'basketball';
+    usePersistEngine(gameCode || null, dbGame, state, !!dbGame && !!gameCode && isBasketball);
+    useGenericPersistEngine(gameCode || null, state, !!dbGame && !!gameCode && !isBasketball);
 
     // --- 3. THE UI FACADE (Protects all HTML below) ---
     const game = dbGame ? {
@@ -718,6 +731,27 @@ export const HostConsole: React.FC = () => {
         );
     }
 
+    // ── Early return: non-basketball sports use their own manifest console ──
+    if (!isBasketball && game) {
+        const SportConsole = manifest.components.HostConsole;
+        const sportContext: GameContext = {
+            gameCode: gameCode || '',
+            teamA: { id: 'A', name: game.teamA.name, color: game.teamA.color, score: (state as any).scoreA ?? game.teamA.score },
+            teamB: { id: 'B', name: game.teamB.name, color: game.teamB.color, score: (state as any).scoreB ?? game.teamB.score },
+            sportLabel: manifest.label,
+        };
+        return (
+            <SportConsole
+                gameId={gameCode || ''}
+                state={state}
+                dispatch={dispatch}
+                context={sportContext}
+                isOffline={false}
+                syncQueueCount={0}
+            />
+        );
+    }
+
     // ── Early return: Advanced mode takes over the whole page ─────────────
     if (isAdvancedMode && game) {
         return (
@@ -766,24 +800,24 @@ export const HostConsole: React.FC = () => {
     const activePlayers = pendingAction?.team === 'A' ? teamAPlayers : teamBPlayers;
 
     return (
-        <div className={`min-h-screen font-sans flex flex-col overflow-hidden ${L ? 'bg-[#F5F0EB] text-[#2C2419]' : 'bg-black text-white'}`}>
+        <div className={`min-h-screen font-sans flex flex-col overflow-hidden ${L ? 'bg-slate-50 text-slate-900' : 'bg-black text-white'}`}>
             <style>{CONSOLE_CSS}</style>
 
             {/* ── HEADER ────────────────────────────────────────────────────── */}
-            <header className={`h-16 flex justify-between items-center px-4 lg:px-6 shrink-0 z-50 relative ${L ? 'bg-white/90 border-b border-[#D4CCC3] shadow-[0_1px_3px_rgba(44,36,25,0.04)]' : 'bg-zinc-950 border-b border-zinc-800'} backdrop-blur-md`}>
+            <header className={`h-16 flex justify-between items-center px-4 lg:px-6 shrink-0 z-50 relative ${L ? 'bg-white/90 border-b border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]' : 'bg-zinc-950 border-b border-zinc-800'} backdrop-blur-md`}>
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => setShowBackConfirm(true)}
-                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-95 ${L ? 'bg-[#EDE5DA] border border-[#D4CCC3] text-[#8B7355] hover:text-[#2C2419]' : 'bg-black border border-zinc-700 text-zinc-400 hover:text-white'}`}
+                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors active:scale-95 ${L ? 'bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-900' : 'bg-black border border-zinc-700 text-zinc-400 hover:text-white'}`}
                     >
                         ←
                     </button>
 
-                    <div className={`flex items-center rounded-md p-1 gap-1 ${L ? 'bg-[#EDE5DA] border border-[#D4CCC3]' : 'bg-zinc-900 border border-zinc-800'}`}>
-                        <div className={`px-3 py-1 rounded text-xs font-mono font-bold tracking-wider select-all ${L ? 'bg-white text-[#8B7355]' : 'bg-black text-zinc-400'}`} title="Game Code">
+                    <div className={`flex items-center rounded-md p-1 gap-1 ${L ? 'bg-slate-100 border border-slate-200' : 'bg-zinc-900 border border-zinc-800'}`}>
+                        <div className={`px-3 py-1 rounded text-xs font-mono font-bold tracking-wider select-all ${L ? 'bg-white text-slate-500' : 'bg-black text-zinc-400'}`} title="Game Code">
                             {gameCode}
                         </div>
-                        <button onClick={copyGameCode} title="Copy Code" className={`p-1.5 rounded transition-all ${L ? 'text-[#8B7355] hover:text-[#2C2419] hover:bg-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}>
+                        <button onClick={copyGameCode} title="Copy Code" className={`p-1.5 rounded transition-all ${L ? 'text-slate-500 hover:text-slate-900 hover:bg-white' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}>
                             {copied ? <Icons.Check /> : <span className="text-sm">📋</span>}
                         </button>
                     </div>
@@ -791,7 +825,7 @@ export const HostConsole: React.FC = () => {
                     <div className="relative">
                         <button
                             onClick={() => setShareMenuOpen(!shareMenuOpen)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${L ? 'bg-white border border-[#D4CCC3] text-[#8B7355] hover:text-[#2C2419] hover:bg-[#EDE5DA]' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${L ? 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
                         >
                             <span className="text-sm">🔗</span>
                             <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">Share</span>
@@ -800,12 +834,12 @@ export const HostConsole: React.FC = () => {
                         {shareMenuOpen && (
                             <>
                                 <div className="fixed inset-0 z-40" onClick={() => setShareMenuOpen(false)}></div>
-                                <div className={`absolute left-0 top-full mt-2 w-52 rounded shadow-2xl overflow-hidden z-50 ${L ? 'bg-white border border-[#D4CCC3]' : 'bg-zinc-950 border border-zinc-800'}`}>
-                                    <button onClick={openWatchLink} className={`w-full px-4 py-3 text-left text-sm transition-colors ${L ? 'hover:bg-[#EDE5DA]' : 'hover:bg-zinc-900'}`}>
+                                <div className={`absolute left-0 top-full mt-2 w-52 rounded shadow-2xl overflow-hidden z-50 ${L ? 'bg-white border border-slate-200' : 'bg-zinc-950 border border-zinc-800'}`}>
+                                    <button onClick={openWatchLink} className={`w-full px-4 py-3 text-left text-sm transition-colors ${L ? 'hover:bg-slate-100' : 'hover:bg-zinc-900'}`}>
                                         <span className="text-blue-400">↗</span> Open in New Tab
                                     </button>
-                                    <div className={`h-px ${L ? 'bg-[#E2DAD0]' : 'bg-zinc-800'}`}></div>
-                                    <button onClick={shareWatchLink} className={`w-full px-4 py-3 text-left text-sm transition-colors ${L ? 'hover:bg-[#EDE5DA]' : 'hover:bg-zinc-900'}`}>
+                                    <div className={`h-px ${L ? 'bg-slate-100' : 'bg-zinc-800'}`}></div>
+                                    <button onClick={shareWatchLink} className={`w-full px-4 py-3 text-left text-sm transition-colors ${L ? 'hover:bg-slate-100' : 'hover:bg-zinc-900'}`}>
                                         🔗 Share Link
                                     </button>
                                 </div>
@@ -914,11 +948,11 @@ export const HostConsole: React.FC = () => {
                             )}
                         </div>
                     )}
-                    <button onClick={() => setShowHelp(true)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${L ? 'bg-white border border-[#D4CCC3] text-[#8B7355] hover:text-[#2C2419] hover:bg-[#EDE5DA]' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>
+                    <button onClick={() => setShowHelp(true)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${L ? 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>
                         <span className="text-sm">?</span>
                         <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">Help</span>
                     </button>
-                    <button onClick={handleExportStats} className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${L ? 'bg-white border border-[#D4CCC3] text-[#8B7355] hover:text-[#2C2419] hover:bg-[#EDE5DA]' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>
+                    <button onClick={handleExportStats} className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${L ? 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>
                         <span className="text-sm">⬇</span>
                         <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">Export</span>
                     </button>
@@ -929,17 +963,17 @@ export const HostConsole: React.FC = () => {
             </header>
 
             {/* ── JUMBOTRON SCOREBOARD ──────────────────────────────────────── */}
-            <div className={`flex-1 relative flex flex-col justify-center overflow-hidden ${L ? 'bg-[#EDE5DA]' : 'bg-black'}`}>
+            <div className={`flex-1 relative flex flex-col justify-center overflow-hidden ${L ? 'bg-slate-100' : 'bg-black'}`}>
                 <div className={`absolute inset-0 pointer-events-none ${L ? 'bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.6)_0%,_transparent_70%)]' : 'bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black'}`}></div>
 
                 <div className="relative z-10 w-full max-w-7xl mx-auto p-4 lg:p-6">
                     <div className="grid grid-cols-12 gap-4 lg:gap-8 h-full max-h-[600px] min-h-[400px]">
 
                         {/* TEAM A PANEL */}
-                        <div className={`col-span-4 rounded-2xl p-4 lg:p-6 flex flex-col relative overflow-hidden ${L ? 'bg-white border border-[#D4CCC3] shadow-[0_2px_8px_rgba(44,36,25,0.06)]' : 'bg-zinc-900/40 border border-zinc-800'}`}>
+                        <div className={`col-span-4 rounded-2xl p-4 lg:p-6 flex flex-col relative overflow-hidden ${L ? 'bg-white border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)]' : 'bg-zinc-900/40 border border-zinc-800'}`}>
                             <div className="absolute top-0 left-0 w-full h-2" style={{ background: game.teamA.color }}></div>
                             <div className="flex justify-between items-start mb-2">
-                                <h2 className={`text-2xl lg:text-4xl font-black italic uppercase tracking-tighter truncate max-w-[85%] ${L ? 'text-[#2C2419]' : 'text-white'}`}>
+                                <h2 className={`text-2xl lg:text-4xl font-black italic uppercase tracking-tighter truncate max-w-[85%] ${L ? 'text-slate-900' : 'text-white'}`}>
                                     {game.teamA.name}
                                 </h2>
                                 {game.gameState.possession === 'A' && (
@@ -948,24 +982,24 @@ export const HostConsole: React.FC = () => {
                             </div>
                             <div className="flex-1 flex items-center justify-center">
                                 <div
-                                    className={`text-[8rem] lg:text-[11rem] font-mono font-bold leading-none tracking-tighter tabular-nums ${L ? 'text-[#2C2419]' : 'text-white drop-shadow-2xl'}`}
+                                    className={`text-[8rem] lg:text-[11rem] font-mono font-bold leading-none tracking-tighter tabular-nums ${L ? 'text-slate-900' : 'text-white drop-shadow-2xl'}`}
                                     style={{ textShadow: `0 0 50px ${game.teamA.color}40` }}
                                 >
                                     {game.teamA.score}
                                 </div>
                             </div>
-                            <div className={`flex justify-between items-end pt-3 border-t ${L ? 'border-[#E2DAD0]' : 'border-zinc-800'}`}>
+                            <div className={`flex justify-between items-end pt-3 border-t ${L ? 'border-slate-100' : 'border-zinc-800'}`}>
                                 <div className="text-center">
-                                    <div className={`text-[10px] font-bold uppercase tracking-widest ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Fouls</div>
+                                    <div className={`text-[10px] font-bold uppercase tracking-widest ${L ? 'text-slate-500' : 'text-zinc-500'}`}>Fouls</div>
                                     <div className="text-4xl font-mono font-bold text-red-500 tabular-nums">{game.teamA.fouls}</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>
+                                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>
                                         Timeouts ({game.teamA.timeouts})
                                     </div>
                                     <div className="flex gap-1.5">
                                         {[...Array(5)].map((_, i) => (
-                                            <div key={i} className={`w-3 h-5 rounded-sm transition-all ${i < game.teamA.timeouts ? (L ? 'bg-[#B8860B]' : 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]') : (L ? 'bg-[#D4CCC3]' : 'bg-zinc-800/50')}`}></div>
+                                            <div key={i} className={`w-3 h-5 rounded-sm transition-all ${i < game.teamA.timeouts ? (L ? 'bg-yellow-700' : 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]') : (L ? 'bg-slate-200' : 'bg-zinc-800/50')}`}></div>
                                         ))}
                                     </div>
                                 </div>
@@ -974,9 +1008,9 @@ export const HostConsole: React.FC = () => {
 
                         {/* CENTER CLOCK TOWER */}
                         <div className="col-span-4 flex flex-col gap-4 relative z-20">
-                            <div className={`flex-1 border-2 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden ${L ? 'bg-white border-[#D4CCC3] shadow-[0_2px_8px_rgba(44,36,25,0.06)]' : 'bg-black border-zinc-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]'}`}>
-                                <div className={`text-[10px] font-bold uppercase tracking-[0.4em] mb-2 z-10 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Game Time</div>
-                                <div className={`relative z-10 flex items-baseline gap-1 transition-colors duration-300 ${timer.gameRunning ? (L ? 'text-[#2C2419]' : 'text-white') : (L ? 'text-[#A08B6E]' : 'text-zinc-400')}`}>
+                            <div className={`flex-1 border-2 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden ${L ? 'bg-white border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)]' : 'bg-black border-zinc-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]'}`}>
+                                <div className={`text-[10px] font-bold uppercase tracking-[0.4em] mb-2 z-10 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>Game Time</div>
+                                <div className={`relative z-10 flex items-baseline gap-1 transition-colors duration-300 ${timer.gameRunning ? (L ? 'text-slate-900' : 'text-white') : (L ? 'text-slate-400' : 'text-zinc-400')}`}>
                                     <span className={`text-[6rem] lg:text-[8.5rem] font-mono font-bold leading-none tracking-tight tabular-nums ${L ? '' : 'drop-shadow-xl'}`}>
                                         {formatTime(timer.minutes)}:{formatTime(timer.seconds)}
                                     </span>
@@ -984,12 +1018,12 @@ export const HostConsole: React.FC = () => {
                             </div>
 
                             <div className="h-40 grid grid-cols-2 gap-4">
-                                <div className={`rounded-xl flex flex-col items-center justify-center backdrop-blur-sm ${L ? 'bg-white border border-[#D4CCC3]' : 'bg-zinc-900/80 border border-zinc-800'}`}>
-                                    <span className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Period</span>
-                                    <span className={`text-6xl font-black italic ${L ? 'text-[#2C2419]' : 'text-white'}`}>{getPeriodName(timer.period)}</span>
+                                <div className={`rounded-xl flex flex-col items-center justify-center backdrop-blur-sm ${L ? 'bg-white border border-slate-200' : 'bg-zinc-900/80 border border-zinc-800'}`}>
+                                    <span className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>Period</span>
+                                    <span className={`text-6xl font-black italic ${L ? 'text-slate-900' : 'text-white'}`}>{getPeriodName(timer.period)}</span>
                                 </div>
-                                <div className={`border-2 rounded-xl flex flex-col items-center justify-center relative overflow-hidden shadow-lg ${L ? 'bg-[#F0EAE2] border-[#D4CCC3]' : 'bg-black border-zinc-800'}`}>
-                                    <span className={`text-[10px] font-bold uppercase tracking-widest mb-1 relative z-10 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Shot Clock</span>
+                                <div className={`border-2 rounded-xl flex flex-col items-center justify-center relative overflow-hidden shadow-lg ${L ? 'bg-slate-100 border-slate-200' : 'bg-black border-zinc-800'}`}>
+                                    <span className={`text-[10px] font-bold uppercase tracking-widest mb-1 relative z-10 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>Shot Clock</span>
                                     <span className={`text-7xl font-mono font-bold leading-none relative z-10 tabular-nums ${timer.shotClock <= 5 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
                                         {timer.shotClock}
                                     </span>
@@ -998,10 +1032,10 @@ export const HostConsole: React.FC = () => {
                         </div>
 
                         {/* TEAM B PANEL */}
-                        <div className={`col-span-4 rounded-2xl p-4 lg:p-6 flex flex-col relative overflow-hidden ${L ? 'bg-white border border-[#D4CCC3] shadow-[0_2px_8px_rgba(44,36,25,0.06)]' : 'bg-zinc-900/40 border border-zinc-800'}`}>
+                        <div className={`col-span-4 rounded-2xl p-4 lg:p-6 flex flex-col relative overflow-hidden ${L ? 'bg-white border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)]' : 'bg-zinc-900/40 border border-zinc-800'}`}>
                             <div className="absolute top-0 right-0 w-full h-2" style={{ background: game.teamB.color }}></div>
                             <div className="flex justify-between items-start mb-2 flex-row-reverse">
-                                <h2 className={`text-2xl lg:text-4xl font-black italic uppercase tracking-tighter truncate max-w-[85%] text-right ${L ? 'text-[#2C2419]' : 'text-white'}`}>
+                                <h2 className={`text-2xl lg:text-4xl font-black italic uppercase tracking-tighter truncate max-w-[85%] text-right ${L ? 'text-slate-900' : 'text-white'}`}>
                                     {game.teamB.name}
                                 </h2>
                                 {game.gameState.possession === 'B' && (
@@ -1010,24 +1044,24 @@ export const HostConsole: React.FC = () => {
                             </div>
                             <div className="flex-1 flex items-center justify-center">
                                 <div
-                                    className={`text-[8rem] lg:text-[11rem] font-mono font-bold leading-none tracking-tighter tabular-nums ${L ? 'text-[#2C2419]' : 'text-white drop-shadow-2xl'}`}
+                                    className={`text-[8rem] lg:text-[11rem] font-mono font-bold leading-none tracking-tighter tabular-nums ${L ? 'text-slate-900' : 'text-white drop-shadow-2xl'}`}
                                     style={{ textShadow: `0 0 50px ${game.teamB.color}40` }}
                                 >
                                     {game.teamB.score}
                                 </div>
                             </div>
-                            <div className={`flex justify-between items-end pt-3 flex-row-reverse border-t ${L ? 'border-[#E2DAD0]' : 'border-zinc-800'}`}>
+                            <div className={`flex justify-between items-end pt-3 flex-row-reverse border-t ${L ? 'border-slate-100' : 'border-zinc-800'}`}>
                                 <div className="text-center">
-                                    <div className={`text-[10px] font-bold uppercase tracking-widest ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Fouls</div>
+                                    <div className={`text-[10px] font-bold uppercase tracking-widest ${L ? 'text-slate-500' : 'text-zinc-500'}`}>Fouls</div>
                                     <div className="text-4xl font-mono font-bold text-red-500 tabular-nums">{game.teamB.fouls}</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>
+                                    <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>
                                         Timeouts ({game.teamB.timeouts})
                                     </div>
                                     <div className="flex gap-1.5 flex-row-reverse">
                                         {[...Array(5)].map((_, i) => (
-                                            <div key={i} className={`w-3 h-5 rounded-sm transition-all ${i < game.teamB.timeouts ? (L ? 'bg-[#B8860B]' : 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]') : (L ? 'bg-[#D4CCC3]' : 'bg-zinc-800/50')}`}></div>
+                                            <div key={i} className={`w-3 h-5 rounded-sm transition-all ${i < game.teamB.timeouts ? (L ? 'bg-yellow-700' : 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]') : (L ? 'bg-slate-200' : 'bg-zinc-800/50')}`}></div>
                                         ))}
                                     </div>
                                 </div>
@@ -1040,13 +1074,13 @@ export const HostConsole: React.FC = () => {
 
             {/* ── PRO CONTROL DECK (Standard Mode) ──────────────────────────────────────────── */}
             <div className="relative">
-                <div className={`p-4 shrink-0 relative z-40 ${L ? 'bg-white border-t-2 border-[#D4CCC3] shadow-[0_-4px_16px_rgba(44,36,25,0.06)]' : 'bg-zinc-950 border-t-4 border-zinc-900 shadow-[0_-20px_50px_rgba(0,0,0,0.6)]'}`}>
+                <div className={`p-4 shrink-0 relative z-40 ${L ? 'bg-white border-t-2 border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]' : 'bg-zinc-950 border-t-4 border-zinc-900 shadow-[0_-20px_50px_rgba(0,0,0,0.6)]'}`}>
                     <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-4 h-full pt-2">
 
                         {/* TEAM A CONTROLS */}
                         <div className="col-span-3 flex flex-col gap-2">
-                            <div className={`flex justify-between items-center pb-1 border-b ${L ? 'border-[#E2DAD0]' : 'border-zinc-800'}`}>
-                                <span className={`text-[10px] font-bold uppercase tracking-widest truncate pl-2 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>
+                            <div className={`flex justify-between items-center pb-1 border-b ${L ? 'border-slate-100' : 'border-zinc-800'}`}>
+                                <span className={`text-[10px] font-bold uppercase tracking-widest truncate pl-2 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>
                                     {game.teamA.name}
                                 </span>
                             </div>
@@ -1062,9 +1096,9 @@ export const HostConsole: React.FC = () => {
                         </div>
 
                         {/* CENTER CONSOLE */}
-                        <div className={`col-span-6 rounded-xl p-2 flex flex-col gap-2 ${L ? 'bg-[#F0EAE2] border border-[#D4CCC3]' : 'bg-zinc-900/50 border border-zinc-800'}`}>
+                        <div className={`col-span-6 rounded-xl p-2 flex flex-col gap-2 ${L ? 'bg-slate-100 border border-slate-200' : 'bg-zinc-900/50 border border-zinc-800'}`}>
                             {hwDeviceId && (
-                                <div className={`rounded-lg p-1 flex items-center justify-between mb-2 shadow-inner ${L ? 'bg-white border border-[#D4CCC3]' : 'bg-black border border-zinc-800'}`}>
+                                <div className={`rounded-lg p-1 flex items-center justify-between mb-2 shadow-inner ${L ? 'bg-white border border-slate-200' : 'bg-black border border-zinc-800'}`}>
                                     <div className="flex items-center gap-2 pl-2">
                                         <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${hwMode === 'hardware' ? 'bg-green-500' : 'bg-blue-500'}`} />
                                         <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Input Source</span>
@@ -1103,22 +1137,22 @@ export const HostConsole: React.FC = () => {
                                     <button
                                         onClick={() => { if (!isWebLocked) handleUndo(); }}
                                         disabled={actionHistory.length === 0}
-                                        className={`h-8 rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed ${L ? 'bg-white border border-[#D4CCC3] text-[#8B7355] hover:text-[#2C2419] hover:border-[#B8AD9F]' : 'bg-black border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}
+                                        className={`h-8 rounded text-[9px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed ${L ? 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300' : 'bg-black border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}
                                     >
                                         <Icons.Undo />
                                         UNDO {actionHistory.length > 0 && `(${actionHistory.length})`}
                                     </button>
                                 </div>
-                                <div className={`col-span-3 flex flex-col gap-1 border-x px-2 ${L ? 'border-[#D4CCC3]' : 'border-zinc-800'}`}>
+                                <div className={`col-span-3 flex flex-col gap-1 border-x px-2 ${L ? 'border-slate-200' : 'border-zinc-800'}`}>
                                     <button
                                         onClick={(e) => { if (!isWebLocked) handleResetShot(e, 24); }}
-                                        className={`flex-1 rounded font-black text-xl shadow-md active:scale-95 ${L ? 'bg-[#EDE5DA] hover:bg-[#E2D8CA] text-[#2C2419] border border-[#D4CCC3]' : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600'}`}
+                                        className={`flex-1 rounded font-black text-xl shadow-md active:scale-95 ${L ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border border-slate-200' : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600'}`}
                                     >
                                         24
                                     </button>
                                     <button
                                         onClick={(e) => { if (!isWebLocked) handleResetShot(e, 14); }}
-                                        className={`flex-1 rounded font-black text-xl shadow-md active:scale-95 ${L ? 'bg-[#EDE5DA] hover:bg-[#E2D8CA] text-[#2C2419] border border-[#D4CCC3]' : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600'}`}
+                                        className={`flex-1 rounded font-black text-xl shadow-md active:scale-95 ${L ? 'bg-slate-100 hover:bg-slate-200 text-slate-900 border border-slate-200' : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600'}`}
                                     >
                                         14
                                     </button>
@@ -1126,15 +1160,15 @@ export const HostConsole: React.FC = () => {
                                 <div className="col-span-4 flex flex-col gap-1">
                                     <button
                                         onClick={(e) => { if (!isWebLocked) handleTogglePossession(e); }}
-                                        className={`flex-1 rounded flex items-center justify-center gap-2 transition-all group active:scale-95 ${L ? 'bg-white border border-[#D4CCC3] hover:border-[#B8AD9F]' : 'bg-black border border-zinc-700 hover:border-white'}`}
+                                        className={`flex-1 rounded flex items-center justify-center gap-2 transition-all group active:scale-95 ${L ? 'bg-white border border-slate-200 hover:border-slate-300' : 'bg-black border border-zinc-700 hover:border-white'}`}
                                     >
-                                        <span className={`text-xl ${game.gameState.possession === 'A' ? (L ? 'text-[#2C2419]' : 'text-white') : (L ? 'text-[#D4CCC3]' : 'text-zinc-800')}`}>◀</span>
-                                        <span className={`text-[10px] font-bold ${L ? 'text-[#8B7355] group-hover:text-[#2C2419]' : 'text-zinc-500 group-hover:text-white'}`}>POSS</span>
-                                        <span className={`text-xl ${game.gameState.possession === 'B' ? (L ? 'text-[#2C2419]' : 'text-white') : (L ? 'text-[#D4CCC3]' : 'text-zinc-800')}`}>▶</span>
+                                        <span className={`text-xl ${game.gameState.possession === 'A' ? (L ? 'text-slate-900' : 'text-white') : (L ? 'text-slate-200' : 'text-zinc-800')}`}>◀</span>
+                                        <span className={`text-[10px] font-bold ${L ? 'text-slate-500 group-hover:text-slate-900' : 'text-zinc-500 group-hover:text-white'}`}>POSS</span>
+                                        <span className={`text-xl ${game.gameState.possession === 'B' ? (L ? 'text-slate-900' : 'text-white') : (L ? 'text-slate-200' : 'text-zinc-800')}`}>▶</span>
                                     </button>
                                     <button
                                         onClick={() => playSound('horn')}
-                                        className={`h-8 rounded text-[9px] font-black uppercase tracking-widest active:scale-95 flex items-center justify-center gap-2 ${L ? 'bg-[#EDE5DA] hover:bg-[#C45832] hover:text-white text-[#8B7355] border border-[#D4CCC3]' : 'bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400'}`}
+                                        className={`h-8 rounded text-[9px] font-black uppercase tracking-widest active:scale-95 flex items-center justify-center gap-2 ${L ? 'bg-slate-100 hover:bg-red-600 hover:text-white text-slate-500 border border-slate-200' : 'bg-zinc-800 hover:bg-white hover:text-black border border-zinc-600 text-zinc-400'}`}
                                     >
                                         SIREN 🔊
                                     </button>
@@ -1144,8 +1178,8 @@ export const HostConsole: React.FC = () => {
 
                         {/* TEAM B CONTROLS */}
                         <div className="col-span-3 flex flex-col gap-2">
-                            <div className={`flex justify-between items-center pb-1 border-b flex-row-reverse ${L ? 'border-[#E2DAD0]' : 'border-zinc-800'}`}>
-                                <span className={`text-[10px] font-bold uppercase tracking-widest truncate ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>
+                            <div className={`flex justify-between items-center pb-1 border-b flex-row-reverse ${L ? 'border-slate-100' : 'border-zinc-800'}`}>
+                                <span className={`text-[10px] font-bold uppercase tracking-widest truncate ${L ? 'text-slate-500' : 'text-zinc-500'}`}>
                                     {game.teamB.name}
                                 </span>
                             </div>
@@ -1166,18 +1200,18 @@ export const HostConsole: React.FC = () => {
 
             {/* ── HELP MODAL ────────────────────────────────────────────────── */}
             {showHelp && (
-                <div className={`fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4 ${L ? 'bg-[#2C2419]/30' : 'bg-black/80'}`}>
-                    <div className={`p-6 max-w-md w-full shadow-2xl rounded-xl ${L ? 'bg-white border border-[#D4CCC3]' : 'bg-zinc-900 border border-zinc-700'}`}>
-                        <h3 className={`text-xl font-bold mb-4 uppercase tracking-widest pb-2 ${L ? 'border-b border-[#E2DAD0] text-[#2C2419]' : 'border-b border-zinc-700'}`}>Shortcuts</h3>
-                        <div className={`space-y-2 text-sm font-mono ${L ? 'text-[#8B7355]' : 'text-zinc-400'}`}>
-                            <div className="flex justify-between"><span>SPACE</span><span className={L ? 'text-[#2C2419]' : 'text-white'}>Start/Stop Clock</span></div>
-                            <div className="flex justify-between"><span>R</span><span className={L ? 'text-[#2C2419]' : 'text-white'}>Reset Shot (24s)</span></div>
-                            <div className="flex justify-between"><span>T</span><span className={L ? 'text-[#2C2419]' : 'text-white'}>Reset Shot (14s)</span></div>
-                            <div className="flex justify-between"><span>P</span><span className={L ? 'text-[#2C2419]' : 'text-white'}>Possession</span></div>
-                            <div className="flex justify-between"><span>CTRL+Z</span><span className={L ? 'text-[#2C2419]' : 'text-white'}>Undo</span></div>
-                            <div className="flex justify-between"><span>H</span><span className={L ? 'text-[#2C2419]' : 'text-white'}>Help</span></div>
+                <div className={`fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4 ${L ? 'bg-slate-900/30' : 'bg-black/80'}`}>
+                    <div className={`p-6 max-w-md w-full shadow-2xl rounded-xl ${L ? 'bg-white border border-slate-200' : 'bg-zinc-900 border border-zinc-700'}`}>
+                        <h3 className={`text-xl font-bold mb-4 uppercase tracking-widest pb-2 ${L ? 'border-b border-slate-100 text-slate-900' : 'border-b border-zinc-700'}`}>Shortcuts</h3>
+                        <div className={`space-y-2 text-sm font-mono ${L ? 'text-slate-500' : 'text-zinc-400'}`}>
+                            <div className="flex justify-between"><span>SPACE</span><span className={L ? 'text-slate-900' : 'text-white'}>Start/Stop Clock</span></div>
+                            <div className="flex justify-between"><span>R</span><span className={L ? 'text-slate-900' : 'text-white'}>Reset Shot (24s)</span></div>
+                            <div className="flex justify-between"><span>T</span><span className={L ? 'text-slate-900' : 'text-white'}>Reset Shot (14s)</span></div>
+                            <div className="flex justify-between"><span>P</span><span className={L ? 'text-slate-900' : 'text-white'}>Possession</span></div>
+                            <div className="flex justify-between"><span>CTRL+Z</span><span className={L ? 'text-slate-900' : 'text-white'}>Undo</span></div>
+                            <div className="flex justify-between"><span>H</span><span className={L ? 'text-slate-900' : 'text-white'}>Help</span></div>
                         </div>
-                        <button onClick={() => setShowHelp(false)} className={`mt-6 w-full py-3 font-bold uppercase tracking-widest rounded ${L ? 'bg-[#C45832] text-white hover:bg-[#A84828]' : 'bg-white text-black hover:bg-zinc-200'}`}>
+                        <button onClick={() => setShowHelp(false)} className={`mt-6 w-full py-3 font-bold uppercase tracking-widest rounded ${L ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-white text-black hover:bg-zinc-200'}`}>
                             Close
                         </button>
                     </div>
@@ -1187,19 +1221,19 @@ export const HostConsole: React.FC = () => {
             {/* ── PLAYER SELECTION POPUP ────────────────────────────────────── */}
             {showPlayerPopup && pendingAction && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                    <div className={`absolute inset-0 backdrop-blur-sm ${L ? 'bg-[#2C2419]/30' : 'bg-black/80'}`} onClick={() => setShowPlayerPopup(false)}></div>
+                    <div className={`absolute inset-0 backdrop-blur-sm ${L ? 'bg-slate-900/30' : 'bg-black/80'}`} onClick={() => setShowPlayerPopup(false)}></div>
 
-                    <div className={`w-full max-w-2xl relative z-10 animate-in zoom-in-95 duration-200 shadow-2xl rounded-sm ${L ? 'bg-white border border-[#D4CCC3]' : 'bg-zinc-950 border border-zinc-800'}`}>
-                        <div className={`flex justify-between items-center p-6 border-b ${L ? 'border-[#E2DAD0]' : 'border-zinc-800'}`}>
+                    <div className={`w-full max-w-2xl relative z-10 animate-in zoom-in-95 duration-200 shadow-2xl rounded-sm ${L ? 'bg-white border border-slate-200' : 'bg-zinc-950 border border-zinc-800'}`}>
+                        <div className={`flex justify-between items-center p-6 border-b ${L ? 'border-slate-100' : 'border-zinc-800'}`}>
                             <div>
-                                <h3 className={`text-sm font-bold uppercase tracking-widest ${L ? 'text-[#2C2419]' : 'text-white'}`}>
+                                <h3 className={`text-sm font-bold uppercase tracking-widest ${L ? 'text-slate-900' : 'text-white'}`}>
                                     {pendingAction.type === 'points' ? `+${pendingAction.value} POINT${pendingAction.value !== 1 ? 'S' : ''}` : 'FOUL'}
                                 </h3>
-                                <p className={`text-xs mt-1 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>
+                                <p className={`text-xs mt-1 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>
                                     Select player for {pendingAction.team === 'A' ? game.teamA.name : game.teamB.name}
                                 </p>
                             </div>
-                            <button onClick={() => setShowPlayerPopup(false)} className={`text-2xl transition-colors ${L ? 'text-[#B8AD9F] hover:text-[#2C2419]' : 'text-zinc-500 hover:text-white'}`}>
+                            <button onClick={() => setShowPlayerPopup(false)} className={`text-2xl transition-colors ${L ? 'text-slate-300 hover:text-slate-900' : 'text-zinc-500 hover:text-white'}`}>
                                 &times;
                             </button>
                         </div>
@@ -1207,8 +1241,8 @@ export const HostConsole: React.FC = () => {
                         <div className="p-6 max-h-[60vh] overflow-y-auto">
                             {activePlayers.length === 0 ? (
                                 <div className="text-center py-12">
-                                    <p className={`mb-4 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>No players in roster</p>
-                                    <button onClick={skipPlayerSelection} className={`px-6 py-2 font-bold uppercase tracking-wider rounded transition-colors ${L ? 'bg-[#EDE5DA] hover:bg-[#E2D8CA] text-[#2C2419]' : 'bg-zinc-800 hover:bg-zinc-700 text-white'}`}>
+                                    <p className={`mb-4 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>No players in roster</p>
+                                    <button onClick={skipPlayerSelection} className={`px-6 py-2 font-bold uppercase tracking-wider rounded transition-colors ${L ? 'bg-slate-100 hover:bg-slate-200 text-slate-900' : 'bg-zinc-800 hover:bg-zinc-700 text-white'}`}>
                                         Continue Without Player
                                     </button>
                                 </div>
@@ -1219,25 +1253,25 @@ export const HostConsole: React.FC = () => {
                                             <button
                                                 key={player.id}
                                                 onClick={() => confirmPlayerAction(player)}
-                                                className={`p-4 rounded-lg transition-all text-left group ${L ? 'bg-[#FAFAF7] hover:bg-[#EDE5DA] border border-[#D4CCC3] hover:border-[#B8AD9F]' : 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700'}`}
+                                                className={`p-4 rounded-lg transition-all text-left group ${L ? 'bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300' : 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700'}`}
                                             >
                                                 <div className="flex items-center gap-3 mb-2">
-                                                    <div className={`text-2xl font-black transition-colors ${L ? 'text-[#B8AD9F] group-hover:text-[#2C2419]' : 'text-zinc-600 group-hover:text-white'}`}>
+                                                    <div className={`text-2xl font-black transition-colors ${L ? 'text-slate-300 group-hover:text-slate-900' : 'text-zinc-600 group-hover:text-white'}`}>
                                                         #{player.number || '?'}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <div className={`text-sm font-bold truncate ${L ? 'text-[#2C2419]' : 'text-white'}`}>{player.name}</div>
-                                                        <div className={`text-[10px] uppercase tracking-wider ${L ? 'text-[#8B7355]' : 'text-zinc-600'}`}>{player.position || 'Player'}</div>
+                                                        <div className={`text-sm font-bold truncate ${L ? 'text-slate-900' : 'text-white'}`}>{player.name}</div>
+                                                        <div className={`text-[10px] uppercase tracking-wider ${L ? 'text-slate-500' : 'text-zinc-600'}`}>{player.position || 'Player'}</div>
                                                     </div>
                                                 </div>
-                                                <div className={`flex gap-3 text-[10px] ${L ? 'text-[#8B7355]' : 'text-zinc-600'}`}>
+                                                <div className={`flex gap-3 text-[10px] ${L ? 'text-slate-500' : 'text-zinc-600'}`}>
                                                     <span>PTS: {player.points || 0}</span>
                                                     <span>FOULS: {player.fouls || 0}</span>
                                                 </div>
                                             </button>
                                         ))}
                                     </div>
-                                    <button onClick={skipPlayerSelection} className={`w-full py-3 font-bold text-xs uppercase tracking-wider rounded transition-colors ${L ? 'bg-[#EDE5DA] hover:bg-[#E2D8CA] border border-[#D4CCC3] text-[#8B7355] hover:text-[#2C2419]' : 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white'}`}>
+                                    <button onClick={skipPlayerSelection} className={`w-full py-3 font-bold text-xs uppercase tracking-wider rounded transition-colors ${L ? 'bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-900' : 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white'}`}>
                                         Skip Player Selection
                                     </button>
                                 </>
@@ -1257,22 +1291,22 @@ export const HostConsole: React.FC = () => {
 
             {/* BACK CONFIRMATION MODAL */}
             {showBackConfirm && (
-                <div className={`fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4 ${L ? 'bg-[#2C2419]/30' : 'bg-black/80'}`}>
-                    <div className={`w-full max-w-md shadow-2xl rounded-xl overflow-hidden animate-in zoom-in-95 duration-200 ${L ? 'bg-white border border-[#D4CCC3]' : 'bg-zinc-900 border border-zinc-700'}`}>
-                        <div className={`p-4 flex justify-between items-center ${L ? 'bg-[#FAFAF7] border-b border-[#E2DAD0]' : 'bg-black border-b border-zinc-800'}`}>
-                            <h3 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 ${L ? 'text-[#2C2419]' : 'text-white'}`}>
+                <div className={`fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4 ${L ? 'bg-slate-900/30' : 'bg-black/80'}`}>
+                    <div className={`w-full max-w-md shadow-2xl rounded-xl overflow-hidden animate-in zoom-in-95 duration-200 ${L ? 'bg-white border border-slate-200' : 'bg-zinc-900 border border-zinc-700'}`}>
+                        <div className={`p-4 flex justify-between items-center ${L ? 'bg-slate-50 border-b border-slate-100' : 'bg-black border-b border-zinc-800'}`}>
+                            <h3 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 ${L ? 'text-slate-900' : 'text-white'}`}>
                                 <span className="text-amber-500">⚠️</span> Pause & Exit
                             </h3>
-                            <button onClick={() => setShowBackConfirm(false)} className={`transition-colors ${L ? 'text-[#B8AD9F] hover:text-[#2C2419]' : 'text-zinc-500 hover:text-white'}`}>&times;</button>
+                            <button onClick={() => setShowBackConfirm(false)} className={`transition-colors ${L ? 'text-slate-300 hover:text-slate-900' : 'text-zinc-500 hover:text-white'}`}>&times;</button>
                         </div>
                         <div className="p-6">
-                            <p className={`text-sm mb-6 ${L ? 'text-[#6B5D4D]' : 'text-zinc-400'}`}>
+                            <p className={`text-sm mb-6 ${L ? 'text-slate-600' : 'text-zinc-400'}`}>
                                 Are you sure you want to leave the console? The game clock will be paused and you will return to the dashboard.
                             </p>
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setShowBackConfirm(false)}
-                                    className={`flex-1 py-3 rounded text-xs font-bold uppercase tracking-widest transition-all ${L ? 'border border-[#D4CCC3] text-[#6B5D4D] hover:text-[#2C2419] hover:bg-[#EDE5DA]' : 'border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800'}`}
+                                    className={`flex-1 py-3 rounded text-xs font-bold uppercase tracking-widest transition-all ${L ? 'border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100' : 'border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800'}`}
                                 >
                                     Cancel
                                 </button>
@@ -1281,7 +1315,7 @@ export const HostConsole: React.FC = () => {
                                         if (timer.gameRunning) timer.stopClock();
                                         navigate('/dashboard');
                                     }}
-                                    className={`flex-1 py-3 rounded text-xs font-bold uppercase tracking-widest transition-all ${L ? 'bg-[#C45832] text-white hover:bg-[#A84828]' : 'bg-white text-black hover:bg-zinc-200'}`}
+                                    className={`flex-1 py-3 rounded text-xs font-bold uppercase tracking-widest transition-all ${L ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-white text-black hover:bg-zinc-200'}`}
                                 >
                                     Yes, Exit
                                 </button>
@@ -1293,23 +1327,23 @@ export const HostConsole: React.FC = () => {
 
             {/* SETTINGS MODAL */}
             {showSettings && (
-                <div className={`fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4 ${L ? 'bg-[#2C2419]/30' : 'bg-black/80'}`}>
-                    <div className={`w-full max-w-md shadow-2xl rounded-xl overflow-hidden animate-in zoom-in-95 duration-200 ${L ? 'bg-white border border-[#D4CCC3]' : 'bg-zinc-900 border border-zinc-700'}`}>
-                        <div className={`p-4 flex justify-between items-center ${L ? 'bg-[#FAFAF7] border-b border-[#E2DAD0]' : 'bg-black border-b border-zinc-800'}`}>
-                            <h3 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 ${L ? 'text-[#2C2419]' : 'text-white'}`}>
+                <div className={`fixed inset-0 z-[100] backdrop-blur flex items-center justify-center p-4 ${L ? 'bg-slate-900/30' : 'bg-black/80'}`}>
+                    <div className={`w-full max-w-md shadow-2xl rounded-xl overflow-hidden animate-in zoom-in-95 duration-200 ${L ? 'bg-white border border-slate-200' : 'bg-zinc-900 border border-zinc-700'}`}>
+                        <div className={`p-4 flex justify-between items-center ${L ? 'bg-slate-50 border-b border-slate-100' : 'bg-black border-b border-zinc-800'}`}>
+                            <h3 className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 ${L ? 'text-slate-900' : 'text-white'}`}>
                                 <span>⚙️</span> Match Settings
                             </h3>
-                            <button onClick={() => setShowSettings(false)} className={`transition-colors ${L ? 'text-[#B8AD9F] hover:text-[#2C2419]' : 'text-zinc-500 hover:text-white'}`}>&times;</button>
+                            <button onClick={() => setShowSettings(false)} className={`transition-colors ${L ? 'text-slate-300 hover:text-slate-900' : 'text-zinc-500 hover:text-white'}`}>&times;</button>
                         </div>
                         <div className="p-8 text-center">
                             <span className="text-4xl grayscale opacity-50 mb-4 block">🛠️</span>
-                            <h4 className={`font-bold mb-2 ${L ? 'text-[#2C2419]' : 'text-white'}`}>Advanced Settings</h4>
-                            <p className={`text-xs ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>This feature is currently under development. You will be able to edit team names, colors, and game rules here soon.</p>
+                            <h4 className={`font-bold mb-2 ${L ? 'text-slate-900' : 'text-white'}`}>Advanced Settings</h4>
+                            <p className={`text-xs ${L ? 'text-slate-500' : 'text-zinc-500'}`}>This feature is currently under development. You will be able to edit team names, colors, and game rules here soon.</p>
                         </div>
-                        <div className={`p-4 ${L ? 'bg-[#FAFAF7] border-t border-[#E2DAD0]' : 'bg-black border-t border-zinc-800'}`}>
+                        <div className={`p-4 ${L ? 'bg-slate-50 border-t border-slate-100' : 'bg-black border-t border-zinc-800'}`}>
                             <button
                                 onClick={() => setShowSettings(false)}
-                                className={`w-full py-3 rounded text-xs font-bold uppercase tracking-widest transition-all active:scale-95 ${L ? 'bg-[#C45832] text-white hover:bg-[#A84828]' : 'bg-white text-black hover:bg-zinc-200'}`}
+                                className={`w-full py-3 rounded text-xs font-bold uppercase tracking-widest transition-all active:scale-95 ${L ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-white text-black hover:bg-zinc-200'}`}
                             >
                                 Close
                             </button>
@@ -1322,7 +1356,7 @@ export const HostConsole: React.FC = () => {
             {undoToast && (
                 <div
                     key={undoToast.id}
-                    className={`fixed bottom-6 left-1/2 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl ${L ? 'bg-white border-[#D4CCC3]' : 'bg-zinc-950 border-zinc-700'}`}
+                    className={`fixed bottom-6 left-1/2 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl ${L ? 'bg-white border-slate-200' : 'bg-zinc-950 border-zinc-700'}`}
                     style={{
                         transform: 'translateX(-50%)',
                         animation: 'undoSlideIn 0.2s ease',
@@ -1330,8 +1364,8 @@ export const HostConsole: React.FC = () => {
                     }}
                 >
                     <div className="flex-1 min-w-0">
-                        <div className={`text-[9px] font-mono font-bold uppercase tracking-widest mb-0.5 ${L ? 'text-[#8B7355]' : 'text-zinc-500'}`}>Last action</div>
-                        <div className={`text-sm font-bold truncate ${L ? 'text-[#2C2419]' : 'text-white'}`}>{undoToast.label}</div>
+                        <div className={`text-[9px] font-mono font-bold uppercase tracking-widest mb-0.5 ${L ? 'text-slate-500' : 'text-zinc-500'}`}>Last action</div>
+                        <div className={`text-sm font-bold truncate ${L ? 'text-slate-900' : 'text-white'}`}>{undoToast.label}</div>
                     </div>
                     <button
                         onClick={() => {
@@ -1339,13 +1373,13 @@ export const HostConsole: React.FC = () => {
                             setUndoToast(null);
                             if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex-shrink-0 ${L ? 'bg-[#C45832] text-white hover:bg-[#A84828]' : 'bg-white text-black hover:bg-zinc-200'}`}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex-shrink-0 ${L ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-white text-black hover:bg-zinc-200'}`}
                     >
                         Undo
                     </button>
                     <button
                         onClick={() => setUndoToast(null)}
-                        className={`transition-colors text-lg leading-none flex-shrink-0 ${L ? 'text-[#B8AD9F] hover:text-[#2C2419]' : 'text-zinc-600 hover:text-zinc-400'}`}
+                        className={`transition-colors text-lg leading-none flex-shrink-0 ${L ? 'text-slate-300 hover:text-slate-900' : 'text-zinc-600 hover:text-zinc-400'}`}
                     >
                         ×
                     </button>
@@ -1374,22 +1408,22 @@ const TactileBtn = ({ label, color, isLocked, onClick }: { label: string; color:
             disabled={isLocked}
             className={`h-full rounded border hover:border-zinc-500 transition-all relative overflow-hidden shadow-sm flex items-center justify-center
                 ${isLocked
-                    ? (isLight ? 'bg-[#F0EAE2] border-[#E2DAD0] opacity-50 cursor-not-allowed' : 'bg-zinc-950/50 border-zinc-800/50 opacity-50 cursor-not-allowed grayscale')
+                    ? (isLight ? 'bg-slate-100 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-zinc-950/50 border-zinc-800/50 opacity-50 cursor-not-allowed grayscale')
                     : (isLight
-                        ? 'bg-white border-[#D4CCC3] hover:bg-[#FAFAF7] hover:border-[#B8AD9F] active:scale-95 group shadow-[inset_0_-1px_2px_rgba(44,36,25,0.04)]'
+                        ? 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300 active:scale-95 group shadow-[inset_0_-1px_2px_rgba(0,0,0,0.04)]'
                         : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800 active:scale-95 active:bg-white group')
                 }`}
             style={{ borderBottom: isLocked ? (isLight ? '1px solid #E2DAD0' : '1px solid #333') : `3px solid ${color}` }}
         >
             {isLocked && <span className="absolute top-1 right-1 text-[8px] opacity-50">🔒</span>}
             <span className={`relative z-10 text-xl font-black italic ${isLocked
-                ? (isLight ? 'text-[#B8AD9F]' : 'text-zinc-600')
-                : (isLight ? 'text-[#2C2419] group-active:text-white' : 'text-white group-active:text-black')
+                ? (isLight ? 'text-slate-300' : 'text-zinc-600')
+                : (isLight ? 'text-slate-900 group-active:text-white' : 'text-white group-active:text-black')
                 }`}>{label}</span>
             {popKey && (
                 <span
                     key={popKey}
-                    className={`absolute inset-x-0 top-1 text-center font-black pointer-events-none select-none ${isLight ? 'text-[#C45832]' : 'text-green-400'}`}
+                    className={`absolute inset-x-0 top-1 text-center font-black pointer-events-none select-none ${isLight ? 'text-red-600' : 'text-green-400'}`}
                     style={{ fontSize: 13, animation: 'scoreFloat 0.65s ease forwards', zIndex: 20 }}
                 >
                     {label}
@@ -1402,8 +1436,8 @@ const TactileBtn = ({ label, color, isLocked, onClick }: { label: string; color:
 const AdminBtn = ({ label, value, type, isLocked, onClick }: { label: string; value: number; type: 'danger' | 'warning'; isLocked?: boolean; onClick: (e: React.MouseEvent) => void }) => {
     const isLight = document.documentElement.classList.contains('light');
     const styles = isLight ? {
-        danger: isLocked ? "text-red-300 border-red-200 bg-[#FAFAF7]" : "text-red-600 border-red-200 hover:bg-red-50 bg-white",
-        warning: isLocked ? "text-amber-300 border-amber-200 bg-[#FAFAF7]" : "text-amber-700 border-amber-200 hover:bg-amber-50 bg-white",
+        danger: isLocked ? "text-red-300 border-red-200 bg-slate-50" : "text-red-600 border-red-200 hover:bg-red-50 bg-white",
+        warning: isLocked ? "text-amber-300 border-amber-200 bg-slate-50" : "text-amber-700 border-amber-200 hover:bg-amber-50 bg-white",
     } : {
         danger: isLocked ? "text-red-900 border-red-900/10 bg-black" : "text-red-500 border-red-900/30 hover:bg-red-900/20 bg-black",
         warning: isLocked ? "text-yellow-900 border-yellow-900/10 bg-black" : "text-yellow-500 border-yellow-900/30 hover:bg-yellow-900/20 bg-black",
