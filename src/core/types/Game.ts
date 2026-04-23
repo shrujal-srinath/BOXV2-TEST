@@ -28,6 +28,7 @@ export interface BaseGameState {
  * Universal Team properties.
  */
 export interface BaseTeam {
+    id?: string;
     name: string;
     color: string;
     score: number; // The primary score (points, sets won, etc.)

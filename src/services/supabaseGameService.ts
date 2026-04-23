@@ -549,7 +549,7 @@ export const finalizeGameWithResult = async (
 
     if (error) {
         console.error('[GameService] finalizeGameWithResult RPC failed, falling back:', error);
-        return finishGame(gameCode);
+        return finishGame(gameCode).then(() => false);
     }
     return true;
 };
