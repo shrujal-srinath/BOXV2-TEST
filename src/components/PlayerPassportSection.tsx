@@ -226,19 +226,19 @@ export const PlayerPassportSection: React.FC<Props> = ({ user }) => {
             /* No profile yet — show CTA */
             <div
               onClick={() => navigate('/player/register?type=self')}
-              className="h-full cursor-pointer bg-white dark:bg-zinc-900/60 border-2 border-dashed border-violet-300 dark:border-violet-800/60 hover:border-violet-500 dark:hover:border-violet-600 rounded-2xl p-5 flex flex-col items-center justify-center text-center transition-all group"
+              className="h-full cursor-pointer bg-white dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800 shadow-md dark:border-dashed dark:border-violet-800/60 hover:shadow-lg dark:hover:border-violet-600 rounded-2xl p-5 flex flex-col items-center justify-center text-center transition-all group"
               style={{ minHeight: 200 }}
             >
-              <div className="w-12 h-12 rounded-2xl bg-violet-100 dark:bg-violet-900/40 border border-violet-200 dark:border-violet-800 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform">🪪</div>
-              <div className="text-[10px] font-black text-violet-500 dark:text-violet-500 uppercase tracking-widest mb-1">Player Passport</div>
-              <div className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight italic leading-tight mb-2 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+              <div className="w-12 h-12 rounded-xl bg-red-600 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform">🪪</div>
+              <div className="text-xs text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Player Passport</div>
+              <div className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight italic leading-tight mb-2">
                 Add Your Profile
               </div>
-              <p className="text-[10px] text-slate-400 dark:text-zinc-600 leading-relaxed mb-4">
+              <p className="text-[11px] text-slate-400 dark:text-zinc-600 leading-relaxed mb-4">
                 Get your stats tracked across every game you play.
               </p>
-              <div className="text-[10px] font-black text-violet-600 dark:text-violet-400 uppercase tracking-widest border border-violet-200 dark:border-violet-800 px-3 py-1.5 rounded-full group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20 transition-colors">
-                Register →
+              <div className="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-3 rounded-xl transition-colors">
+                Register
               </div>
             </div>
           ) : (

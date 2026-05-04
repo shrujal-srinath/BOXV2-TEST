@@ -29,10 +29,10 @@ DISPLAY=:0 unclutter -idle 0 &
 echo "⏳ Waiting for servers..."
 sleep 12
 
-# 4. Referee UI on display 0 (primary)
-echo "📺 Launching Referee UI..."
+# 4. Pi Launcher on display 0 (DSI primary)
+echo "📺 Launching Pi Launcher UI..."
 DISPLAY=:0 chromium-browser \
-  --app=http://localhost:5173/referee \
+  --app=http://localhost:5173/pi-launcher \
   --start-fullscreen \
   --kiosk \
   --no-sandbox \
@@ -40,10 +40,10 @@ DISPLAY=:0 chromium-browser \
   --noerrdialogs \
   --user-data-dir=/tmp/chrome_referee &
 
-# 5. Arena UI on display 1 (HDMI)
-echo "🏟️  Launching Arena UI..."
+# 5. Pi Launcher on display 1 (HDMI)
+echo "🏟️  Launching Pi Launcher UI (HDMI)..."
 DISPLAY=:0 chromium-browser \
-  --app=http://localhost:5173/arena \
+  --app=http://localhost:5173/pi-launcher \
   --start-fullscreen \
   --kiosk \
   --no-sandbox \

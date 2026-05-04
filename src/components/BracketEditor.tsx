@@ -145,7 +145,7 @@ export const BracketEditor: React.FC<Props> = ({
                 // COLOR SCHEME: Zinc-gray + Yellow (completed) + Green (LIVE only)
                 const strokeColor = isLive ? '#22c55e' :  // Green for LIVE
                     isCompleted || isBye ? '#eab308' :  // Yellow for completed
-                        '#52525b';  // Zinc for default
+                        '#94a3b8';  // Slate-400 — visible on both light and dark backgrounds
 
                 paths.push(
                     <path
@@ -272,16 +272,16 @@ export const BracketEditor: React.FC<Props> = ({
     };
 
     return (
-        <div className="relative w-full h-full bg-gradient-to-br from-black via-zinc-950 to-black overflow-hidden">
-            {/* BACKGROUND EFFECTS */}
-            <div className="absolute inset-0 opacity-30 pointer-events-none">
+        <div className="relative w-full h-full bg-[#F0EEE9] dark:bg-gradient-to-br dark:from-black dark:via-zinc-950 dark:to-black overflow-hidden">
+            {/* BACKGROUND EFFECTS — dark mode only */}
+            <div className="absolute inset-0 opacity-30 pointer-events-none hidden dark:block">
                 <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px]" />
                 <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px]" />
             </div>
 
-            {/* GRID OVERLAY */}
+            {/* GRID OVERLAY — dark mode only (white lines invisible on light bg) */}
             <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none"
+                className="absolute inset-0 opacity-[0.03] pointer-events-none hidden dark:block"
                 style={{
                     backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
                     backgroundSize: '40px 40px'
@@ -290,18 +290,18 @@ export const BracketEditor: React.FC<Props> = ({
 
             {/* ERROR BANNER */}
             {error && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-500/10 border border-red-500/50 backdrop-blur-xl px-6 py-3 rounded-full animate-pulse">
-                    <p className="text-red-400 text-sm font-bold">⚠️ {error}</p>
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 dark:bg-red-500/10 border border-red-300 dark:border-red-500/50 backdrop-blur-xl px-6 py-3 rounded-full animate-pulse">
+                    <p className="text-red-600 dark:text-red-400 text-sm font-bold">⚠️ {error}</p>
                 </div>
             )}
 
             {/* CHAMPION TROPHY */}
             {championMatch?.winnerSide && (
-                <div className="absolute top-8 right-8 z-40 bg-yellow-500/10 border border-yellow-500/30 backdrop-blur-xl rounded-2xl p-6 animate-pulse">
+                <div className="absolute top-8 right-8 z-40 bg-amber-50 dark:bg-yellow-500/10 border border-amber-200 dark:border-yellow-500/30 backdrop-blur-xl rounded-2xl p-6 animate-pulse [box-shadow:0_4px_24px_rgba(0,0,0,0.08)]">
                     <div className="text-center">
                         <div className="text-5xl mb-2">🏆</div>
-                        <p className="text-yellow-400 font-black text-xl tracking-wider">CHAMPION</p>
-                        <p className="text-white text-2xl font-black mt-2">
+                        <p className="text-amber-600 dark:text-yellow-400 font-black text-xl tracking-wider">CHAMPION</p>
+                        <p className="text-slate-900 dark:text-white text-2xl font-black mt-2">
                             {championMatch.winnerSide === 'A' ? championMatch.teamA : championMatch.teamB}
                         </p>
                     </div>
@@ -312,7 +312,7 @@ export const BracketEditor: React.FC<Props> = ({
             <div className="absolute top-6 right-6 z-30 flex flex-col gap-2">
                 <button
                     onClick={handleZoomIn}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white font-bold transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-700 hover:border-red-400 dark:hover:border-yellow-500 rounded-lg flex items-center justify-center text-slate-600 dark:text-white font-bold transition-all hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-110 active:scale-95 [box-shadow:0_1px_4px_rgba(0,0,0,0.08)]"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -320,7 +320,7 @@ export const BracketEditor: React.FC<Props> = ({
                 </button>
                 <button
                     onClick={handleZoomOut}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white font-bold transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-700 hover:border-red-400 dark:hover:border-yellow-500 rounded-lg flex items-center justify-center text-slate-600 dark:text-white font-bold transition-all hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-110 active:scale-95 [box-shadow:0_1px_4px_rgba(0,0,0,0.08)]"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 12H4" />
@@ -328,25 +328,25 @@ export const BracketEditor: React.FC<Props> = ({
                 </button>
                 <button
                     onClick={handleZoomReset}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white text-xs font-black transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-700 hover:border-red-400 dark:hover:border-yellow-500 rounded-lg flex items-center justify-center text-slate-600 dark:text-white text-xs font-black transition-all hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-110 active:scale-95 [box-shadow:0_1px_4px_rgba(0,0,0,0.08)]"
                 >
                     1:1
                 </button>
                 <button
                     onClick={handleZoomFit}
-                    className="w-11 h-11 bg-zinc-900/90 border border-zinc-700 hover:border-yellow-500 rounded-lg flex items-center justify-center text-white transition-all hover:bg-zinc-800 hover:scale-110 active:scale-95"
+                    className="w-11 h-11 bg-white dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-700 hover:border-red-400 dark:hover:border-yellow-500 rounded-lg flex items-center justify-center text-slate-600 dark:text-white transition-all hover:bg-slate-50 dark:hover:bg-zinc-800 hover:scale-110 active:scale-95 [box-shadow:0_1px_4px_rgba(0,0,0,0.08)]"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
                     </svg>
                 </button>
-                <div className="mt-1 text-center text-[10px] text-zinc-500 font-mono font-bold">
+                <div className="mt-1 text-center text-[10px] text-slate-400 dark:text-zinc-500 font-mono font-bold">
                     {Math.round(zoom * 100)}%
                 </div>
             </div>
 
             {/* MINIMAP */}
-            <div className="absolute bottom-6 right-6 z-30 w-64 h-40 bg-zinc-900/95 border border-zinc-700 rounded-lg overflow-hidden shadow-2xl">
+            <div className="absolute bottom-6 right-6 z-30 w-64 h-40 bg-white/90 dark:bg-zinc-900/95 border border-slate-200 dark:border-zinc-700 rounded-lg overflow-hidden [box-shadow:0_4px_16px_rgba(0,0,0,0.1)]">
                 <svg
                     viewBox={`0 0 ${containerWidth} ${containerHeight}`}
                     className="w-full h-full"
@@ -363,8 +363,8 @@ export const BracketEditor: React.FC<Props> = ({
                                 y={pos.y}
                                 width={CARD_WIDTH}
                                 height={CARD_HEIGHT}
-                                fill={isLive ? '#22c55e' : isCompleted ? '#eab308' : '#3f3f46'}
-                                stroke="#52525b"
+                                fill={isLive ? '#22c55e' : isCompleted ? '#eab308' : '#cbd5e1'}
+                                stroke="#94a3b8"
                                 strokeWidth="3"
                                 opacity={isLive ? 0.9 : isCompleted ? 0.7 : 0.4}
                             />
@@ -372,7 +372,7 @@ export const BracketEditor: React.FC<Props> = ({
                     })}
                     <g opacity="0.2">{svgPaths.map((path, idx) => <g key={idx}>{path}</g>)}</g>
                 </svg>
-                <div className="absolute top-2 left-2 text-[9px] text-zinc-400 font-bold uppercase tracking-widest bg-black/50 px-2 py-1 rounded">
+                <div className="absolute top-2 left-2 text-[9px] text-slate-500 dark:text-zinc-400 font-bold uppercase tracking-widest bg-white/70 dark:bg-black/50 px-2 py-1 rounded">
                     Overview
                 </div>
             </div>
@@ -430,12 +430,12 @@ export const BracketEditor: React.FC<Props> = ({
                                     onMouseLeave={() => setHoveredMatch(null)}
                                 >
                                     <div className={`
-                                        relative w-full h-full rounded-xl overflow-hidden backdrop-blur-md
-                                        ${isDraft && isRound1 ? 'border-2 border-dashed border-yellow-500/40' :
+                                        relative w-full h-full rounded-xl overflow-hidden bg-white dark:bg-transparent
+                                        ${isDraft && isRound1 ? 'border-2 border-dashed border-amber-300/60 dark:border-yellow-500/40' :
                                             isLive ? 'border-2 border-green-500' :
-                                                isCompleted ? 'border border-yellow-500/30' :
-                                                    'border border-zinc-700/50'}
-                                        ${isHovered ? 'shadow-2xl shadow-blue-500/20 scale-105' : 'shadow-xl'}
+                                                isCompleted ? 'border border-amber-300 dark:border-yellow-500/30' :
+                                                    'border border-slate-200 dark:border-zinc-700/50'}
+                                        ${isHovered ? 'shadow-2xl shadow-blue-500/20 scale-105' : '[box-shadow:0_1px_4px_rgba(0,0,0,0.08)]'}
                                         ${isFinal ? 'shadow-2xl shadow-yellow-500/30' : ''}
                                         transition-all duration-300
                                     `}>
@@ -444,26 +444,29 @@ export const BracketEditor: React.FC<Props> = ({
                                             <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500 z-20" />
                                         )}
 
-                                        <div className={`absolute inset-0 ${isLive ? 'bg-gradient-to-br from-green-950/80 via-zinc-900/90 to-zinc-950/90' :
+                                        {/* Dark-mode gradient overlays — hidden in light mode */}
+                                        <div className={`absolute inset-0 hidden dark:block ${isLive ? 'bg-gradient-to-br from-green-950/80 via-zinc-900/90 to-zinc-950/90' :
                                             isCompleted ? 'bg-gradient-to-br from-zinc-900/90 via-zinc-900/95 to-zinc-950/95' :
                                                 'bg-gradient-to-br from-zinc-900/70 via-zinc-900/80 to-zinc-950/90'
                                             }`} />
+                                        {/* Light-mode live tint */}
+                                        {isLive && <div className="absolute inset-0 bg-green-50/60 dark:hidden" />}
 
-                                        {isLive && <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-green-500/5 to-transparent" />}
+                                        {isLive && <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-green-500/5 to-transparent hidden dark:block" />}
 
                                         <div className="relative z-10 flex flex-col h-full">
                                             {/* HEADER */}
-                                            <div className="px-4 py-2 flex items-center justify-between border-b border-white/5">
+                                            <div className="px-4 py-2 flex items-center justify-between border-b border-slate-100 dark:border-white/5">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] font-mono text-zinc-500 tracking-widest">
+                                                    <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-500 tracking-widest">
                                                         R{match.round} • #{(match.matchNumber || 0) + 1}
                                                     </span>
                                                     {isFinal && <span className="text-lg">🏆</span>}
                                                 </div>
-                                                <div className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${isLive ? 'bg-green-500/20 text-green-400 animate-pulse' :
-                                                    match.isBye ? 'bg-yellow-500/20 text-yellow-500' :
-                                                        isCompleted ? 'bg-yellow-500/20 text-yellow-500' :
-                                                            'bg-zinc-800/50 text-zinc-500'
+                                                <div className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${isLive ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 animate-pulse' :
+                                                    match.isBye ? 'bg-amber-100 dark:bg-yellow-500/20 text-amber-700 dark:text-yellow-500' :
+                                                        isCompleted ? 'bg-amber-100 dark:bg-yellow-500/20 text-amber-700 dark:text-yellow-500' :
+                                                            'bg-slate-100 dark:bg-zinc-800/50 text-slate-500 dark:text-zinc-500'
                                                     }`}>
                                                     {match.isBye ? 'BYE' : match.status}
                                                 </div>
@@ -474,9 +477,9 @@ export const BracketEditor: React.FC<Props> = ({
                                                 {/* TEAM A */}
                                                 <div
                                                     onClick={() => !isEditingA && handleTeamClick(match, 'A')}
-                                                    className={`flex-1 px-4 flex items-center justify-between border-b border-white/5 transition-all duration-200
-                                                        ${(canEdit || canStartGame) && match.teamA !== 'BYE' && !isEditingA ? 'cursor-pointer hover:bg-yellow-500/5' : ''}
-                                                        ${match.winnerSide === 'A' ? 'bg-yellow-500/10' : ''}`}
+                                                    className={`flex-1 px-4 flex items-center justify-between border-b border-slate-100 dark:border-white/5 transition-all duration-200
+                                                        ${(canEdit || canStartGame) && match.teamA !== 'BYE' && !isEditingA ? 'cursor-pointer hover:bg-amber-50 dark:hover:bg-yellow-500/5' : ''}
+                                                        ${match.winnerSide === 'A' ? 'bg-amber-50 dark:bg-yellow-500/10' : ''}`}
                                                 >
                                                     {isEditingA ? (
                                                         <input
@@ -486,21 +489,21 @@ export const BracketEditor: React.FC<Props> = ({
                                                             onChange={(e) => setEditValue(e.target.value)}
                                                             onKeyDown={handleKeyDown}
                                                             onBlur={handleSaveEdit}
-                                                            className="flex-1 bg-black border-2 border-yellow-500 text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none shadow-lg"
+                                                            className="flex-1 bg-white dark:bg-black border-2 border-violet-500 dark:border-yellow-500 text-slate-900 dark:text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none shadow-lg"
                                                             placeholder="Enter team name"
                                                             maxLength={30}
                                                         />
                                                     ) : (
                                                         <>
-                                                            <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamA === 'TBD' ? 'text-zinc-600 italic font-normal' :
-                                                                match.winnerSide === 'A' ? 'text-yellow-400' :
-                                                                    'text-zinc-100'
+                                                            <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamA === 'TBD' ? 'text-slate-400 dark:text-zinc-600 italic font-normal' :
+                                                                match.winnerSide === 'A' ? 'text-amber-600 dark:text-yellow-400' :
+                                                                    'text-slate-800 dark:text-zinc-100'
                                                                 }`}>
                                                                 {match.teamA}
                                                             </span>
                                                             <div className="flex items-center gap-2">
-                                                                {canEdit && match.teamA !== 'BYE' && <span className="text-[8px] text-yellow-500 font-bold">EDIT</span>}
-                                                                {match.winnerSide === 'A' && <span className="text-yellow-500 text-sm">✓</span>}
+                                                                {canEdit && match.teamA !== 'BYE' && <span className="text-[8px] text-red-500 dark:text-yellow-500 font-bold">EDIT</span>}
+                                                                {match.winnerSide === 'A' && <span className="text-amber-600 dark:text-yellow-500 text-sm">✓</span>}
                                                             </div>
                                                         </>
                                                     )}
@@ -510,8 +513,8 @@ export const BracketEditor: React.FC<Props> = ({
                                                 <div
                                                     onClick={() => !isEditingB && match.teamB !== 'BYE' && handleTeamClick(match, 'B')}
                                                     className={`flex-1 px-4 flex items-center justify-between transition-all duration-200
-                                                        ${(canEdit || canStartGame) && match.teamB !== 'BYE' && !isEditingB ? 'cursor-pointer hover:bg-yellow-500/5' : ''}
-                                                        ${match.winnerSide === 'B' ? 'bg-yellow-500/10' : ''}`}
+                                                        ${(canEdit || canStartGame) && match.teamB !== 'BYE' && !isEditingB ? 'cursor-pointer hover:bg-amber-50 dark:hover:bg-yellow-500/5' : ''}
+                                                        ${match.winnerSide === 'B' ? 'bg-amber-50 dark:bg-yellow-500/10' : ''}`}
                                                 >
                                                     {isEditingB ? (
                                                         <input
@@ -521,21 +524,21 @@ export const BracketEditor: React.FC<Props> = ({
                                                             onChange={(e) => setEditValue(e.target.value)}
                                                             onKeyDown={handleKeyDown}
                                                             onBlur={handleSaveEdit}
-                                                            className="flex-1 bg-black border-2 border-yellow-500 text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none shadow-lg"
+                                                            className="flex-1 bg-white dark:bg-black border-2 border-violet-500 dark:border-yellow-500 text-slate-900 dark:text-white text-sm font-bold uppercase px-2 py-1 rounded outline-none shadow-lg"
                                                             placeholder="Enter team name"
                                                             maxLength={30}
                                                         />
                                                     ) : (
                                                         <>
-                                                            <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamB === 'TBD' || match.teamB === 'BYE' ? 'text-zinc-600 italic font-normal' :
-                                                                match.winnerSide === 'B' ? 'text-yellow-400' :
-                                                                    'text-zinc-100'
+                                                            <span className={`text-sm font-black uppercase tracking-wide truncate ${match.teamB === 'TBD' || match.teamB === 'BYE' ? 'text-slate-400 dark:text-zinc-600 italic font-normal' :
+                                                                match.winnerSide === 'B' ? 'text-amber-600 dark:text-yellow-400' :
+                                                                    'text-slate-800 dark:text-zinc-100'
                                                                 }`}>
                                                                 {match.teamB}
                                                             </span>
                                                             <div className="flex items-center gap-2">
-                                                                {canEdit && match.teamB !== 'BYE' && <span className="text-[8px] text-yellow-500 font-bold">EDIT</span>}
-                                                                {match.winnerSide === 'B' && <span className="text-yellow-500 text-sm">✓</span>}
+                                                                {canEdit && match.teamB !== 'BYE' && <span className="text-[8px] text-red-500 dark:text-yellow-500 font-bold">EDIT</span>}
+                                                                {match.winnerSide === 'B' && <span className="text-amber-600 dark:text-yellow-500 text-sm">✓</span>}
                                                             </div>
                                                         </>
                                                     )}
@@ -558,10 +561,10 @@ export const BracketEditor: React.FC<Props> = ({
             </div>
 
             {/* LEGEND */}
-            <div className="absolute bottom-8 left-8 flex gap-4 text-xs text-zinc-500">
+            <div className="absolute bottom-8 left-8 flex gap-4 text-xs text-slate-500 dark:text-zinc-500">
                 <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500" /><span>Live</span></div>
                 <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-500" /><span>Completed</span></div>
-                {canRename && <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border-2 border-dashed border-yellow-500/40" /><span>Round 1 - Click to Edit</span></div>}
+                {canRename && <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border-2 border-dashed border-amber-400/60 dark:border-yellow-500/40" /><span>Round 1 - Click to Edit</span></div>}
             </div>
         </div>
     );

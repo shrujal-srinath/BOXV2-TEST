@@ -180,56 +180,66 @@ export const Dashboard: React.FC = () => {
           )}
 
           {visibleGames.map((g, index) => (
-            <div key={g.code || `game-${index}`} className={`bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 p-4 rounded-xl transition-all shadow-[0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-none group relative overflow-hidden flex flex-col ${isMyGames ? 'hover:border-red-500' : 'hover:border-blue-500'}`}>
-              {/* Status Color Bar */}
-              <div className={`absolute top-0 left-0 w-1 h-full transition-all group-hover:w-2 ${isMyGames ? 'bg-red-600' : 'bg-blue-600'}`}></div>
+            <div key={g.code || `game-${index}`} className={`bg-white dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800 rounded-2xl transition-all [box-shadow:0_1px_3px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-none hover:[box-shadow:0_4px_12px_rgba(0,0,0,0.10),0_8px_24px_rgba(0,0,0,0.06)] dark:hover:border-zinc-700 group relative overflow-hidden flex flex-col`}>
+              {/* Top accent bar */}
+              <div className={`absolute top-0 inset-x-0 h-1 rounded-t-2xl ${isMyGames ? 'bg-red-600' : 'bg-red-600 dark:bg-blue-600'}`} />
 
               {/* Delete Button (Only for My Games) */}
               {isMyGames && (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteGame(g.code); }}
-                  className="absolute top-2 right-2 p-2 bg-slate-100 dark:bg-black/80 text-slate-300 dark:text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-zinc-900 rounded-full transition-all z-20 opacity-0 group-hover:opacity-100 backdrop-blur-sm border border-slate-200 dark:border-zinc-800"
+                  className="absolute top-3 right-3 p-1.5 bg-slate-100 dark:bg-black/80 text-slate-300 dark:text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-zinc-900 rounded-lg transition-all z-20 opacity-0 group-hover:opacity-100 border border-slate-200 dark:border-zinc-800"
                   title="Delete Session"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
               )}
 
-              {/* Header */}
-              <div className="flex justify-between items-start mb-4 pl-2">
-                <div className="text-[10px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-widest bg-slate-100 dark:bg-black px-2 py-1 rounded-full">{g.sport || 'BASKETBALL'}</div>
-                <div className={`w-2 h-2 rounded-full animate-pulse ${isMyGames ? 'bg-red-500' : 'bg-blue-500'}`}></div>
-              </div>
+              <div className="p-4 pt-5 flex flex-col flex-1">
+                {/* Header */}
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full animate-pulse flex-shrink-0 bg-red-500`} />
+                    <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">{g.sport || 'Basketball'}</span>
+                  </div>
+                  <span className="text-[9px] font-mono text-slate-300 dark:text-zinc-600">{g.code || '----'}</span>
+                </div>
 
-              {/* Title & Code */}
-              <h3 className={`font-black italic text-xl text-slate-900 dark:text-white mb-1 transition-colors uppercase tracking-tight pl-2 truncate ${isMyGames ? 'group-hover:text-red-600 dark:group-hover:text-red-400' : 'group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
-                {g.settings?.gameName || 'UNTITLED GAME'}
-              </h3>
-              <div className="text-xs font-mono text-slate-400 dark:text-zinc-400 mb-4 pl-2">ID: <span className="text-slate-500 dark:text-zinc-500">{g.code || '----'}</span></div>
+                {/* Title */}
+                <h3 className="font-black text-slate-900 dark:text-white text-base mb-4 truncate group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
+                  {g.settings?.gameName || 'Untitled Game'}
+                </h3>
 
-              {/* Score */}
-              <div className="flex items-center justify-between bg-slate-100 dark:bg-black p-3 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)] dark:shadow-none mb-3 mt-auto">
-                <div className="font-bold text-lg" style={{ color: g.teamA?.color || '#DC2626' }}>{g.teamA?.score ?? 0}</div>
-                <div className="text-[9px] text-slate-400 dark:text-zinc-600 uppercase tracking-widest font-bold">VS</div>
-                <div className="font-bold text-lg" style={{ color: g.teamB?.color || '#2563EB' }}>{g.teamB?.score ?? 0}</div>
-              </div>
+                {/* Score — HUGE numbers */}
+                <div className="flex items-center justify-between bg-slate-50 dark:bg-black p-3 rounded-xl border border-slate-100 dark:border-zinc-800 mb-4 mt-auto">
+                  <div className="text-center flex-1">
+                    <div className="text-5xl font-black text-slate-900 dark:text-white tabular-nums leading-none" style={{ color: g.teamA?.color || undefined }}>{g.teamA?.score ?? 0}</div>
+                    <div className="text-[9px] text-slate-400 dark:text-zinc-600 font-semibold mt-1 truncate max-w-[80px]">{g.teamA?.name || 'Home'}</div>
+                  </div>
+                  <div className="text-[10px] text-slate-300 dark:text-zinc-700 font-black px-2">VS</div>
+                  <div className="text-center flex-1">
+                    <div className="text-5xl font-black text-slate-900 dark:text-white tabular-nums leading-none" style={{ color: g.teamB?.color || undefined }}>{g.teamB?.score ?? 0}</div>
+                    <div className="text-[9px] text-slate-400 dark:text-zinc-600 font-semibold mt-1 truncate max-w-[80px]">{g.teamB?.name || 'Away'}</div>
+                  </div>
+                </div>
 
-              {/* Actions */}
-              <div className="flex gap-2">
-                {isMyGames ? (
-                  <>
-                    <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 dark:bg-red-900/60 dark:hover:bg-red-900/90 text-white border border-red-600 dark:border-red-900/80 shadow-[0_2px_8px_rgba(196,88,50,0.25)] dark:shadow-[0_2px_8px_rgba(153,27,27,0.25)] text-xs font-bold uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-1.5">
-                      Console <span className="opacity-70">→</span>
+                {/* Actions */}
+                <div className="flex gap-2">
+                  {isMyGames ? (
+                    <>
+                      <button onClick={() => navigate(`/host/${g.code}`)} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 dark:bg-red-900/60 dark:hover:bg-red-900/90 text-white text-xs font-semibold rounded-xl transition-colors duration-150 cursor-pointer flex items-center justify-center gap-1.5">
+                        Console →
+                      </button>
+                      <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 text-xs font-semibold rounded-xl transition-colors duration-150 cursor-pointer">
+                        Tablet
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 dark:bg-blue-900/80 dark:hover:bg-blue-800 text-white text-xs font-semibold rounded-xl transition-colors duration-150 cursor-pointer flex items-center justify-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Watch Stream
                     </button>
-                    <button onClick={() => goToTabletMode(g.code)} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 text-xs font-bold uppercase tracking-widest rounded-lg transition-all">
-                      Tablet
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => navigate(`/watch/${g.code}`)} className="flex-1 py-2 bg-blue-700 hover:bg-blue-600 dark:bg-blue-900/80 dark:hover:bg-blue-800 text-white shadow-[0_2px_6px_rgba(29,78,216,0.2)] dark:shadow-none text-xs font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2">
-                    <span>●</span> Watch Stream
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -321,60 +331,70 @@ export const Dashboard: React.FC = () => {
 
 
   if (loading) return (
-    <div className="min-h-screen bg-slate-50 dark:bg-black flex items-center justify-center transition-colors duration-300">
+    <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center transition-colors duration-300">
       <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
 
   return (
-    <div className={`min-h-screen bg-slate-50 dark:bg-black font-sans text-slate-900 dark:text-white transition-colors duration-300`}>
+    <div className={`min-h-screen bg-[#F0EEE9] dark:bg-black font-sans text-slate-900 dark:text-white transition-colors duration-300`}>
       {/* HEADER */}
-      <header className="border-b border-slate-200 dark:border-zinc-800 bg-white/85 dark:bg-zinc-900/50 backdrop-blur-md p-6 flex justify-between items-center sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-none">
-        <button onClick={() => setShowProfilePanel(true)} className="flex items-center gap-3 group hover:bg-slate-100 dark:hover:bg-zinc-800/50 p-2 -ml-2 rounded-xl transition-all cursor-pointer" title="Open profile">
-          <div className="relative flex-shrink-0">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-md overflow-hidden border-2 transition-all group-hover:border-red-600 dark:group-hover:border-red-700 ${user ? 'border-red-600/50 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800' : 'border-slate-300/50 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800'}`}>
-              {user?.user_metadata?.avatar_url
-                ? <img src={user.user_metadata.avatar_url} alt="User" className="w-full h-full object-cover" />
-                : <div className="w-full h-full bg-gradient-to-br from-red-600 to-red-900 flex items-center justify-center text-white text-sm font-black">
-                    {user ? (user.user_metadata?.full_name?.[0]?.toUpperCase() || 'U') : 'G'}
-                  </div>
-              }
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-slate-50 dark:border-black rounded-full" />
+      <header className="bg-white dark:bg-zinc-900/50 dark:border-b dark:border-zinc-800 px-6 py-4 flex justify-between items-center sticky top-0 z-20 [box-shadow:0_1px_0_rgba(0,0,0,0.08)] dark:shadow-none">
+        {/* Left: wordmark + avatar */}
+        <div className="flex items-center gap-4">
+          {/* THE BOX wordmark */}
+          <div className="hidden sm:flex items-center gap-2.5 pr-4 border-r border-slate-100 dark:border-zinc-800 mr-1">
+            <svg className="w-6 h-6 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            </svg>
+            <span className="text-[15px] font-black tracking-tight text-slate-900 dark:text-white leading-none">THE BOX</span>
           </div>
-          <div className="text-left hidden sm:block">
-            <div className="text-slate-900 dark:text-white font-bold text-sm leading-none">
-              {user ? (user.user_metadata?.full_name?.split(' ')[0] || 'Operator') : 'Guest'}
-            </div>
-            <div className="text-[9px] text-slate-400 dark:text-zinc-600 uppercase tracking-widest font-bold mt-0.5">
-              {user && !(user as any).is_anonymous ? (user.app_metadata?.provider === 'google' ? 'Google' : 'Email') : 'Guest Session'}
-            </div>
-          </div>
-        </button>
 
-        {/* --- HARDWARE STATUS WIDGET --- */}
+          <button onClick={() => setShowProfilePanel(true)} className="flex items-center gap-3 group hover:bg-slate-50 dark:hover:bg-zinc-800/50 p-1.5 -ml-1.5 rounded-xl transition-all cursor-pointer" title="Open profile">
+            <div className="relative flex-shrink-0">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shadow-sm overflow-hidden border-2 transition-all group-hover:border-red-600 dark:group-hover:border-red-700 ${user ? 'border-red-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800' : 'border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800'}`}>
+                {user?.user_metadata?.avatar_url
+                  ? <img src={user.user_metadata.avatar_url} alt="User" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full bg-gradient-to-br from-red-600 to-red-900 flex items-center justify-center text-white text-sm font-black">
+                      {user ? (user.user_metadata?.full_name?.[0]?.toUpperCase() || 'U') : 'G'}
+                    </div>
+                }
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-black rounded-full" />
+            </div>
+            <div className="text-left hidden sm:block">
+              <div className="text-slate-900 dark:text-white font-bold text-sm leading-none">
+                {user ? (user.user_metadata?.full_name?.split(' ')[0] || 'Operator') : 'Guest'}
+              </div>
+              <div className="text-[9px] text-slate-400 dark:text-zinc-600 uppercase tracking-widest font-semibold mt-0.5">
+                {user && !(user as any).is_anonymous ? (user.app_metadata?.provider === 'google' ? 'Google' : 'Email') : 'Guest Session'}
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* Center: H/W status chip — redesigned */}
         <button
           onClick={() => setActiveModal('connect_controller')}
           className={`
-            flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all mr-auto ml-4 shadow-sm dark:shadow-none
+            flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all mr-auto ml-4
             ${isConnected
-              ? 'bg-green-50 border-green-300 text-green-800 hover:bg-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-500 dark:hover:bg-green-900/50'
-              : 'bg-slate-100 border-slate-200 text-slate-500 hover:text-slate-600 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-600 dark:hover:text-zinc-400 opacity-0 md:opacity-100'
+              ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-500 dark:hover:bg-green-900/50'
+              : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-600 dark:hover:text-zinc-400 opacity-0 md:opacity-100'
             }
           `}
         >
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-zinc-400 dark:bg-zinc-600'}`} />
-          <span className="text-[10px] font-bold uppercase tracking-widest hidden md:inline">
-            {isConnected ? (transport === 'supabase' ? 'H/W: CLOUD' : 'H/W: LAN') : 'H/W: OFF'}
+          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-slate-400 dark:bg-zinc-600'}`} />
+          <span className="text-[10px] font-semibold tracking-wide hidden md:inline">
+            {isConnected ? (transport === 'supabase' ? 'Cloud' : 'LAN') : 'Offline'}
           </span>
-          {isConnected && <span className="text-lg leading-none">🎮</span>}
+          {isConnected && <span className="text-sm leading-none">🎮</span>}
         </button>
-        {/* ----------------------------- */}
 
-        <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-[55] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded transition-colors" aria-label="Open menu">
-          <div className="w-6 h-0.5 bg-slate-500 dark:bg-zinc-400 group-hover:bg-slate-900 dark:group-hover:bg-white transition-colors"></div>
-          <div className="w-6 h-0.5 bg-slate-500 dark:bg-zinc-400 group-hover:bg-slate-900 dark:group-hover:bg-white transition-colors"></div>
-          <div className="w-4 h-0.5 bg-slate-500 dark:bg-zinc-400 group-hover:bg-slate-900 dark:group-hover:bg-white transition-colors ml-auto"></div>
+        <button onClick={() => setIsMenuOpen(true)} className="group p-2 space-y-1.5 cursor-pointer z-[55] hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" aria-label="Open menu">
+          <div className="w-5 h-0.5 bg-slate-400 dark:bg-zinc-400 group-hover:bg-slate-800 dark:group-hover:bg-white transition-colors"></div>
+          <div className="w-5 h-0.5 bg-slate-400 dark:bg-zinc-400 group-hover:bg-slate-800 dark:group-hover:bg-white transition-colors"></div>
+          <div className="w-3 h-0.5 bg-slate-400 dark:bg-zinc-400 group-hover:bg-slate-800 dark:group-hover:bg-white transition-colors ml-auto"></div>
         </button>
       </header>
 
@@ -463,17 +483,17 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto p-6 md:p-10">
+      <main className="max-w-7xl mx-auto px-6 md:px-10 pt-8 pb-10">
         {showInstallCard && !isInstalled && (
           <div className="mb-8 animate-in slide-in-from-top-4 fade-in duration-500">
             <InstallPrompt isInstalled={isInstalled} hasPrompt={!!prompt} onInstall={handleInstall} onDismiss={handleDismiss} />
           </div>
         )}
 
-        {/* 1. INITIALIZE NEW SESSION */}
-        <section className="mb-8">
-          <h2 className="text-slate-500 dark:text-zinc-500 text-xs font-bold uppercase tracking-[0.2em] mb-6 flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-transparent">
-            <span className="w-2 h-2 bg-red-600 dark:bg-red-600 rounded-full"></span> Initialize New Session
+        {/* 1. START A GAME */}
+        <section className="mb-10">
+          <h2 className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3 mb-5">
+            Start a Game
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {CORE_SPORTS.map((id) => {
@@ -495,10 +515,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* More Sports collapsible */}
-          <div className="mt-4">
+          <div className="mt-5">
             <button
               onClick={() => setShowMoreSports(v => !v)}
-              className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500 hover:text-red-600 dark:hover:text-zinc-300 transition-colors group"
+              className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-zinc-500 hover:text-red-600 dark:hover:text-zinc-300 transition-colors group"
             >
               <span className={`transition-transform duration-300 ${showMoreSports ? 'rotate-90' : ''}`}>▶</span>
               {showMoreSports ? 'Hide Extended Sports' : 'More Sports'}
@@ -535,38 +555,38 @@ export const Dashboard: React.FC = () => {
 
         {/* 3. LIVE GAMES & TOURNAMENTS TABS */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="flex items-center gap-6 border-b border-slate-200 dark:border-zinc-800 pb-0 mb-6 overflow-x-auto">
+          <h2 className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3 mb-5">
+            Live Feed
+          </h2>
+          <div className="flex items-center gap-0 border-b border-slate-200 dark:border-zinc-800 mb-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('all')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'all' ? 'text-red-600 dark:text-white' : 'text-slate-500 hover:text-slate-600 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
+              className={`pb-3.5 mr-6 text-xs font-bold uppercase tracking-[0.18em] transition-all relative whitespace-nowrap -mb-px border-b-2 ${activeTab === 'all' ? 'text-red-600 border-red-600 dark:text-white dark:border-white' : 'text-slate-400 border-transparent hover:text-slate-600 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
               Active Feed
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-red-600 text-white dark:bg-blue-600' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'all' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {liveFeed.length}
               </span>
-              {activeTab === 'all' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-600 dark:bg-blue-600"></div>}
             </button>
 
             <button
               onClick={() => setActiveTab('my')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'my' ? 'text-red-600 dark:text-white' : 'text-slate-500 hover:text-slate-600 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
+              className={`pb-3.5 mr-6 text-xs font-bold uppercase tracking-[0.18em] transition-all relative whitespace-nowrap -mb-px border-b-2 ${activeTab === 'my' ? 'text-red-600 border-red-600 dark:text-white dark:border-white' : 'text-slate-400 border-transparent hover:text-slate-600 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
               My Games
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'my' ? 'bg-red-600 text-white dark:bg-red-600 dark:text-white' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'my' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {myGames.length}
               </span>
-              {activeTab === 'my' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-600 dark:bg-red-600"></div>}
             </button>
 
             <button
               onClick={() => setActiveTab('tournaments')}
-              className={`pb-4 text-xs font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === 'tournaments' ? 'text-yellow-700 dark:text-yellow-400' : 'text-slate-500 hover:text-slate-600 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
+              className={`pb-3.5 text-xs font-bold uppercase tracking-[0.18em] transition-all relative whitespace-nowrap -mb-px border-b-2 ${activeTab === 'tournaments' ? 'text-red-600 border-red-600 dark:text-yellow-400 dark:border-yellow-400' : 'text-slate-400 border-transparent hover:text-slate-600 dark:text-zinc-600 dark:hover:text-zinc-400'}`}
             >
-              Live Tournaments
-              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'tournaments' ? 'bg-yellow-700 text-white dark:text-black' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500'}`}>
+              Tournaments
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] ${activeTab === 'tournaments' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500'}`}>
                 {liveTournaments.length}
               </span>
-              {activeTab === 'tournaments' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-yellow-500"></div>}
             </button>
           </div>
 
@@ -762,7 +782,55 @@ const DEV_STATUS_BADGE: Record<SportDevStatus, { label: string; classes: string 
   'under-development': { label: 'SOON', classes: 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' },
 };
 
+const LIGHT_GRADIENTS: Record<string, string> = {
+  red:    'from-orange-500 to-red-600',
+  orange: 'from-orange-500 to-red-600',
+  teal:   'from-emerald-500 to-teal-600',
+  green:  'from-emerald-500 to-teal-600',
+  yellow: 'from-amber-400 to-orange-500',
+  blue:   'from-blue-500 to-indigo-600',
+  purple: 'from-violet-500 to-purple-700',
+  pink:   'from-pink-500 to-rose-600',
+  zinc:   'from-slate-600 to-slate-800',
+};
+
 const SportCard = ({ name, desc, icon, onClick, accent, isSelected, theme, devStatus }: any) => {
+  if (theme === 'light') {
+    const gradient = LIGHT_GRADIENTS[accent] || LIGHT_GRADIENTS.zinc;
+    return (
+      <button
+        onClick={onClick}
+        className={`
+          bg-gradient-to-br ${gradient} p-5 text-left group transition-all duration-200 relative overflow-hidden h-48 rounded-2xl flex flex-col justify-between
+          hover:scale-[1.02] hover:shadow-xl
+          ${isSelected ? 'scale-[1.02] ring-2 ring-white/40 shadow-xl' : '[box-shadow:0_2px_8px_rgba(0,0,0,0.12),0_8px_24px_rgba(0,0,0,0.08)]'}
+        `}
+      >
+        {/* Decorative emoji watermark */}
+        <div className="absolute bottom-3 right-3 text-7xl opacity-[0.15] select-none pointer-events-none rotate-12 leading-none">
+          {icon}
+        </div>
+
+        <div className="relative z-10 flex items-start justify-between gap-2">
+          <h3 className="text-2xl font-black text-white leading-tight">{name}</h3>
+          {devStatus && DEV_STATUS_BADGE[devStatus as SportDevStatus] && (
+            <span className="shrink-0 text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30 mt-1">
+              {DEV_STATUS_BADGE[devStatus as SportDevStatus]!.label}
+            </span>
+          )}
+        </div>
+
+        <div className="relative z-10 flex flex-col gap-2">
+          <p className="text-white/70 text-[11px] font-medium leading-tight">{desc}</p>
+          <span className="self-start px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-full border border-white/30 transition-colors">
+            Start Game
+          </span>
+        </div>
+      </button>
+    );
+  }
+
+  // ── Dark mode (original) ──────────────────────────────────────────────────
   const accentConfig: any = {
     red: { border: 'group-[.is-selected]:border-red-600', text: 'group-[.is-selected]:text-red-600 dark:group-[.is-selected]:text-red-500', glow: 'group-[.is-selected]:drop-shadow-[0_0_30px_rgba(220,38,38,0.3)] dark:group-[.is-selected]:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]', hoverBorder: 'hover:border-red-600', hoverText: 'group-hover:text-red-600 dark:group-hover:text-red-500', hoverGlow: 'group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.3)] dark:group-hover:drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]' },
     blue: { border: 'group-[.is-selected]:border-blue-600', text: 'group-[.is-selected]:text-blue-600 dark:group-[.is-selected]:text-blue-500', glow: 'group-[.is-selected]:drop-shadow-[0_0_30px_rgba(37,99,235,0.3)] dark:group-[.is-selected]:drop-shadow-[0_0_30px_rgba(37,99,235,0.8)]', hoverBorder: 'hover:border-blue-600', hoverText: 'group-hover:text-blue-600 dark:group-hover:text-blue-500', hoverGlow: 'group-hover:drop-shadow-[0_0_30px_rgba(37,99,235,0.3)] dark:group-hover:drop-shadow-[0_0_30px_rgba(37,99,235,0.8)]' },
@@ -775,50 +843,39 @@ const SportCard = ({ name, desc, icon, onClick, accent, isSelected, theme, devSt
     zinc: { border: 'group-[.is-selected]:border-zinc-500', text: 'group-[.is-selected]:text-zinc-400 dark:group-[.is-selected]:text-zinc-300', glow: 'group-[.is-selected]:drop-shadow-[0_0_20px_rgba(161,161,170,0.2)]', hoverBorder: 'hover:border-zinc-500', hoverText: 'group-hover:text-zinc-400 dark:group-hover:text-zinc-300', hoverGlow: 'group-hover:drop-shadow-[0_0_20px_rgba(161,161,170,0.2)]' },
   };
   const config = accentConfig[accent] || accentConfig.red;
-
-  // Light mode: warm concrete accent colors for left border
-  // Dark mode: no left border color (returns undefined → no inline style)
-  const lightBorderColors: any = {
-    red: '#C45832', blue: '#2563EB', green: '#3D7A3C',
-    yellow: '#B8860B', orange: '#C5631C', purple: '#7C3AED',
-  };
-
   const borderClasses = `${config.hoverBorder} ${config.border}`;
   const textClasses = `${config.hoverText} ${config.text}`;
   const glowClasses = `${config.hoverGlow} ${config.glow}`;
-
   const iconStateClass = `
-    opacity-[0.04] grayscale 
-    group-hover:grayscale-0 group-hover:opacity-40 group-hover:scale-125 group-hover:brightness-[1.2] dark:group-hover:brightness-[1.8] group-hover:saturate-[1.5]
-    group-[.is-selected]:grayscale-0 group-[.is-selected]:opacity-40 group-[.is-selected]:scale-125 group-[.is-selected]:brightness-[1.2] dark:group-[.is-selected]:brightness-[1.8] group-[.is-selected]:saturate-[1.5]
+    opacity-[0.04] grayscale
+    group-hover:grayscale-0 group-hover:opacity-40 group-hover:scale-125 group-hover:brightness-[1.8] group-hover:saturate-[1.5]
+    group-[.is-selected]:grayscale-0 group-[.is-selected]:opacity-40 group-[.is-selected]:scale-125 group-[.is-selected]:brightness-[1.8] group-[.is-selected]:saturate-[1.5]
   `;
 
   return (
     <button
       onClick={onClick}
       className={`
-        bg-white dark:bg-zinc-900/40 border border-slate-200 dark:border-zinc-800 p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between
-        ${theme === 'light' ? 'border-l-[3px] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06),0_8px_20px_rgba(0,0,0,0.04)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]' : 'hover:shadow-none shadow-none'}
+        dark:bg-zinc-900/40 border border-zinc-800 p-6 text-left group transition-all duration-300 relative overflow-hidden h-40 flex flex-col justify-between
         ${borderClasses}
-        ${isSelected ? `is-selected ${theme === 'light' ? 'shadow-[inset_0_2px_4px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] !border-l-[4px]' : 'shadow-lg'} scale-[1.02]` : ''}
+        ${isSelected ? `is-selected shadow-lg scale-[1.02]` : ''}
       `}
-      style={theme === 'light' ? { borderLeftColor: lightBorderColors[accent] || '#C45832' } : undefined}
     >
       <div className={`absolute -top-4 -right-4 text-[120px] transition-all duration-500 rotate-12 transform-gpu backface-hidden perspective-1000 ${iconStateClass} ${glowClasses}`}>
         {icon}
       </div>
       <div className="relative z-10">
         <div className="flex items-start justify-between gap-2 mb-0.5">
-          <h3 className={`text-xl font-black italic text-slate-900 dark:text-zinc-300 transition-colors uppercase tracking-tight ${textClasses}`}>{name}</h3>
+          <h3 className={`text-xl font-black italic dark:text-zinc-300 transition-colors uppercase tracking-tight ${textClasses}`}>{name}</h3>
           {devStatus && DEV_STATUS_BADGE[devStatus as SportDevStatus] && (
             <span className={`shrink-0 text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full mt-1 ${DEV_STATUS_BADGE[devStatus as SportDevStatus]!.classes}`}>
               {DEV_STATUS_BADGE[devStatus as SportDevStatus]!.label}
             </span>
           )}
         </div>
-        <p className="text-slate-500 dark:text-zinc-500 text-[10px] mt-1 uppercase tracking-widest font-bold leading-tight">{desc}</p>
+        <p className="dark:text-zinc-500 text-[10px] mt-1 uppercase tracking-widest font-bold leading-tight">{desc}</p>
       </div>
-      <div className={`relative z-10 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-zinc-500 group-hover:text-slate-900 dark:group-hover:text-white'} ${textClasses}`}>Initialize <span className="text-sm">→</span></div>
+      <div className={`relative z-10 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${isSelected ? 'dark:text-white' : 'dark:text-zinc-500 dark:group-hover:text-white'} ${textClasses}`}>Initialize <span className="text-sm">→</span></div>
     </button>
   );
 };

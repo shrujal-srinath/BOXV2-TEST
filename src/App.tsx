@@ -23,6 +23,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { subscribeToAuth } from './services/authService';
 import { HardwareProvider } from './contexts/HardwareContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { SplashScreen } from './components/SplashScreen';
 
 // ── Website pages ──────────────────────────────────────────
 import { LandingPage } from './pages/LandingPage';
@@ -39,10 +40,14 @@ import { TournamentDashboard } from './pages/TournamentDashboard';
 import { TournamentSetup } from './pages/TournamentSetup';
 import { TournamentManager } from './pages/TournamentManager';
 import { TournamentViewer } from './pages/TournamentViewer';
+import { TournamentWallView } from './pages/TournamentWallView';
 import { PlayerPassportPage } from './pages/PlayerPassportPage';
 import { VolunteerConsole } from './pages/VolunteerConsole';
 import RefereeScreen from './pages/RefereeScreen'; // <-- Added Referee Route
 import ArenaView from './pages/ArenaView';         // <-- Added Arena Route
+import PiLauncher from './pages/PiLauncher';
+import PiReceiverSetup from './pages/PiReceiverSetup';
+import PiDisplay from './pages/PiDisplay';
 
 // ── Tablet PWA pages (NO auth wrapper — these must be public) ─
 import { StandaloneTablet } from './pages/StandaloneTablet';
@@ -75,8 +80,8 @@ const isPWA =
 const RootRedirect: React.FC<{ userId: string | null; authLoading: boolean }> = ({ userId, authLoading }) => {
   if (isPWA) return <Navigate to="/tablet/standalone" replace />;
   if (authLoading) return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="animate-pulse text-zinc-600 font-mono text-xs uppercase tracking-widest">Loading...</div>
+    <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
+      <div className="animate-pulse text-slate-400 dark:text-zinc-600 font-mono text-xs uppercase tracking-widest">Loading...</div>
     </div>
   );
   return userId ? <HomePage /> : <LandingPage />;
@@ -100,11 +105,11 @@ function getCachedUserId(): string | null {
 
 function App() {
   const [userId, setUserId] = useState<string | null>(getCachedUserId);
-  // If we already have a cached user, skip the loading screen entirely.
   const [authLoading, setAuthLoading] = useState(() => getCachedUserId() === null);
+  // Splash always shows on cold load; skip it only for tablet PWA mode
+  const [showSplash, setShowSplash] = useState(!isPWA);
 
   useEffect(() => {
-    // Safety net: never block the UI for more than 3 s waiting for Supabase auth.
     const timeout = setTimeout(() => setAuthLoading(false), 3000);
     const unsub = subscribeToAuth((u) => {
       setUserId(u?.id || null);
@@ -113,6 +118,10 @@ function App() {
     });
     return () => { unsub(); clearTimeout(timeout); };
   }, []);
+
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
 
   return (
     <ThemeProvider>
@@ -141,12 +150,16 @@ function App() {
               <Route path="/wall" element={<WallView />} />
               <Route path="/referee" element={<RefereeScreen />} />
               <Route path="/arena" element={<ArenaView />} />
+              <Route path="/pi-launcher" element={<PiLauncher />} />
+              <Route path="/pi-receiver" element={<PiReceiverSetup />} />
+              <Route path="/pi-display/:gameCode" element={<PiDisplay />} />
 
               {/* ── Tournament PUBLIC viewer (shareable QR link, no auth) ── */}
               {/* /t/:id      → bracket/results/live scores for spectators   */}
               {/* /t/:id/volunteer → scorer console (PIN-gated, no auth)     */}
               <Route path="/t/:id" element={<TournamentViewer />} />
               <Route path="/t/:id/volunteer" element={<VolunteerConsole />} />
+              <Route path="/t/:id/wall/:code" element={<TournamentWallView />} />
 
               {/* ══════════════════════════════════════════════
               WEBSITE — PROTECTED ROUTES

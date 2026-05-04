@@ -92,10 +92,10 @@ const SportIconBadge: React.FC<{ meta: SportMeta; size?: 'sm' | 'md' | 'lg' }> =
 
 const StatusPill: React.FC<{ status: DivisionConfig['status'] }> = ({ status }) => {
     const map: Record<string, { label: string; cls: string }> = {
-        setup_required: { label: 'Setup Required', cls: 'text-zinc-500 border-zinc-800 bg-zinc-950' },
-        draft: { label: 'Draft', cls: 'text-yellow-500 border-yellow-900/50 bg-yellow-950/20' },
-        published: { label: 'Live', cls: 'text-green-400 border-green-900/50 bg-green-950/20' },
-        completed: { label: 'Completed', cls: 'text-zinc-400 border-zinc-700 bg-zinc-900' },
+        setup_required: { label: 'Setup Required', cls: 'text-slate-500 dark:text-zinc-500 border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950' },
+        draft: { label: 'Draft', cls: 'text-amber-600 dark:text-yellow-500 border-amber-200 dark:border-yellow-900/50 bg-amber-50 dark:bg-yellow-950/20' },
+        published: { label: 'Live', cls: 'text-green-700 dark:text-green-400 border-green-200 dark:border-green-900/50 bg-green-100 dark:bg-green-950/20' },
+        completed: { label: 'Completed', cls: 'text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-900' },
     };
     const s = map[status] ?? map.setup_required;
     return (
@@ -119,14 +119,14 @@ const SportDivisionCard: React.FC<{
     return (
         <div
             onClick={onClick}
-            className={`relative group rounded-2xl border cursor-pointer transition-all duration-300 overflow-hidden min-h-[200px] flex flex-col`}
-            style={{
-                background: isSelected ? `${meta.accentHex}10` : '#09090b',
-                borderColor: isSelected ? meta.accentHex : '#27272a',
-                boxShadow: isSelected ? `0 0 0 1px ${meta.accentHex}40, 0 8px 30px ${meta.accentHex}10` : 'none',
-            }}
+            className={`relative group rounded-2xl border cursor-pointer transition-all duration-300 overflow-hidden min-h-[200px] flex flex-col ${isSelected ? '' : 'bg-white dark:bg-[#09090b] border-slate-200 dark:border-zinc-800 [box-shadow:0_1px_3px_rgba(0,0,0,0.06)] dark:shadow-none'}`}
+            style={isSelected ? {
+                background: `${meta.accentHex}10`,
+                borderColor: meta.accentHex,
+                boxShadow: `0 0 0 1px ${meta.accentHex}40, 0 8px 30px ${meta.accentHex}10`,
+            } : undefined}
         >
-            <div className="h-[2px]" style={{ background: isSelected ? meta.accentHex : '#27272a' }} />
+            <div className="h-[2px]" style={{ background: isSelected ? meta.accentHex : 'transparent' }} />
 
             <div className="p-5 flex flex-col flex-1">
                 <div className="flex items-start justify-between mb-4">
@@ -138,7 +138,7 @@ const SportDivisionCard: React.FC<{
                     <div className="text-[9px] font-black uppercase tracking-[0.25em] mb-1" style={{ color: meta.accentHex }}>
                         {division.gender === 'men' ? "Men's" : division.gender === 'women' ? "Women's" : 'Mixed'}
                     </div>
-                    <div className="text-xl font-black italic uppercase text-white leading-none">
+                    <div className="text-xl font-black italic uppercase text-slate-900 dark:text-white leading-none">
                         {meta.label}
                     </div>
                     {division.bracketSize && (
@@ -177,41 +177,41 @@ const SetupModal: React.FC<{
     const meta = getSportMeta(sport);
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onCancel} />
-            <div className="bg-zinc-950 border border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl shadow-2xl overflow-hidden">
+            <div className="absolute inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-xl" onClick={onCancel} />
+            <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-2xl overflow-hidden">
                 <div className="h-[2px]" style={{ background: `linear-gradient(to right, ${meta.accentHex}, transparent)` }} />
                 <div className="p-7">
                     <div className="flex items-center gap-4 mb-7">
                         <SportIconBadge meta={meta} size="md" />
                         <div>
-                            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Initialize Division</div>
-                            <h2 className="text-lg font-black italic uppercase text-white leading-none">{meta.label}</h2>
+                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-500 mb-0.5">Initialize Division</div>
+                            <h2 className="text-lg font-black italic uppercase text-slate-900 dark:text-white leading-none">{meta.label}</h2>
                         </div>
                     </div>
 
-                    <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest text-center mb-4">Number of Teams</div>
+                    <div className="text-[10px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-widest text-center mb-4">Number of Teams</div>
                     <div className="flex items-center justify-center gap-5 mb-7">
                         <button onClick={() => onTeamCountChange(Math.max(2, teamCount - 1))}
-                            className="w-11 h-11 rounded-xl bg-zinc-800 border border-zinc-700 text-xl font-black text-white hover:bg-zinc-700 transition-all active:scale-95">−</button>
+                            className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xl font-black text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-700 transition-all active:scale-95">−</button>
                         <div className="text-center w-16">
-                            <div className="text-5xl font-black text-white">{teamCount}</div>
-                            <div className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest mt-0.5">teams</div>
+                            <div className="text-5xl font-black text-slate-900 dark:text-white">{teamCount}</div>
+                            <div className="text-[9px] text-slate-400 dark:text-zinc-600 font-bold uppercase tracking-widest mt-0.5">teams</div>
                         </div>
                         <button onClick={() => onTeamCountChange(Math.min(64, teamCount + 1))}
-                            className="w-11 h-11 rounded-xl bg-zinc-800 border border-zinc-700 text-xl font-black text-white hover:bg-zinc-700 transition-all active:scale-95">+</button>
+                            className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xl font-black text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-700 transition-all active:scale-95">+</button>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 mb-7">
                         {[{ v: bracketSize, l: 'Bracket' }, { v: Math.log2(bracketSize) | 0, l: 'Rounds' }, { v: byes, l: 'Byes' }].map(({ v, l }) => (
-                            <div key={l} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-center">
-                                <div className="text-2xl font-black text-white">{v}</div>
-                                <div className="text-[9px] text-zinc-600 font-bold uppercase tracking-wider mt-0.5">{l}</div>
+                            <div key={l} className="bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-xl p-3 text-center">
+                                <div className="text-2xl font-black text-slate-900 dark:text-white">{v}</div>
+                                <div className="text-[9px] text-slate-400 dark:text-zinc-600 font-bold uppercase tracking-wider mt-0.5">{l}</div>
                             </div>
                         ))}
                     </div>
 
                     <div className="flex gap-3">
-                        <button onClick={onCancel} className="flex-1 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-white transition-all">Cancel</button>
+                        <button onClick={onCancel} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-slate-900 dark:hover:text-white transition-all">Cancel</button>
                         <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-[0.98]"
                             style={{ background: meta.accentHex, color: '#000' }}>Generate</button>
                     </div>
@@ -230,26 +230,26 @@ const AddSportModal: React.FC<{
     onClose: () => void;
 }> = ({ addableSports, onAddSport, onClose }) => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onClose} />
-        <div className="bg-zinc-950 border border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl shadow-2xl p-7">
-            <h3 className="text-sm font-black italic uppercase text-white mb-5">Add Sport Division</h3>
+        <div className="absolute inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-xl" onClick={onClose} />
+        <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-2xl p-7">
+            <h3 className="text-sm font-black italic uppercase text-slate-900 dark:text-white mb-5">Add Sport Division</h3>
             {addableSports.length === 0 ? (
-                <div className="text-zinc-600 text-xs font-bold uppercase tracking-widest text-center py-6">All sports added</div>
+                <div className="text-slate-400 dark:text-zinc-600 text-xs font-bold uppercase tracking-widest text-center py-6">All sports added</div>
             ) : (
                 <div className="space-y-2">
                     {addableSports.map(sport => {
                         const meta = getSportMeta(sport);
                         return (
                             <button key={sport} onClick={() => { onAddSport(sport); onClose(); }}
-                                className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all group">
+                                className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-slate-400 dark:hover:border-zinc-700 transition-all group">
                                 <SportIconBadge meta={meta} size="sm" />
-                                <span className="font-black uppercase text-xs tracking-wide text-zinc-300 group-hover:text-white transition-colors">{meta.label}</span>
+                                <span className="font-black uppercase text-xs tracking-wide text-slate-600 dark:text-zinc-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{meta.label}</span>
                             </button>
                         );
                     })}
                 </div>
             )}
-            <button onClick={onClose} className="w-full mt-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500 font-black uppercase text-[10px] tracking-widest hover:text-white transition-all">Close</button>
+            <button onClick={onClose} className="w-full mt-4 py-3 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-500 font-black uppercase text-[10px] tracking-widest hover:text-slate-900 dark:hover:text-white transition-all">Close</button>
         </div>
     </div>
 );
@@ -276,40 +276,40 @@ const PinRevealModal: React.FC<{ tournamentId: string; onClose: () => void }> = 
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onClose} />
-            <div className="bg-zinc-950 border border-zinc-800 w-full max-w-xs relative z-10 rounded-3xl shadow-2xl overflow-hidden">
+            <div className="absolute inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-xl" onClick={onClose} />
+            <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full max-w-xs relative z-10 rounded-3xl [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-2xl overflow-hidden">
                 <div className="h-[2px] bg-gradient-to-r from-yellow-500 to-transparent" />
                 <div className="p-7 text-center">
-                    <div className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-1">Scorer Access</div>
-                    <div className="text-sm font-black italic uppercase text-white mb-6">PIN Code</div>
+                    <div className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-zinc-500 mb-1">Scorer Access</div>
+                    <div className="text-sm font-black italic uppercase text-slate-900 dark:text-white mb-6">PIN Code</div>
                     {loading ? (
                         <div className="h-16 flex items-center justify-center">
-                            <div className="w-6 h-6 rounded-full border-2 border-zinc-800 border-t-yellow-500 animate-spin" />
+                            <div className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-zinc-800 border-t-yellow-500 animate-spin" />
                         </div>
                     ) : pin ? (
                         <>
                             <div className="flex items-center justify-center gap-2 mb-6">
                                 {pin.split('').map((digit, i) => (
-                                    <div key={i} className="w-14 h-16 rounded-xl bg-black border border-zinc-700 flex items-center justify-center">
-                                        <span className="text-4xl font-black text-yellow-400 tabular-nums">{digit}</span>
+                                    <div key={i} className="w-14 h-16 rounded-xl bg-slate-50 dark:bg-black border border-slate-200 dark:border-zinc-700 flex items-center justify-center">
+                                        <span className="text-4xl font-black text-amber-600 dark:text-yellow-400 tabular-nums">{digit}</span>
                                     </div>
                                 ))}
                             </div>
-                            <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mb-5">
+                            <div className="text-[10px] text-slate-400 dark:text-zinc-600 font-bold uppercase tracking-widest mb-5">
                                 Share with your scorers only
                             </div>
                             <button onClick={handleCopy}
-                                className={`w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${copied ? 'bg-green-600 text-white' : 'bg-yellow-500 text-black hover:bg-yellow-400'}`}>
+                                className={`w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${copied ? 'bg-green-600 text-white' : 'bg-red-600 dark:bg-yellow-500 text-white dark:text-black hover:bg-red-700 dark:hover:bg-yellow-400'}`}>
                                 {copied ? 'Copied!' : 'Copy PIN'}
                             </button>
                         </>
                     ) : (
-                        <div className="text-red-400 text-xs font-bold uppercase tracking-widest py-4">
+                        <div className="text-red-500 dark:text-red-400 text-xs font-bold uppercase tracking-widest py-4">
                             Could not fetch PIN.<br />
-                            <span className="text-zinc-600">Check Supabase RLS policy.</span>
+                            <span className="text-slate-400 dark:text-zinc-600">Check Supabase RLS policy.</span>
                         </div>
                     )}
-                    <button onClick={onClose} className="w-full mt-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500 font-black uppercase text-[10px] tracking-widest hover:text-white transition-all">Close</button>
+                    <button onClick={onClose} className="w-full mt-3 py-2.5 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-500 font-black uppercase text-[10px] tracking-widest hover:text-slate-900 dark:hover:text-white transition-all">Close</button>
                 </div>
             </div>
         </div>
@@ -332,15 +332,15 @@ const ShareModal: React.FC<{ tournamentId: string; tournamentName: string; onClo
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onClose} />
-            <div className="bg-zinc-950 border border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl shadow-2xl overflow-hidden">
+            <div className="absolute inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-xl" onClick={onClose} />
+            <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-2xl overflow-hidden">
                 <div className="h-[2px] bg-gradient-to-r from-yellow-500 to-transparent" />
                 <div className="p-7 text-center">
-                    <div className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-1">Spectator Link</div>
-                    <div className="text-sm font-black italic uppercase text-white mb-5">{tournamentName}</div>
+                    <div className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-zinc-500 mb-1">Spectator Link</div>
+                    <div className="text-sm font-black italic uppercase text-slate-900 dark:text-white mb-5">{tournamentName}</div>
 
                     {/* QR Code */}
-                    <div className="w-[180px] h-[180px] mx-auto rounded-2xl overflow-hidden border border-zinc-800 mb-5 bg-[#09090b] flex items-center justify-center">
+                    <div className="w-[180px] h-[180px] mx-auto rounded-2xl overflow-hidden border border-slate-200 dark:border-zinc-800 mb-5 bg-[#09090b] flex items-center justify-center">
                         <img
                             src={qrUrl}
                             alt="Tournament QR Code"
@@ -349,15 +349,15 @@ const ShareModal: React.FC<{ tournamentId: string; tournamentName: string; onClo
                         />
                     </div>
 
-                    <div className="text-[10px] text-zinc-600 font-mono mb-4 break-all">{url}</div>
+                    <div className="text-[10px] text-slate-400 dark:text-zinc-600 font-mono mb-4 break-all">{url}</div>
 
                     <div className="flex gap-2">
                         <button onClick={handleCopy}
-                            className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${copied ? 'bg-green-600 text-white' : 'bg-yellow-500 text-black hover:bg-yellow-400'}`}>
+                            className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${copied ? 'bg-green-600 text-white' : 'bg-red-600 dark:bg-yellow-500 text-white dark:text-black hover:bg-red-700 dark:hover:bg-yellow-400'}`}>
                             {copied ? 'Copied!' : 'Copy Link'}
                         </button>
                         <button onClick={onClose}
-                            className="px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-white transition-all">
+                            className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-slate-900 dark:hover:text-white transition-all">
                             Done
                         </button>
                     </div>
@@ -399,31 +399,31 @@ const ScheduleManager: React.FC<{
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onClose} />
-            <div className="bg-zinc-950 border border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl shadow-2xl p-7">
-                <div className="text-sm font-black italic uppercase text-white mb-1">Quick Schedule</div>
-                <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-6">Auto-fill times for {schedulable.length} matches</div>
+            <div className="absolute inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-xl" onClick={onClose} />
+            <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-2xl p-7">
+                <div className="text-sm font-black italic uppercase text-slate-900 dark:text-white mb-1">Quick Schedule</div>
+                <div className="text-[10px] text-slate-400 dark:text-zinc-500 font-bold uppercase tracking-widest mb-6">Auto-fill times for {schedulable.length} matches</div>
 
                 <div className="space-y-4 mb-6">
                     <div>
-                        <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Start Time</label>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-zinc-500 uppercase tracking-widest block mb-2">Start Time</label>
                         <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-white font-mono font-bold text-sm outline-none focus:border-yellow-600 transition-colors" />
+                            className="w-full bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-800 rounded-xl p-3 text-slate-900 dark:text-white font-mono font-bold text-sm outline-none focus:border-violet-500 dark:focus:border-yellow-600 transition-colors" />
                     </div>
                     <div>
-                        <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Interval per Match (minutes)</label>
+                        <label className="text-[9px] font-black text-slate-500 dark:text-zinc-500 uppercase tracking-widest block mb-2">Interval per Match (minutes)</label>
                         <div className="flex items-center gap-3">
-                            <button onClick={() => setInterval(Math.max(10, interval - 5))} className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 text-white font-black hover:bg-zinc-700 transition-all">−</button>
-                            <div className="flex-1 text-center font-black text-2xl text-white">{interval}</div>
-                            <button onClick={() => setInterval(Math.min(180, interval + 5))} className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 text-white font-black hover:bg-zinc-700 transition-all">+</button>
+                            <button onClick={() => setInterval(Math.max(10, interval - 5))} className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-white font-black hover:bg-slate-200 dark:hover:bg-zinc-700 transition-all">−</button>
+                            <div className="flex-1 text-center font-black text-2xl text-slate-900 dark:text-white">{interval}</div>
+                            <button onClick={() => setInterval(Math.min(180, interval + 5))} className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-white font-black hover:bg-slate-200 dark:hover:bg-zinc-700 transition-all">+</button>
                         </div>
                     </div>
                 </div>
 
                 <div className="flex gap-3">
-                    <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-white transition-all">Cancel</button>
+                    <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-slate-900 dark:hover:text-white transition-all">Cancel</button>
                     <button onClick={handleQuickSchedule} disabled={saving || schedulable.length === 0}
-                        className="flex-1 py-3 rounded-xl bg-yellow-500 text-black font-black uppercase text-[10px] tracking-widest hover:bg-yellow-400 transition-all disabled:opacity-50">
+                        className="flex-1 py-3 rounded-xl bg-red-600 dark:bg-yellow-500 text-white dark:text-black font-black uppercase text-[10px] tracking-widest hover:bg-red-700 dark:hover:bg-yellow-400 transition-all disabled:opacity-50">
                         {saving ? 'Saving...' : 'Apply'}
                     </button>
                 </div>
@@ -472,8 +472,13 @@ const BracketView: React.FC<{
 
     const handleNameSave = async (fixture: TournamentFixture, side: 'A' | 'B') => {
         const key = `${fixture.id}_${side}`;
-        const name = editingNames[key];
-        if (!name || name === (side === 'A' ? fixture.teamA : fixture.teamB)) return;
+        const raw = editingNames[key];
+        const name = raw?.trim();
+        // Reject empty or unchanged values — revert the input to its previous value
+        if (!name || name === (side === 'A' ? fixture.teamA : fixture.teamB)) {
+            setEditingNames(prev => { const n = { ...prev }; delete n[key]; return n; });
+            return;
+        }
         setSavingId(key);
         await updateTeamName(tournamentId, fixture.id, side, name);
         setSavingId(null);
@@ -585,6 +590,40 @@ const BracketView: React.FC<{
 };
 
 // ─────────────────────────────────────────────────────────────────
+// CONFIRM MODAL
+// ─────────────────────────────────────────────────────────────────
+const ConfirmModal: React.FC<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void;
+    onCancel: () => void;
+}> = ({ title, message, confirmLabel = 'Confirm', danger = false, onConfirm, onCancel }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-xl" onClick={onCancel} />
+        <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full max-w-sm relative z-10 rounded-3xl [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-2xl overflow-hidden">
+            <div className={`h-[2px] ${danger ? 'bg-gradient-to-r from-red-500 to-transparent' : 'bg-gradient-to-r from-yellow-500 to-transparent'}`} />
+            <div className="p-7">
+                <div className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-zinc-500 mb-1">Confirm Action</div>
+                <h2 className="text-sm font-black italic uppercase text-slate-900 dark:text-white mb-3">{title}</h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mb-7 leading-relaxed">{message}</p>
+                <div className="flex gap-3">
+                    <button onClick={onCancel}
+                        className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 font-black uppercase text-[10px] tracking-widest hover:text-slate-900 dark:hover:text-white transition-all">
+                        Cancel
+                    </button>
+                    <button onClick={onConfirm}
+                        className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-[0.98] ${danger ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-red-600 dark:bg-yellow-500 hover:bg-red-700 dark:hover:bg-yellow-400 text-white dark:text-black'}`}>
+                        {confirmLabel}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
+// ─────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────
 export const TournamentManager: React.FC = () => {
@@ -605,6 +644,9 @@ export const TournamentManager: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'bracket' | 'staff'>('bracket');
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [revokingId, setRevokingId] = useState<string | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{
+        title: string; message: string; confirmLabel?: string; danger?: boolean; onConfirm: () => void;
+    } | null>(null);
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
@@ -628,16 +670,31 @@ export const TournamentManager: React.FC = () => {
         setSelectedDivisionId(setupDivId);
     };
 
-    const handlePublish = async () => {
+    const handlePublish = () => {
         if (!id || !selectedDivisionId) return;
-        if (!window.confirm('Publish this bracket?\n\nScorers will be able to start matches. The bracket structure will be locked.')) return;
-        await publishDivision(id, selectedDivisionId);
+        setConfirmAction({
+            title: 'Publish Bracket',
+            message: 'Scorers will be able to start matches once published. The bracket structure will be locked.',
+            confirmLabel: 'Publish',
+            onConfirm: async () => {
+                setConfirmAction(null);
+                await publishDivision(id, selectedDivisionId);
+            },
+        });
     };
 
-    const handleUnpublish = async () => {
+    const handleUnpublish = () => {
         if (!id || !selectedDivisionId) return;
-        if (!window.confirm('Hide this bracket from scorers? (Does not delete data)')) return;
-        await unpublishDivision(id, selectedDivisionId);
+        setConfirmAction({
+            title: 'Unpublish Bracket',
+            message: 'This will hide the bracket from scorers. No data will be deleted.',
+            confirmLabel: 'Unpublish',
+            danger: true,
+            onConfirm: async () => {
+                setConfirmAction(null);
+                await unpublishDivision(id, selectedDivisionId);
+            },
+        });
     };
 
     const handleAddSport = async (sport: SchedulableSport) => {
@@ -645,24 +702,40 @@ export const TournamentManager: React.FC = () => {
         await addTournamentSport(id, sport as any);
     };
 
-    const handleRemoveDivision = async (divId: string) => {
+    const handleRemoveDivision = (divId: string) => {
         if (!id) return;
-        if (!window.confirm('Delete this division and all its fixture data?')) return;
-        await removeDivision(id, divId);
-        if (selectedDivisionId === divId) setSelectedDivisionId(null);
+        setConfirmAction({
+            title: 'Delete Division',
+            message: 'This will permanently delete the division and all its fixture data. This cannot be undone.',
+            confirmLabel: 'Delete',
+            danger: true,
+            onConfirm: async () => {
+                setConfirmAction(null);
+                await removeDivision(id, divId);
+                if (selectedDivisionId === divId) setSelectedDivisionId(null);
+            },
+        });
     };
 
-    const handleRevokeScorer = async (userId: string) => {
+    const handleRevokeScorer = (userId: string) => {
         if (!id) return;
-        if (!window.confirm('Remove this scorer from the tournament?')) return;
-        setRevokingId(userId);
-        await revokeScorer(id, userId);
-        setRevokingId(null);
+        setConfirmAction({
+            title: 'Remove Scorer',
+            message: 'This scorer will lose access to start matches for this tournament.',
+            confirmLabel: 'Remove',
+            danger: true,
+            onConfirm: async () => {
+                setConfirmAction(null);
+                setRevokingId(userId);
+                await revokeScorer(id, userId);
+                setRevokingId(null);
+            },
+        });
     };
 
     if (!tournament) return (
-        <div className="min-h-screen bg-black flex items-center justify-center">
-            <div className="w-10 h-10 rounded-full border-2 border-zinc-900 border-t-yellow-500 animate-spin" />
+        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full border-2 border-slate-200 dark:border-zinc-900 border-t-red-600 dark:border-t-yellow-500 animate-spin" />
         </div>
     );
 
@@ -684,23 +757,23 @@ export const TournamentManager: React.FC = () => {
     const liveCount = divisionsList.filter(d => d.status === 'published').length;
 
     return (
-        <div className="min-h-screen bg-black text-white relative">
+        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black text-slate-900 dark:text-white relative">
             {/* Background */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/4 w-[600px] h-[300px] rounded-full opacity-[0.03]"
+                <div className="absolute top-0 left-1/4 w-[600px] h-[300px] rounded-full dark:opacity-[0.03] opacity-0"
                     style={{ background: `radial-gradient(circle, ${theme.accentHex} 0%, transparent 70%)` }} />
             </div>
 
             {/* ── HEADER ────────────────────────────────────────────────── */}
-            <header className="sticky top-0 z-30 bg-black/80 backdrop-blur-xl border-b border-zinc-900">
+            <header className="sticky top-0 z-30 bg-white/80 dark:bg-black/80 backdrop-blur-xl [box-shadow:0_1px_0_rgba(0,0,0,0.08)] dark:border-b dark:border-zinc-900">
                 <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
                     {/* Left */}
                     <div className="flex items-center gap-4 min-w-0">
-                        <button onClick={() => navigate('/tournament')} className="text-zinc-600 hover:text-white transition-colors flex-shrink-0">
+                        <button onClick={() => navigate('/tournament')} className="text-slate-400 dark:text-zinc-600 hover:text-slate-900 dark:hover:text-white transition-colors flex-shrink-0">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                         </button>
                         <div className="min-w-0">
-                            <div className="text-[8px] font-black uppercase tracking-[0.3em] text-zinc-600 mb-0.5 flex items-center gap-2">
+                            <div className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-400 dark:text-zinc-600 mb-0.5 flex items-center gap-2">
                                 <span className="font-mono">{tournament.id}</span>
                                 {liveCount > 0 && (
                                     <span className="flex items-center gap-1 text-green-400">
@@ -709,13 +782,25 @@ export const TournamentManager: React.FC = () => {
                                     </span>
                                 )}
                             </div>
-                            <h1 className="text-lg font-black italic uppercase text-white leading-none truncate">{tournament.name}</h1>
+                            <h1 className="text-lg font-black italic uppercase text-slate-900 dark:text-white leading-none truncate">{tournament.name}</h1>
                         </div>
                     </div>
 
                     {/* Right — admin actions */}
                     {isAdmin && (
                         <div className="flex items-center gap-2 flex-shrink-0">
+                            {/* Wall view — opens in new tab for a live game code */}
+                            {divisionFixtures.some(f => f.status === 'live' && f.gameCode) && (
+                                <button
+                                    onClick={() => {
+                                        const live = divisionFixtures.find(f => f.status === 'live' && f.gameCode);
+                                        if (live?.gameCode) window.open(`/t/${id}/wall/${live.gameCode}`, '_blank');
+                                    }}
+                                    className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-green-700/50 flex items-center justify-center transition-all group"
+                                    title="Open Wall Scoreboard">
+                                    <svg className="w-4 h-4 text-zinc-500 group-hover:text-green-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                </button>
+                            )}
                             {/* PIN reveal */}
                             <button onClick={() => setShowPinModal(true)}
                                 className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-yellow-700/50 flex items-center justify-center transition-all group"
@@ -754,14 +839,14 @@ export const TournamentManager: React.FC = () => {
                 {(!isAdmin || activeTab === 'bracket') && (
                     <>
                         {/* Gender tabs */}
-                        <div className="flex items-center gap-1 mb-8 bg-zinc-950 border border-zinc-900 rounded-2xl p-1 w-fit">
+                        <div className="flex items-center gap-1 mb-8 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 rounded-2xl p-1 w-fit">
                             {(['men', 'women', 'mixed'] as GenderCategory[]).map(g => {
                                 const t = GENDER_THEME[g];
                                 const divCount = divisionsList.filter(d => d.gender === g).length;
                                 if (!isAdmin && divCount === 0) return null;
                                 return (
                                     <button key={g} onClick={() => { setActiveGender(g); setSelectedDivisionId(null); }}
-                                        className={`px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${activeGender === g ? 'text-black' : 'text-zinc-600 hover:text-zinc-300'}`}
+                                        className={`px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${activeGender === g ? 'text-black' : 'text-slate-500 dark:text-zinc-600 hover:text-slate-800 dark:hover:text-zinc-300'}`}
                                         style={activeGender === g ? { background: t.accentHex } : {}}>
                                         {t.label}
                                     </button>
@@ -785,11 +870,11 @@ export const TournamentManager: React.FC = () => {
                                 ))}
                                 {isAdmin && (
                                     <button onClick={() => setShowAddSportModal(true)}
-                                        className="group rounded-2xl border-2 border-dashed border-zinc-900 hover:border-zinc-700 bg-transparent hover:bg-zinc-950/60 transition-all duration-300 flex flex-col items-center justify-center gap-3 min-h-[200px]">
-                                        <div className="w-10 h-10 rounded-2xl bg-zinc-900 group-hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center transition-all">
-                                            <svg className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
+                                        className="group rounded-2xl border-2 border-dashed border-slate-300 dark:border-zinc-900 hover:border-red-400 dark:hover:border-zinc-700 bg-white dark:bg-transparent hover:bg-red-50 dark:hover:bg-zinc-950/60 transition-all duration-300 flex flex-col items-center justify-center gap-3 min-h-[200px]">
+                                        <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-zinc-900 group-hover:bg-red-100 dark:group-hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 flex items-center justify-center transition-all">
+                                            <svg className="w-5 h-5 text-slate-400 dark:text-zinc-600 group-hover:text-red-600 dark:group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
                                         </div>
-                                        <span className="text-xs font-black italic uppercase text-zinc-600 group-hover:text-white transition-colors">Add Sport</span>
+                                        <span className="text-xs font-black italic uppercase text-slate-400 dark:text-zinc-600 group-hover:text-red-600 dark:group-hover:text-white transition-colors">Add Sport</span>
                                     </button>
                                 )}
                             </div>
@@ -797,16 +882,16 @@ export const TournamentManager: React.FC = () => {
 
                         {/* ── BRACKET PANEL ─────────────────────────────────── */}
                         {currentDivision && (
-                            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden">
+                            <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-3xl overflow-hidden [box-shadow:0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] dark:shadow-none">
                                 {/* Panel header */}
-                                <div className="px-6 py-4 border-b border-zinc-900 flex items-center justify-between flex-wrap gap-3">
+                                <div className="px-6 py-4 border-b border-slate-100 dark:border-zinc-900 flex items-center justify-between flex-wrap gap-3">
                                     <div className="flex items-center gap-3">
                                         <SportIconBadge meta={getSportMeta(currentDivision.sport)} size="sm" />
                                         <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-zinc-500">
                                                 {currentDivision.gender === 'men' ? "Men's" : currentDivision.gender === 'women' ? "Women's" : 'Mixed'} Division
                                             </div>
-                                            <div className="text-sm font-black italic uppercase text-white leading-none">
+                                            <div className="text-sm font-black italic uppercase text-slate-900 dark:text-white leading-none">
                                                 {getSportMeta(currentDivision.sport).label}
                                             </div>
                                         </div>
@@ -854,6 +939,31 @@ export const TournamentManager: React.FC = () => {
                                     )}
                                 </div>
 
+                                {/* Status guidance banner */}
+                                {currentDivision.status === 'setup_required' && isAdmin && (
+                                    <div className="px-6 py-3 bg-zinc-900/60 border-b border-zinc-800 flex items-center gap-2">
+                                        <svg className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Click the division card above to set team count and generate fixtures.</span>
+                                    </div>
+                                )}
+                                {currentDivision.status === 'draft' && !isEditMode && (
+                                    <div className="px-6 py-3 bg-yellow-950/20 border-b border-yellow-900/30 flex items-center gap-2">
+                                        <svg className="w-3.5 h-3.5 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <span className="text-[10px] font-bold text-yellow-600 uppercase tracking-widest">Draft — Enter team names via Edit Teams, then Publish to let scorers start matches.</span>
+                                    </div>
+                                )}
+                                {currentDivision.status === 'published' && (
+                                    <div className="px-6 py-3 bg-green-950/20 border-b border-green-900/30 flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+                                        <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Live — Scorers can now start matches from the volunteer console.</span>
+                                    </div>
+                                )}
+                                {currentDivision.status === 'completed' && currentDivision.champion && (
+                                    <div className="px-6 py-3 bg-yellow-950/20 border-b border-yellow-900/30 flex items-center gap-2">
+                                        <svg className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3h14M5 3a2 2 0 00-2 2v3a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2M5 3l2 8M19 3l-2 8m-5 0v8m0 0H9m3 0h3" /></svg>
+                                        <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest">Champion: {currentDivision.champion}</span>
+                                    </div>
+                                )}
                                 {/* Edit mode hint */}
                                 {isEditMode && (
                                     <div className="px-6 py-3 bg-yellow-950/20 border-b border-yellow-900/30">
@@ -889,20 +999,20 @@ export const TournamentManager: React.FC = () => {
                     <div className="max-w-2xl space-y-8">
                         {/* Pending requests */}
                         <div>
-                            <div className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-4">
+                            <div className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3 mb-4">
                                 Pending Requests ({pendingRequests.length})
                             </div>
                             {pendingRequests.length === 0 ? (
-                                <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 text-center text-zinc-700 text-xs font-bold uppercase tracking-widest">
+                                <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 rounded-2xl p-6 text-center text-slate-400 dark:text-zinc-700 text-xs font-bold uppercase tracking-widest">
                                     No pending requests
                                 </div>
                             ) : (
                                 <div className="space-y-3">
                                     {pendingRequests.map(([uid, req]) => (
-                                        <div key={uid} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4">
+                                        <div key={uid} className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4 [box-shadow:0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-none">
                                             <div className="min-w-0">
-                                                <div className="font-black text-white text-sm truncate">{req.displayName || 'Unknown'}</div>
-                                                <div className="text-[10px] text-zinc-500 truncate">{req.email}</div>
+                                                <div className="font-black text-slate-900 dark:text-white text-sm truncate">{req.displayName || 'Unknown'}</div>
+                                                <div className="text-[10px] text-slate-500 dark:text-zinc-500 truncate">{req.email}</div>
                                             </div>
                                             <div className="flex gap-2 flex-shrink-0">
                                                 <button onClick={() => id && handleRequest(id, uid, 'reject')}
@@ -922,11 +1032,11 @@ export const TournamentManager: React.FC = () => {
 
                         {/* Active scorers */}
                         <div>
-                            <div className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-4">
+                            <div className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3 mb-4">
                                 Active Scorers ({scorerList.length})
                             </div>
                             {scorerList.length === 0 ? (
-                                <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 text-center text-zinc-700 text-xs font-bold uppercase tracking-widest">
+                                <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 rounded-2xl p-6 text-center text-slate-400 dark:text-zinc-700 text-xs font-bold uppercase tracking-widest">
                                     No scorers added yet — share the PIN to invite them
                                 </div>
                             ) : (
@@ -934,14 +1044,14 @@ export const TournamentManager: React.FC = () => {
                                     {scorerList.map(uid => {
                                         const userData = scorerUserData[uid];
                                         return (
-                                            <div key={uid} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4">
+                                            <div key={uid} className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4 [box-shadow:0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-none">
                                                 <div className="min-w-0 flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-black text-zinc-400">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center text-xs font-black text-slate-500 dark:text-zinc-400">
                                                         {userData?.displayName?.[0] ?? '?'}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <div className="font-black text-white text-sm truncate">{userData?.displayName || 'Scorer'}</div>
-                                                        <div className="text-[10px] text-zinc-600 font-mono truncate">{uid.slice(0, 12)}...</div>
+                                                        <div className="font-black text-slate-900 dark:text-white text-sm truncate">{userData?.displayName || 'Scorer'}</div>
+                                                        <div className="text-[10px] text-slate-400 dark:text-zinc-600 font-mono truncate">{uid.slice(0, 12)}...</div>
                                                     </div>
                                                 </div>
                                                 <button
@@ -959,13 +1069,13 @@ export const TournamentManager: React.FC = () => {
 
                         {/* PIN shortcut */}
                         <button onClick={() => setShowPinModal(true)}
-                            className="flex items-center gap-3 w-full bg-zinc-950 border border-zinc-800 hover:border-yellow-700/40 rounded-2xl p-4 transition-all group text-left">
+                            className="flex items-center gap-3 w-full bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 hover:border-red-300 dark:hover:border-yellow-700/40 rounded-2xl p-4 transition-all group text-left [box-shadow:0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-none">
                             <div className="w-10 h-10 rounded-xl bg-yellow-950/30 border border-yellow-900/30 flex items-center justify-center group-hover:bg-yellow-950/50 transition-all">
                                 <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             </div>
                             <div>
-                                <div className="text-xs font-black uppercase text-white tracking-wide">Reveal Scorer PIN</div>
-                                <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mt-0.5">Share with scorers to grant access</div>
+                                <div className="text-xs font-black uppercase text-slate-900 dark:text-white tracking-wide">Reveal Scorer PIN</div>
+                                <div className="text-[10px] text-slate-400 dark:text-zinc-600 font-bold uppercase tracking-widest mt-0.5">Share with scorers to grant access</div>
                             </div>
                         </button>
                     </div>
@@ -999,6 +1109,16 @@ export const TournamentManager: React.FC = () => {
                     fixtures={divisionFixtures}
                     tournamentId={id}
                     onClose={() => setShowScheduler(false)}
+                />
+            )}
+            {confirmAction && (
+                <ConfirmModal
+                    title={confirmAction.title}
+                    message={confirmAction.message}
+                    confirmLabel={confirmAction.confirmLabel}
+                    danger={confirmAction.danger}
+                    onConfirm={confirmAction.onConfirm}
+                    onCancel={() => setConfirmAction(null)}
                 />
             )}
         </div>

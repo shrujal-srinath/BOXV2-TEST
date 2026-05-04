@@ -84,13 +84,10 @@ const getSportMeta = (sport: string) => SPORT_META[sport] ?? SPORT_META.general;
 // ─── Animated background ─────────────────────────────────────────────────────
 const ArenaBackground: React.FC = () => (
     <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-black" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] rounded-full opacity-[0.04]"
+        <div className="absolute inset-0 bg-[#F0EEE9] dark:bg-black" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] rounded-full dark:opacity-[0.04] opacity-0"
             style={{ background: 'radial-gradient(circle, #facc15 0%, transparent 70%)' }} />
-        <div className="absolute bottom-0 right-0 w-[600px] h-[300px] rounded-full opacity-[0.03]"
-            style={{ background: 'radial-gradient(circle, #facc15 0%, transparent 70%)' }} />
-        {/* subtle grid */}
-        <div className="absolute inset-0 opacity-[0.02]"
+        <div className="absolute inset-0 dark:opacity-[0.02] opacity-0"
             style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '80px 80px' }} />
     </div>
 );
@@ -98,18 +95,18 @@ const ArenaBackground: React.FC = () => (
 // ─── Status badge ─────────────────────────────────────────────────────────────
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     if (status === 'live') return (
-        <span className="inline-flex items-center gap-1.5 bg-green-950/60 border border-green-800/50 text-green-400 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+        <span className="inline-flex items-center gap-1.5 bg-green-100 dark:bg-green-950/60 border border-green-200 dark:border-green-800/50 text-green-700 dark:text-green-400 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 bg-green-500 dark:bg-green-400 rounded-full animate-pulse" />
             Live
         </span>
     );
     if (status === 'completed') return (
-        <span className="inline-flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 text-zinc-500 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
+        <span className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-500 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
             Final
         </span>
     );
     return (
-        <span className="inline-flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 text-zinc-600 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
+        <span className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-400 dark:text-zinc-600 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">
             Scheduled
         </span>
     );
@@ -147,7 +144,7 @@ const LiveMatchCard: React.FC<{ fixture: TournamentFixture }> = ({ fixture }) =>
 
     return (
         <Link to={fixture.gameCode ? `/watch/${fixture.gameCode}` : '#'}
-            className="group block bg-zinc-950 border border-zinc-800 hover:border-zinc-600 rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/50">
+            className="group block bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-600 rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl dark:hover:shadow-black/50 [box-shadow:0_1px_3px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.04)] dark:shadow-none">
             {/* Top accent line */}
             <div className="h-0.5 w-full" style={{ background: `linear-gradient(90deg, ${meta.accent}, transparent)` }} />
 
@@ -156,7 +153,7 @@ const LiveMatchCard: React.FC<{ fixture: TournamentFixture }> = ({ fixture }) =>
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                         <div className="w-5 h-5 flex-shrink-0" style={{ color: meta.accent }}>{meta.icon}</div>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{meta.label}</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-zinc-500">{meta.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <StatusBadge status={fixture.status} />
@@ -169,15 +166,15 @@ const LiveMatchCard: React.FC<{ fixture: TournamentFixture }> = ({ fixture }) =>
                 {/* Score display */}
                 <div className="flex items-center justify-between">
                     <div className="flex-1">
-                        <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1 truncate">{fixture.teamA}</div>
-                        <div className="text-4xl font-black text-white tabular-nums leading-none">{scoreA}</div>
+                        <div className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1 truncate">{fixture.teamA}</div>
+                        <div className="text-4xl font-black text-slate-900 dark:text-white tabular-nums leading-none">{scoreA}</div>
                     </div>
                     <div className="px-4 text-center">
-                        <div className="text-zinc-600 font-black text-lg">—</div>
+                        <div className="text-slate-300 dark:text-zinc-600 font-black text-lg">—</div>
                         {fixture.status === 'live' && (
-                            <div className="mt-1 text-[9px] font-bold text-zinc-500 uppercase">
+                            <div className="mt-1 text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase">
                                 {running ? (
-                                    <span className="text-green-500">{String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}</span>
+                                    <span className="text-green-600 dark:text-green-500">{String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}</span>
                                 ) : (
                                     <span>Q{period}</span>
                                 )}
@@ -185,15 +182,15 @@ const LiveMatchCard: React.FC<{ fixture: TournamentFixture }> = ({ fixture }) =>
                         )}
                     </div>
                     <div className="flex-1 text-right">
-                        <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1 truncate">{fixture.teamB}</div>
-                        <div className="text-4xl font-black text-white tabular-nums leading-none">{scoreB}</div>
+                        <div className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1 truncate">{fixture.teamB}</div>
+                        <div className="text-4xl font-black text-slate-900 dark:text-white tabular-nums leading-none">{scoreB}</div>
                     </div>
                 </div>
 
                 {/* Watch button */}
                 {fixture.gameCode && (
-                    <div className="mt-4 pt-4 border-t border-zinc-900">
-                        <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 group-hover:text-zinc-300 transition-colors">
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300 transition-colors">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                             Watch Live
                         </div>
@@ -219,44 +216,44 @@ const FixtureRow: React.FC<{ fixture: TournamentFixture; navigate: (path: string
     return (
         <div
             onClick={handleClick}
-            className={`flex items-center justify-between py-3 px-4 rounded-xl border transition-all duration-200 
-                ${fixture.gameCode ? 'cursor-pointer hover:bg-zinc-900/50' : 'cursor-default'}
-                ${isLive ? 'bg-green-950/10 border-green-900/30' : 'bg-zinc-950/30 border-zinc-900/50'}
+            className={`flex items-center justify-between py-3 px-4 rounded-xl border transition-all duration-200
+                ${fixture.gameCode ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-900/50' : 'cursor-default'}
+                ${isLive ? 'bg-green-50 dark:bg-green-950/10 border-green-200 dark:border-green-900/30' : 'bg-white dark:bg-zinc-950/30 border-slate-200 dark:border-zinc-900/50'}
             `}
         >
             {/* Time + Court */}
             <div className="w-20 flex-shrink-0">
-                <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                <div className="text-[10px] font-black text-slate-500 dark:text-zinc-500 uppercase tracking-widest">
                     {fixture.time !== 'Pending' ? fixture.time : '—'}
                 </div>
                 {fixture.court !== 'Unassigned' && (
-                    <div className="text-[9px] text-zinc-700 font-bold mt-0.5">{fixture.court}</div>
+                    <div className="text-[9px] text-slate-400 dark:text-zinc-700 font-bold mt-0.5">{fixture.court}</div>
                 )}
             </div>
 
             {/* Teams & scores */}
             <div className="flex-1 px-3">
                 <div className="flex items-center justify-between">
-                    <span className={`text-sm font-black uppercase tracking-tight ${winnerA ? 'text-white' : isCompleted ? 'text-zinc-500' : 'text-zinc-200'}`}>
-                        {winnerA && <span className="text-yellow-500 mr-1">▶</span>}
-                        {fixture.teamA === 'TBD' ? <span className="text-zinc-700 italic font-normal">TBD</span> : fixture.teamA}
+                    <span className={`text-sm font-black uppercase tracking-tight ${winnerA ? 'text-slate-900 dark:text-white' : isCompleted ? 'text-slate-400 dark:text-zinc-500' : 'text-slate-800 dark:text-zinc-200'}`}>
+                        {winnerA && <span className="text-red-600 dark:text-yellow-500 mr-1">▶</span>}
+                        {fixture.teamA === 'TBD' ? <span className="text-slate-300 dark:text-zinc-700 italic font-normal">TBD</span> : fixture.teamA}
                     </span>
                     {isCompleted && (
-                        <span className={`text-sm font-black tabular-nums ${winnerA ? 'text-white' : 'text-zinc-500'}`}>
+                        <span className={`text-sm font-black tabular-nums ${winnerA ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-zinc-500'}`}>
                             {fixture.finalScore?.teamA ?? 0}
                         </span>
                     )}
                 </div>
-                <div className="my-0.5 h-px bg-zinc-900" />
+                <div className="my-0.5 h-px bg-slate-100 dark:bg-zinc-900" />
                 <div className="flex items-center justify-between">
-                    <span className={`text-sm font-black uppercase tracking-tight ${winnerB ? 'text-white' : isCompleted ? 'text-zinc-500' : 'text-zinc-200'}`}>
-                        {winnerB && <span className="text-yellow-500 mr-1">▶</span>}
-                        {fixture.teamB === 'BYE' ? <span className="text-zinc-700 italic font-normal">BYE</span> :
-                            fixture.teamB === 'TBD' ? <span className="text-zinc-700 italic font-normal">TBD</span> :
+                    <span className={`text-sm font-black uppercase tracking-tight ${winnerB ? 'text-slate-900 dark:text-white' : isCompleted ? 'text-slate-400 dark:text-zinc-500' : 'text-slate-800 dark:text-zinc-200'}`}>
+                        {winnerB && <span className="text-red-600 dark:text-yellow-500 mr-1">▶</span>}
+                        {fixture.teamB === 'BYE' ? <span className="text-slate-300 dark:text-zinc-700 italic font-normal">BYE</span> :
+                            fixture.teamB === 'TBD' ? <span className="text-slate-300 dark:text-zinc-700 italic font-normal">TBD</span> :
                                 fixture.teamB}
                     </span>
                     {isCompleted && (
-                        <span className={`text-sm font-black tabular-nums ${winnerB ? 'text-white' : 'text-zinc-500'}`}>
+                        <span className={`text-sm font-black tabular-nums ${winnerB ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-zinc-500'}`}>
                             {fixture.finalScore?.teamB ?? 0}
                         </span>
                     )}
@@ -405,29 +402,29 @@ export const TournamentViewer: React.FC = () => {
     };
 
     if (notFound) return (
-        <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
             <div className="text-center">
-                <div className="text-5xl font-black italic text-zinc-800 mb-4">404</div>
-                <div className="text-zinc-600 font-bold uppercase text-xs tracking-widest">Tournament not found</div>
+                <div className="text-5xl font-black italic text-slate-300 dark:text-zinc-800 mb-4">404</div>
+                <div className="text-slate-500 dark:text-zinc-600 font-bold uppercase text-xs tracking-widest">Tournament not found</div>
             </div>
         </div>
     );
 
     if (!tournament) return (
-        <div className="min-h-screen bg-black flex items-center justify-center">
-            <div className="w-8 h-8 rounded-full border-2 border-zinc-800 border-t-zinc-500 animate-spin" />
+        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full border-2 border-slate-300 dark:border-zinc-800 border-t-slate-500 dark:border-t-zinc-500 animate-spin" />
         </div>
     );
 
     const activeSports = Object.keys(tournament.sportConfig || {});
 
     return (
-        <div className="min-h-screen bg-black text-white relative overflow-x-hidden">
+        <div className="min-h-screen text-slate-900 dark:text-white relative overflow-x-hidden">
             <ArenaBackground />
 
             {/* ── HEADER ─────────────────────────────────────────────────────── */}
             <header className="relative z-20 sticky top-0">
-                <div className="absolute inset-0 bg-black/80 backdrop-blur-xl border-b border-zinc-900/80" />
+                <div className="absolute inset-0 bg-white/80 dark:bg-black/80 backdrop-blur-xl [box-shadow:0_1px_0_rgba(0,0,0,0.08)] dark:border-b dark:border-zinc-900/80" />
                 <div className="relative px-4 lg:px-8 h-16 flex items-center justify-between max-w-5xl mx-auto">
                     {/* Brand + Tournament name */}
                     <div className="flex items-center gap-3 min-w-0">
@@ -441,15 +438,15 @@ export const TournamentViewer: React.FC = () => {
                             </div>
                         )}
                         <div className="min-w-0">
-                            <div className="text-[9px] font-bold text-yellow-500 uppercase tracking-[0.2em]">The Box</div>
-                            <h1 className="text-sm font-black italic text-white uppercase tracking-tight truncate leading-tight">{tournament.name}</h1>
+                            <div className="text-[9px] font-bold text-red-600 dark:text-yellow-500 uppercase tracking-[0.2em]">The Box</div>
+                            <h1 className="text-sm font-black italic text-slate-900 dark:text-white uppercase tracking-tight truncate leading-tight">{tournament.name}</h1>
                         </div>
                     </div>
 
                     {/* Volunteer access */}
                     <button
                         onClick={() => setShowVolunteerModal(true)}
-                        className="flex-shrink-0 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-600 text-white rounded-lg font-black uppercase text-[9px] tracking-widest transition-all"
+                        className="flex-shrink-0 px-4 py-2 bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 text-slate-700 dark:text-white rounded-lg font-black uppercase text-[9px] tracking-widest transition-all"
                     >
                         Scorer Access
                     </button>
@@ -457,13 +454,13 @@ export const TournamentViewer: React.FC = () => {
             </header>
 
             {/* ── TOURNAMENT META STRIP ───────────────────────────────────────── */}
-            <div className="relative z-10 border-b border-zinc-900/50">
+            <div className="relative z-10 border-b border-slate-200 dark:border-zinc-900/50">
                 <div className="max-w-5xl mx-auto px-4 lg:px-8 py-4 flex flex-wrap items-center gap-4">
                     {tournament.organizer && (
-                        <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{tournament.organizer}</div>
+                        <div className="text-[10px] text-slate-500 dark:text-zinc-500 font-bold uppercase tracking-widest">{tournament.organizer}</div>
                     )}
                     {tournament.location && (
-                        <div className="flex items-center gap-1 text-[10px] text-zinc-600 font-bold">
+                        <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-zinc-600 font-bold">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                             {tournament.location}
                         </div>
@@ -489,20 +486,20 @@ export const TournamentViewer: React.FC = () => {
             </div>
 
             {/* ── TAB BAR ──────────────────────────────────────────────────────── */}
-            <div className="relative z-10 border-b border-zinc-900/50 sticky top-16 bg-black/80 backdrop-blur-xl">
+            <div className="relative z-10 border-b border-slate-200 dark:border-zinc-900/50 sticky top-16 bg-white/80 dark:bg-black/80 backdrop-blur-xl">
                 <div className="max-w-5xl mx-auto px-4 lg:px-8 flex">
                     {(['live', 'fixtures', 'results'] as Tab[]).map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`relative px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
+                            className={`relative px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-zinc-600 hover:text-slate-700 dark:hover:text-zinc-400'}`}
                         >
                             {tab === 'live' && liveFixtures.length > 0 && (
                                 <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                             )}
                             {tab}
                             {activeTab === tab && (
-                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-yellow-500" />
+                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600 dark:bg-yellow-500" />
                             )}
                         </button>
                     ))}
@@ -517,13 +514,13 @@ export const TournamentViewer: React.FC = () => {
                     <div>
                         {liveFixtures.length === 0 ? (
                             <div className="text-center py-20">
-                                <div className="w-14 h-14 rounded-full bg-zinc-950 border border-zinc-900 flex items-center justify-center mx-auto mb-4">
-                                    <svg className="w-7 h-7 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-7 h-7 text-slate-400 dark:text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </div>
-                                <div className="text-zinc-700 font-black uppercase text-xs tracking-widest mb-1">No games live right now</div>
-                                <div className="text-zinc-800 text-[10px] font-bold uppercase tracking-widest">Check back during match time</div>
+                                <div className="text-slate-400 dark:text-zinc-700 font-black uppercase text-xs tracking-widest mb-1">No games live right now</div>
+                                <div className="text-slate-300 dark:text-zinc-800 text-[10px] font-bold uppercase tracking-widest">Check back during match time</div>
                             </div>
                         ) : (
                             <div>
@@ -567,7 +564,7 @@ export const TournamentViewer: React.FC = () => {
                         ) : (
                             <div className="space-y-10">
                                 {publishedDivisions.map(div => (
-                                    <div key={div.id} className="bg-zinc-950/40 border border-zinc-900/50 rounded-2xl p-5">
+                                    <div key={div.id} className="bg-white dark:bg-zinc-950/40 border border-slate-200 dark:border-zinc-900/50 rounded-2xl p-5 [box-shadow:0_1px_3px_rgba(0,0,0,0.06)] dark:shadow-none">
                                         <DivisionFixturesPanel
                                             tournamentId={id!}
                                             divisionId={div.id}
@@ -601,15 +598,15 @@ export const TournamentViewer: React.FC = () => {
 
             {/* ── VOLUNTEER / SCORER PIN MODAL ────────────────────────────────── */}
             {showVolunteerModal && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-                    <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-2xl p-6 space-y-5">
+                <div className="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+                    <div className="w-full max-w-sm bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5 [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-none">
                         <div className="flex items-start justify-between">
                             <div>
-                                <h2 className="text-lg font-black italic uppercase tracking-tight text-white">Scorer Access</h2>
-                                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-0.5">Enter your tournament PIN</p>
+                                <h2 className="text-lg font-black italic uppercase tracking-tight text-slate-900 dark:text-white">Scorer Access</h2>
+                                <p className="text-slate-500 dark:text-zinc-500 text-xs font-bold uppercase tracking-widest mt-0.5">Enter your tournament PIN</p>
                             </div>
                             <button onClick={() => { setShowVolunteerModal(false); setPinError(''); setPin(''); }}
-                                className="text-zinc-600 hover:text-white transition-colors">
+                                className="text-slate-400 dark:text-zinc-600 hover:text-slate-700 dark:hover:text-white transition-colors">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
                         </div>
@@ -624,18 +621,18 @@ export const TournamentViewer: React.FC = () => {
                                 onChange={e => { setPin(e.target.value.replace(/\D/g, '')); setPinError(''); }}
                                 onKeyDown={e => e.key === 'Enter' && handleVolunteerAccess()}
                                 placeholder="Enter PIN"
-                                className="w-full bg-zinc-900 border border-zinc-700 text-white text-2xl font-black text-center tracking-[0.5em] rounded-xl px-4 py-4 focus:outline-none focus:border-yellow-600 transition-colors placeholder:text-zinc-700 placeholder:text-base placeholder:tracking-normal"
+                                className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-slate-900 dark:text-white text-2xl font-black text-center tracking-[0.5em] rounded-xl px-4 py-4 focus:outline-none focus:border-red-500 dark:focus:border-yellow-600 transition-colors placeholder:text-slate-300 dark:placeholder:text-zinc-700 placeholder:text-base placeholder:tracking-normal"
                                 autoFocus
                             />
                             {pinError && (
-                                <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest mt-2 text-center">{pinError}</p>
+                                <p className="text-red-500 text-[10px] font-bold uppercase tracking-widest mt-2 text-center">{pinError}</p>
                             )}
                         </div>
 
                         <button
                             onClick={handleVolunteerAccess}
                             disabled={pin.length < 4 || pinLoading}
-                            className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-black uppercase text-xs tracking-widest rounded-xl transition-all"
+                            className="w-full py-3 bg-red-600 hover:bg-red-700 dark:bg-yellow-600 dark:hover:bg-yellow-500 disabled:bg-slate-100 dark:disabled:bg-zinc-800 disabled:text-slate-400 dark:disabled:text-zinc-600 text-white dark:text-black font-black uppercase text-xs tracking-widest rounded-xl transition-all"
                         >
                             {pinLoading ? 'Verifying...' : 'Enter as Scorer'}
                         </button>

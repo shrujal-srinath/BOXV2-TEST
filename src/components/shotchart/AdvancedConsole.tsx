@@ -21,7 +21,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { HalfCourt } from './HalfCourt';
+import { HalfCourtCanvas } from './HalfCourtCanvas';
+import type { CourtTheme } from './HalfCourtCanvas';
 import { classifyZone, SHOT_ATTRIBUTES, COURT } from './courtZones';
 import type {
     ShotEvent, ShotAttribute, ShotZoneId, ShotType, GameActionType,
@@ -30,6 +31,7 @@ import type { Player } from '../../types';
 import { TimedPlayerPopup } from './TimedPlayerPopup';
 import { JumpBallModal } from './JumpBallModal';
 import { SubstitutionPanel } from './SubstitutionPanel';
+import { CourtGraphicsModal } from './CourtGraphicsModal';
 
 // ── CSS ──────────────────────────────────────────────────────────────────────
 
@@ -126,6 +128,11 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
     const [lastAct, setLastAct] = useState('');
     const [showStats, setShowStats] = useState<'A' | 'B' | null>(null);
     const pendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // ── Court graphics settings ──
+    const [courtTheme, setCourtTheme] = useState<CourtTheme>('dark');
+    const [hexOpacity, setHexOpacity] = useState(0);
+    const [showCourtSettings, setShowCourtSettings] = useState(false);
 
     // ── New component state ──
     const [deferredShot, setDeferredShot] = useState<{
@@ -317,6 +324,18 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                     <TeamScoreBlock side="B" name={teamBName} color={teamBColor} score={teamBScore} fouls={teamBFouls} timeouts={teamBTimeouts} possession={possession} onStatsClick={() => setShowStats(showStats === 'B' ? null : 'B')} />
 
                     {gameCode && <span className="text-[9px] font-mono text-zinc-700 bg-zinc-900 px-2 py-1 rounded border border-zinc-800 shrink-0">{gameCode}</span>}
+
+                    {/* Settings button */}
+                    <button
+                        onClick={() => setShowCourtSettings(true)}
+                        title="Court Graphics Settings"
+                        className="w-9 h-9 flex items-center justify-center rounded bg-zinc-900 border border-zinc-800 hover:border-zinc-500 text-zinc-500 hover:text-white transition-all active:scale-95 shrink-0"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -359,7 +378,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                     {/* Court */}
                     <div className={`flex-1 relative mx-3 mb-2 rounded-lg overflow-hidden border transition-all duration-300 ${pending ? 'border-zinc-600' : 'border-zinc-800/50'}`}
                         style={{ boxShadow: pending ? `0 0 40px ${ac}10` : 'none' }}>
-                        <HalfCourt shots={courtDots} zoneOverlays={zoneOverlays} showZones={heatMap} interactive={!!pending} onCourtTap={handleCourtTap} activeColor={ac} activeEdge={pending ? pending.teamSide : null} pendingInfo={pending ? { made: pending.made, points: pending.points } : null} liveMode={true} />
+                        <HalfCourtCanvas shots={courtDots} zoneOverlays={heatMap ? zoneOverlays : undefined} onCourtTap={handleCourtTap} interactive={!!pending} activeColor={ac} activeEdge={pending ? pending.teamSide : null} pendingInfo={pending ? { made: pending.made, points: pending.points } : null} courtTheme={courtTheme} hexOpacity={hexOpacity} />
                     </div>
 
                     {/* Attribute ribbon */}
@@ -517,6 +536,16 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                         setShowSubPanel(null);
                     }}
                     onCancel={() => setShowSubPanel(null)}
+                />
+            )}
+
+            {showCourtSettings && (
+                <CourtGraphicsModal
+                    theme={courtTheme}
+                    hexOpacity={hexOpacity}
+                    onThemeChange={setCourtTheme}
+                    onHexOpacityChange={setHexOpacity}
+                    onClose={() => setShowCourtSettings(false)}
                 />
             )}
         </div>

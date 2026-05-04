@@ -277,7 +277,7 @@ export const GameSetup: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen font-sans flex items-center justify-center p-4 md:p-8 ${theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-zinc-950 text-zinc-100'}`}>
+    <div className={`min-h-screen font-sans flex items-center justify-center p-4 md:p-8 ${theme === 'light' ? 'bg-[#F0EEE9] text-slate-900' : 'bg-zinc-950 text-zinc-100'}`}>
       {/* Container */}
       <div className={`w-full max-w-6xl rounded-2xl overflow-hidden flex flex-col h-[90vh] max-h-[850px] ${theme === 'light' ? 'bg-white border border-slate-200 shadow-[0_4px_16px_rgba(0,0,0,0.08),0_16px_48px_rgba(0,0,0,0.1)]' : 'bg-zinc-900 border border-zinc-800 shadow-2xl'}`}>
 

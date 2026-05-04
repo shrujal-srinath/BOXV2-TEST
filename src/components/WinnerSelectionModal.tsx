@@ -30,15 +30,15 @@ export const WinnerSelectionModal: React.FC<Props> = ({ teamA, teamB, onSelect, 
     const winnerTeam = selectedWinner === 'A' ? teamA : selectedWinner === 'B' ? teamB : null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-black border border-zinc-700 rounded-2xl w-full max-w-3xl shadow-2xl animate-in zoom-in-95 duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-gradient-to-br dark:from-zinc-900 dark:via-zinc-900 dark:to-black border border-slate-200 dark:border-zinc-700 rounded-2xl w-full max-w-3xl [box-shadow:0_8px_32px_rgba(0,0,0,0.12)] dark:shadow-2xl animate-in zoom-in-95 duration-300">
                 {/* HEADER */}
-                <div className="border-b border-zinc-800 p-8 text-center">
+                <div className="border-b border-slate-100 dark:border-zinc-800 p-8 text-center">
                     <div className="text-6xl mb-4 animate-bounce">🏆</div>
-                    <h2 className="text-3xl font-black uppercase tracking-tight text-white mb-2">
+                    <h2 className="text-3xl font-black uppercase tracking-tight text-slate-900 dark:text-white mb-2">
                         Declare Winner
                     </h2>
-                    <p className="text-sm text-zinc-500 font-medium">
+                    <p className="text-sm text-slate-500 dark:text-zinc-500 font-medium">
                         Select the winning team to advance in the bracket
                     </p>
                 </div>
@@ -52,29 +52,29 @@ export const WinnerSelectionModal: React.FC<Props> = ({ teamA, teamB, onSelect, 
                             className={`
                                 relative p-8 rounded-2xl border-2 transition-all duration-300 cursor-pointer
                                 ${selectedWinner === 'A'
-                                    ? 'bg-yellow-500/10 border-yellow-500 shadow-2xl shadow-yellow-500/30 scale-105'
-                                    : 'bg-zinc-800/50 border-zinc-700 hover:border-yellow-500/50 hover:scale-105 hover:shadow-xl'
+                                    ? 'bg-amber-50 dark:bg-yellow-500/10 border-red-500 dark:border-yellow-500 shadow-2xl shadow-red-500/10 dark:shadow-yellow-500/30 scale-105'
+                                    : 'bg-slate-50 dark:bg-zinc-800/50 border-slate-200 dark:border-zinc-700 hover:border-red-300 dark:hover:border-yellow-500/50 hover:scale-105 hover:shadow-xl'
                                 }
                             `}
                         >
                             {/* Selected Badge */}
                             {selectedWinner === 'A' && (
-                                <div className="absolute -top-3 -right-3 w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
-                                    <span className="text-black text-2xl font-black">✓</span>
+                                <div className="absolute -top-3 -right-3 w-12 h-12 bg-red-600 dark:bg-yellow-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                                    <span className="text-white dark:text-black text-2xl font-black">✓</span>
                                 </div>
                             )}
 
                             {/* Team Info */}
                             <div className="text-center">
-                                <div className={`text-5xl font-black mb-4 transition-all ${selectedWinner === 'A' ? 'text-yellow-400 scale-110' : 'text-white'
+                                <div className={`text-5xl font-black mb-4 transition-all ${selectedWinner === 'A' ? 'text-red-600 dark:text-yellow-400 scale-110' : 'text-slate-800 dark:text-white'
                                     }`}>
                                     {teamA.score}
                                 </div>
-                                <div className={`text-xl font-black uppercase tracking-wide mb-2 ${selectedWinner === 'A' ? 'text-yellow-400' : 'text-white'
+                                <div className={`text-xl font-black uppercase tracking-wide mb-2 ${selectedWinner === 'A' ? 'text-red-600 dark:text-yellow-400' : 'text-slate-800 dark:text-white'
                                     }`}>
                                     {teamA.name}
                                 </div>
-                                <div className={`text-xs font-bold uppercase tracking-widest ${selectedWinner === 'A' ? 'text-yellow-500' : 'text-zinc-500'
+                                <div className={`text-xs font-bold uppercase tracking-widest ${selectedWinner === 'A' ? 'text-red-500 dark:text-yellow-500' : 'text-slate-400 dark:text-zinc-500'
                                     }`}>
                                     Team A
                                 </div>
@@ -94,29 +94,29 @@ export const WinnerSelectionModal: React.FC<Props> = ({ teamA, teamB, onSelect, 
                             className={`
                                 relative p-8 rounded-2xl border-2 transition-all duration-300 cursor-pointer
                                 ${selectedWinner === 'B'
-                                    ? 'bg-yellow-500/10 border-yellow-500 shadow-2xl shadow-yellow-500/30 scale-105'
-                                    : 'bg-zinc-800/50 border-zinc-700 hover:border-yellow-500/50 hover:scale-105 hover:shadow-xl'
+                                    ? 'bg-amber-50 dark:bg-yellow-500/10 border-red-500 dark:border-yellow-500 shadow-2xl shadow-red-500/10 dark:shadow-yellow-500/30 scale-105'
+                                    : 'bg-slate-50 dark:bg-zinc-800/50 border-slate-200 dark:border-zinc-700 hover:border-red-300 dark:hover:border-yellow-500/50 hover:scale-105 hover:shadow-xl'
                                 }
                             `}
                         >
                             {/* Selected Badge */}
                             {selectedWinner === 'B' && (
-                                <div className="absolute -top-3 -right-3 w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
-                                    <span className="text-black text-2xl font-black">✓</span>
+                                <div className="absolute -top-3 -right-3 w-12 h-12 bg-red-600 dark:bg-yellow-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                                    <span className="text-white dark:text-black text-2xl font-black">✓</span>
                                 </div>
                             )}
 
                             {/* Team Info */}
                             <div className="text-center">
-                                <div className={`text-5xl font-black mb-4 transition-all ${selectedWinner === 'B' ? 'text-yellow-400 scale-110' : 'text-white'
+                                <div className={`text-5xl font-black mb-4 transition-all ${selectedWinner === 'B' ? 'text-red-600 dark:text-yellow-400 scale-110' : 'text-slate-800 dark:text-white'
                                     }`}>
                                     {teamB.score}
                                 </div>
-                                <div className={`text-xl font-black uppercase tracking-wide mb-2 ${selectedWinner === 'B' ? 'text-yellow-400' : 'text-white'
+                                <div className={`text-xl font-black uppercase tracking-wide mb-2 ${selectedWinner === 'B' ? 'text-red-600 dark:text-yellow-400' : 'text-slate-800 dark:text-white'
                                     }`}>
                                     {teamB.name}
                                 </div>
-                                <div className={`text-xs font-bold uppercase tracking-widest ${selectedWinner === 'B' ? 'text-yellow-500' : 'text-zinc-500'
+                                <div className={`text-xs font-bold uppercase tracking-widest ${selectedWinner === 'B' ? 'text-red-500 dark:text-yellow-500' : 'text-slate-400 dark:text-zinc-500'
                                     }`}>
                                     Team B
                                 </div>
@@ -133,13 +133,13 @@ export const WinnerSelectionModal: React.FC<Props> = ({ teamA, teamB, onSelect, 
 
                     {/* Confirmation Message */}
                     {selectedWinner && (
-                        <div className="mt-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl animate-in slide-in-from-top-4 duration-300">
+                        <div className="mt-6 p-4 bg-amber-50 dark:bg-yellow-500/10 border border-amber-200 dark:border-yellow-500/30 rounded-xl animate-in slide-in-from-top-4 duration-300">
                             <div className="text-center">
-                                <p className="text-sm font-bold text-yellow-400 mb-1">
+                                <p className="text-sm font-bold text-amber-700 dark:text-yellow-400 mb-1">
                                     ⚠️ Confirm Winner
                                 </p>
-                                <p className="text-xs text-zinc-400">
-                                    <span className="text-yellow-400 font-bold">{winnerTeam?.name}</span> will advance to the next round
+                                <p className="text-xs text-slate-500 dark:text-zinc-400">
+                                    <span className="text-red-600 dark:text-yellow-400 font-bold">{winnerTeam?.name}</span> will advance to the next round
                                 </p>
                             </div>
                         </div>
@@ -147,11 +147,11 @@ export const WinnerSelectionModal: React.FC<Props> = ({ teamA, teamB, onSelect, 
                 </div>
 
                 {/* FOOTER */}
-                <div className="border-t border-zinc-800 p-6 flex justify-end gap-3">
+                <div className="border-t border-slate-100 dark:border-zinc-800 p-6 flex justify-end gap-3">
                     <button
                         onClick={onCancel}
                         disabled={confirming}
-                        className="px-6 py-3 rounded-lg font-bold uppercase text-sm tracking-wider text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-6 py-3 rounded-lg font-bold uppercase text-sm tracking-wider text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-zinc-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Cancel
                     </button>
@@ -161,14 +161,14 @@ export const WinnerSelectionModal: React.FC<Props> = ({ teamA, teamB, onSelect, 
                         className={`
                             px-8 py-3 rounded-lg font-black uppercase text-sm tracking-wider transition-all flex items-center gap-2
                             ${selectedWinner && !confirming
-                                ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg shadow-yellow-500/30 hover:scale-105'
-                                : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                                ? 'bg-red-600 hover:bg-red-700 dark:bg-yellow-500 dark:hover:bg-yellow-400 text-white dark:text-black shadow-lg shadow-red-500/10 dark:shadow-yellow-500/30 hover:scale-105'
+                                : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-600 cursor-not-allowed'
                             }
                         `}
                     >
                         {confirming ? (
                             <>
-                                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                                <div className="w-4 h-4 border-2 border-slate-200 dark:border-black border-t-red-600 dark:border-t-transparent rounded-full animate-spin"></div>
                                 <span>Processing...</span>
                             </>
                         ) : (

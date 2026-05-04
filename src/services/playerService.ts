@@ -72,6 +72,18 @@ export const registerProfile = async (params: {
   jersey_number?: string;
   sport_ids?: string[];
   bio?: string;
+  secondary_position?: string;
+  wingspan_cm?: number;
+  vertical_leap_cm?: number;
+  shuttle_run_sec?: number;
+  bench_press_kg?: number;
+  achievements?: string[];
+  highlight_video_url?: string;
+  instagram_handle?: string;
+  youtube_channel?: string;
+  twitter_handle?: string;
+  academic_year?: string;
+  graduation_year?: number;
   registered_by: string;
   auth_user_id?: string;
   is_claimed?: boolean;
@@ -99,8 +111,20 @@ export const registerProfile = async (params: {
       primary_position: params.primary_position?.trim() || null,
       jersey_number:    params.jersey_number?.trim() || null,
       sport_ids:        params.sport_ids ?? [],
-      bio:              params.bio?.trim() || null,
-      player_code:      codeData as string,
+      bio:                  params.bio?.trim() || null,
+      secondary_position:   params.secondary_position?.trim() || null,
+      wingspan_cm:          params.wingspan_cm ?? null,
+      vertical_leap_cm:     params.vertical_leap_cm ?? null,
+      shuttle_run_sec:      params.shuttle_run_sec ?? null,
+      bench_press_kg:       params.bench_press_kg ?? null,
+      achievements:         params.achievements ?? null,
+      highlight_video_url:  params.highlight_video_url?.trim() || null,
+      instagram_handle:     params.instagram_handle?.trim() || null,
+      youtube_channel:      params.youtube_channel?.trim() || null,
+      twitter_handle:       params.twitter_handle?.trim() || null,
+      academic_year:        params.academic_year?.trim() || null,
+      graduation_year:      params.graduation_year ?? null,
+      player_code:          codeData as string,
       registered_by:    params.registered_by,
       auth_user_id:     params.auth_user_id || null,
       is_claimed:       params.is_claimed ?? false,

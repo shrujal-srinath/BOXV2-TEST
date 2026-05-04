@@ -4,6 +4,8 @@ import { useParams } from 'react-router-dom';
 import { useBasketballGame } from '../hooks/useBasketballGame';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
 
+const BASKETBALL_SPORTS = new Set(['basketball']);
+
 export const TournamentWallView: React.FC = () => {
     const { code } = useParams<{ code: string }>();
     const { game } = useBasketballGame(code || '', 'online');
@@ -15,8 +17,10 @@ export const TournamentWallView: React.FC = () => {
         shotClockDuration: game.settings.shotClockDuration
     });
 
-    const showTenths = timer.minutes === 0; // Show tenths in last minute
+    const showTenths = timer.minutes === 0;
     const isLowTime = timer.minutes === 0 && timer.seconds < 10;
+    const sport: string = (game as any).sportId ?? (game.settings as any)?.sport ?? 'basketball';
+    const isBasketball = BASKETBALL_SPORTS.has(sport);
 
     if (!game) return <div className="bg-black min-h-screen"></div>;
 
@@ -48,10 +52,12 @@ export const TournamentWallView: React.FC = () => {
                     <div className="text-[12rem] md:text-[16rem] font-black leading-none tracking-tighter" style={{ color: game.teamA.color, textShadow: '0 0 50px rgba(0,0,0,0.5)' }}>
                         {game.teamA.score}
                     </div>
-                    <div className="mt-12 flex gap-12">
-                        <StatBox label="FOULS" value={game.teamA.fouls} />
-                        <StatBox label="TIMEOUTS" value={game.teamA.timeouts} />
-                    </div>
+                    {isBasketball && (
+                        <div className="mt-12 flex gap-12">
+                            <StatBox label="FOULS" value={(game.teamA as any).fouls ?? 0} />
+                            <StatBox label="TIMEOUTS" value={(game.teamA as any).timeouts ?? 0} />
+                        </div>
+                    )}
                 </div>
 
                 {/* CENTER CLOCK COLUMN */}
@@ -65,20 +71,24 @@ export const TournamentWallView: React.FC = () => {
                         }
                     </div>
 
-                    {/* SHOT CLOCK */}
-                    <div className="bg-zinc-900/80 p-6 rounded-2xl border-2 border-zinc-800 mb-12">
-                        <div className="text-center text-zinc-500 text-sm font-bold uppercase tracking-widest mb-2">Shot Clock</div>
-                        <div className={`font-mono font-black text-8xl leading-none ${timer.shotClock < 5 ? 'text-red-500' : 'text-yellow-400'}`}>
-                            {timer.shotClock}
+                    {/* SHOT CLOCK — basketball only */}
+                    {isBasketball && (
+                        <div className="bg-zinc-900/80 p-6 rounded-2xl border-2 border-zinc-800 mb-12">
+                            <div className="text-center text-zinc-500 text-sm font-bold uppercase tracking-widest mb-2">Shot Clock</div>
+                            <div className={`font-mono font-black text-8xl leading-none ${timer.shotClock < 5 ? 'text-red-500' : 'text-yellow-400'}`}>
+                                {timer.shotClock}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
-                    {/* POSSESSION ARROW */}
-                    <div className="flex items-center gap-8 opacity-80">
-                        <div className={`w-0 h-0 border-y-[20px] border-y-transparent border-r-[30px] transition-all duration-300 ${game.gameState.possession === 'A' ? 'border-r-red-600 scale-125' : 'border-r-zinc-800'}`}></div>
-                        <div className="text-zinc-600 font-bold uppercase tracking-widest text-sm">Possession</div>
-                        <div className={`w-0 h-0 border-y-[20px] border-y-transparent border-l-[30px] transition-all duration-300 ${game.gameState.possession === 'B' ? 'border-l-blue-600 scale-125' : 'border-l-zinc-800'}`}></div>
-                    </div>
+                    {/* POSSESSION ARROW — basketball only */}
+                    {isBasketball && (
+                        <div className="flex items-center gap-8 opacity-80">
+                            <div className={`w-0 h-0 border-y-[20px] border-y-transparent border-r-[30px] transition-all duration-300 ${(game.gameState as any).possession === 'A' ? 'border-r-red-600 scale-125' : 'border-r-zinc-800'}`}></div>
+                            <div className="text-zinc-600 font-bold uppercase tracking-widest text-sm">Possession</div>
+                            <div className={`w-0 h-0 border-y-[20px] border-y-transparent border-l-[30px] transition-all duration-300 ${(game.gameState as any).possession === 'B' ? 'border-l-blue-600 scale-125' : 'border-l-zinc-800'}`}></div>
+                        </div>
+                    )}
 
                 </div>
 
@@ -91,10 +101,12 @@ export const TournamentWallView: React.FC = () => {
                     <div className="text-[12rem] md:text-[16rem] font-black leading-none tracking-tighter" style={{ color: game.teamB.color, textShadow: '0 0 50px rgba(0,0,0,0.5)' }}>
                         {game.teamB.score}
                     </div>
-                    <div className="mt-12 flex gap-12">
-                        <StatBox label="FOULS" value={game.teamB.fouls} />
-                        <StatBox label="TIMEOUTS" value={game.teamB.timeouts} />
-                    </div>
+                    {isBasketball && (
+                        <div className="mt-12 flex gap-12">
+                            <StatBox label="FOULS" value={(game.teamB as any).fouls ?? 0} />
+                            <StatBox label="TIMEOUTS" value={(game.teamB as any).timeouts ?? 0} />
+                        </div>
+                    )}
                 </div>
 
             </div>

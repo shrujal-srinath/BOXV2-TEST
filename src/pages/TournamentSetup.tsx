@@ -5,12 +5,19 @@ import { createTournament } from '../services/tournamentService';
 import { ImageCropperModal } from '../components/ImageCropperModal';
 import type { SchedulableSport } from '../types';
 
+const inp = [
+  'w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-150',
+  'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400',
+  'focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10',
+  'dark:bg-black dark:border-zinc-800 dark:text-white dark:placeholder:text-zinc-700',
+  'dark:focus:border-yellow-600 dark:focus:ring-yellow-600/10',
+].join(' ');
+
 export const TournamentSetup: React.FC = () => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Identity
     const [name, setName] = useState("");
     const [logoUrl, setLogoUrl] = useState("");
     const [organizer, setOrganizer] = useState("");
@@ -18,13 +25,11 @@ export const TournamentSetup: React.FC = () => {
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
 
-    // Config
     const [selectedSports, setSelectedSports] = useState<SchedulableSport[]>(['basketball']);
     const [sportConfig, setSportConfig] = useState<{ [key: string]: { courts: number } }>({
         basketball: { courts: 1 }
     });
 
-    // Image Upload
     const [tempImageSrc, setTempImageSrc] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -33,7 +38,6 @@ export const TournamentSetup: React.FC = () => {
       'cricket', 'football', 'hockey', 'khokho', 'netball', 'tennis', 'handball', 'throwball', 'chess', 'carrom', 'athletics',
     ];
 
-    // HANDLERS
     const toggleSport = (sport: SchedulableSport) => {
         if (selectedSports.includes(sport)) {
             setSelectedSports(prev => prev.filter(s => s !== sport));
@@ -85,7 +89,7 @@ export const TournamentSetup: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-black text-white font-sans flex items-center justify-center p-4">
+        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black text-slate-900 dark:text-white font-sans flex items-center justify-center p-4">
             {tempImageSrc && (
                 <ImageCropperModal
                     imageSrc={tempImageSrc}
@@ -94,19 +98,21 @@ export const TournamentSetup: React.FC = () => {
                 />
             )}
 
-            <div className="w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col h-[85vh]">
+            <div className="w-full max-w-4xl bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-2xl overflow-hidden flex flex-col h-[85vh] [box-shadow:0_1px_3px_rgba(0,0,0,0.08),0_8px_32px_rgba(0,0,0,0.06)] dark:shadow-none">
 
                 {/* Header */}
-                <div className="bg-zinc-950 border-b border-zinc-800 p-6 flex justify-between items-center shrink-0">
+                <div className="bg-white dark:bg-zinc-950 border-b border-slate-100 dark:border-zinc-800 px-6 py-5 flex justify-between items-center shrink-0">
                     <div>
-                        <h1 className="text-xl font-black italic uppercase text-white">New Tournament</h1>
-                        <div className="flex gap-2 mt-2">
+                        <h1 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">New Tournament</h1>
+                        <div className="flex gap-2 mt-2.5">
                             {[1, 2, 3].map(s => (
-                                <div key={s} className={`h-1 w-8 rounded-full transition-colors duration-300 ${step >= s ? 'bg-yellow-500' : 'bg-zinc-800'}`}></div>
+                                <div key={s} className={`h-1 w-8 rounded-full transition-colors duration-300 ${step >= s ? 'bg-red-600' : 'bg-slate-200 dark:bg-zinc-800'}`} />
                             ))}
                         </div>
                     </div>
-                    <button onClick={() => navigate('/tournament')} className="text-zinc-500 hover:text-white text-2xl">&times;</button>
+                    <button onClick={() => navigate('/tournament')} className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors text-xl leading-none">
+                        &times;
+                    </button>
                 </div>
 
                 {/* Content */}
@@ -116,41 +122,45 @@ export const TournamentSetup: React.FC = () => {
                     {step === 1 && (
                         <div className="space-y-8 animate-in slide-in-from-right-8 duration-500">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-6">
-                                    <h2 className="text-lg font-bold uppercase tracking-wide">Identity</h2>
+                                <div className="space-y-5">
+                                    <h2 className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3">Identity</h2>
                                     <div>
-                                        <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Event Name *</label>
-                                        <input value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-black border border-zinc-800 p-4 text-lg font-bold text-white rounded-lg outline-none focus:border-yellow-600 uppercase placeholder-zinc-700" placeholder="E.G. SUMMER OLYMPICS 2026" />
+                                        <label className="text-xs font-semibold text-slate-700 dark:text-zinc-400 uppercase tracking-wide block mb-1.5">Event Name <span className="text-[9px] font-bold text-red-500 uppercase tracking-wider">Required</span></label>
+                                        <input value={name} onChange={(e) => setName(e.target.value)} className={inp} placeholder="Summer Olympics 2026" />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-4 uppercase">Event Logo</label>
+                                        <label className="text-xs font-semibold text-slate-700 dark:text-zinc-400 uppercase tracking-wide block mb-2">Event Logo <span className="text-[9px] text-slate-400 dark:text-zinc-500">Optional</span></label>
                                         <input type="file" accept="image/*" onChange={onSelectFile} ref={fileInputRef} className="hidden" />
-                                        <div className="flex items-center gap-6">
-                                            <div onClick={() => fileInputRef.current?.click()} className="relative group w-20 h-20 rounded-full bg-zinc-900 border-2 border-dashed border-zinc-700 flex items-center justify-center overflow-hidden hover:border-yellow-500 hover:bg-zinc-800 transition-all cursor-pointer shadow-lg">
-                                                {logoUrl ? <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" /> : <span className="text-zinc-600 group-hover:text-white text-xs font-bold uppercase">Upload</span>}
+                                        <div className="flex items-center gap-5">
+                                            <div onClick={() => fileInputRef.current?.click()} className="relative group w-20 h-20 rounded-2xl bg-slate-50 dark:bg-zinc-900 border-2 border-dashed border-slate-300 dark:border-zinc-700 flex items-center justify-center overflow-hidden hover:border-red-500 dark:hover:border-yellow-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all cursor-pointer">
+                                                {logoUrl ? (
+                                                    <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="text-slate-400 dark:text-zinc-600 group-hover:text-slate-600 dark:group-hover:text-white text-xs font-bold uppercase transition-colors">Upload</span>
+                                                )}
                                             </div>
-                                            <button onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold uppercase tracking-widest text-yellow-600 hover:text-yellow-500 underline">Choose Image</button>
+                                            <button onClick={() => fileInputRef.current?.click()} className="text-[11px] font-bold uppercase tracking-widest text-red-600 dark:text-yellow-600 hover:text-red-700 dark:hover:text-yellow-500 underline">Choose Image</button>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="space-y-6">
-                                    <h2 className="text-lg font-bold uppercase tracking-wide">Details</h2>
+                                <div className="space-y-5">
+                                    <h2 className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3">Details</h2>
                                     <div>
-                                        <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Organizer</label>
-                                        <input value={organizer} onChange={(e) => setOrganizer(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 text-sm text-white rounded outline-none focus:border-zinc-600 placeholder-zinc-800" placeholder="Organization" />
+                                        <label className="text-xs font-semibold text-slate-700 dark:text-zinc-400 uppercase tracking-wide block mb-1.5">Organizer</label>
+                                        <input value={organizer} onChange={(e) => setOrganizer(e.target.value)} className={inp} placeholder="Organization name" />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Location</label>
-                                        <input value={location} onChange={(e) => setLocation(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 text-sm text-white rounded outline-none focus:border-zinc-600 placeholder-zinc-800" placeholder="Venue" />
+                                        <label className="text-xs font-semibold text-slate-700 dark:text-zinc-400 uppercase tracking-wide block mb-1.5">Location</label>
+                                        <input value={location} onChange={(e) => setLocation(e.target.value)} className={inp} placeholder="Venue" />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                            <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Start</label>
-                                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 text-sm text-white rounded outline-none focus:border-zinc-600 uppercase" />
+                                            <label className="text-xs font-semibold text-slate-700 dark:text-zinc-400 uppercase tracking-wide block mb-1.5">Start</label>
+                                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inp} />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">End</label>
-                                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 text-sm text-white rounded outline-none focus:border-zinc-600 uppercase" />
+                                            <label className="text-xs font-semibold text-slate-700 dark:text-zinc-400 uppercase tracking-wide block mb-1.5">End</label>
+                                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inp} />
                                         </div>
                                     </div>
                                 </div>
@@ -161,23 +171,36 @@ export const TournamentSetup: React.FC = () => {
                     {/* STEP 2: SPORTS */}
                     {step === 2 && (
                         <div className="animate-in slide-in-from-right-8 duration-500">
-                            <h2 className="text-lg font-bold uppercase tracking-wide mb-6">Select Events</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {availableSports.map(sport => (
-                                    <div
-                                        key={sport}
-                                        onClick={() => toggleSport(sport)}
-                                        className={`p-6 rounded-xl border-2 cursor-pointer transition-all ${selectedSports.includes(sport) ? 'bg-zinc-800 border-yellow-500' : 'bg-black border-zinc-800 hover:border-zinc-600 opacity-60 hover:opacity-100'}`}
-                                    >
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-xl capitalize font-bold text-white">{sport}</span>
-                                            {selectedSports.includes(sport) && <span className="text-yellow-500">✓</span>}
+                            <h2 className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3 mb-6">Select Events</h2>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {availableSports.map(sport => {
+                                    const selected = selectedSports.includes(sport);
+                                    return (
+                                        <div
+                                            key={sport}
+                                            onClick={() => toggleSport(sport)}
+                                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all select-none ${
+                                                selected
+                                                    ? 'bg-red-50 dark:bg-zinc-800 border-red-500 dark:border-yellow-500'
+                                                    : 'bg-white dark:bg-black border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-600'
+                                            }`}
+                                        >
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className={`text-sm font-bold capitalize ${selected ? 'text-red-700 dark:text-white' : 'text-slate-700 dark:text-zinc-300'}`}>{sport}</span>
+                                                {selected && (
+                                                    <span className="w-4 h-4 bg-red-600 dark:bg-yellow-500 rounded-full flex items-center justify-center">
+                                                        <svg className="w-2.5 h-2.5 text-white dark:text-black" viewBox="0 0 10 10" fill="none">
+                                                            <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                                        </svg>
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className={`text-[10px] uppercase tracking-widest font-semibold ${selected ? 'text-red-500 dark:text-yellow-500' : 'text-slate-400 dark:text-zinc-500'}`}>
+                                                {selected ? 'Included' : 'Click to add'}
+                                            </p>
                                         </div>
-                                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
-                                            {selectedSports.includes(sport) ? 'Included' : 'Click to Add'}
-                                        </p>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -185,19 +208,19 @@ export const TournamentSetup: React.FC = () => {
                     {/* STEP 3: COURTS */}
                     {step === 3 && (
                         <div className="animate-in slide-in-from-right-8 duration-500 max-w-2xl mx-auto">
-                            <h2 className="text-lg font-bold uppercase tracking-wide mb-6 text-center">Configure Venues</h2>
-                            <div className="space-y-4">
+                            <h2 className="text-base font-bold text-slate-800 dark:text-zinc-200 border-l-4 border-red-600 pl-3 mb-6">Configure Venues</h2>
+                            <div className="space-y-3">
                                 {selectedSports.map(sport => (
-                                    <div key={sport} className="bg-black border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-zinc-900 rounded-full flex items-center justify-center text-lg capitalize font-bold text-zinc-500">{sport[0]}</div>
-                                            <span className="font-bold text-white capitalize">{sport}</span>
+                                    <div key={sport} className="bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 p-4 rounded-xl flex items-center justify-between [box-shadow:0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-none">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 bg-slate-100 dark:bg-zinc-900 rounded-xl flex items-center justify-center text-base font-black text-slate-500 dark:text-zinc-500 capitalize">{sport[0].toUpperCase()}</div>
+                                            <span className="font-bold text-slate-800 dark:text-white capitalize text-sm">{sport}</span>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <button onClick={() => updateCourts(sport, -1)} className="w-8 h-8 rounded bg-zinc-900 text-white hover:bg-zinc-800 font-bold">-</button>
-                                            <span className="font-mono font-bold w-6 text-center text-yellow-500 text-lg">{sportConfig[sport]?.courts || 1}</span>
-                                            <button onClick={() => updateCourts(sport, 1)} className="w-8 h-8 rounded bg-zinc-900 text-white hover:bg-zinc-800 font-bold">+</button>
-                                            <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest ml-2">Courts</span>
+                                            <button onClick={() => updateCourts(sport, -1)} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 font-bold text-sm transition-colors">−</button>
+                                            <span className="font-mono font-black w-6 text-center text-red-600 dark:text-yellow-500 text-lg">{sportConfig[sport]?.courts || 1}</span>
+                                            <button onClick={() => updateCourts(sport, 1)} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 font-bold text-sm transition-colors">+</button>
+                                            <span className="text-[10px] text-slate-400 dark:text-zinc-500 uppercase font-semibold tracking-widest ml-1">Courts</span>
                                         </div>
                                     </div>
                                 ))}
@@ -207,12 +230,12 @@ export const TournamentSetup: React.FC = () => {
 
                 </div>
 
-                {/* Footer Controls */}
-                <div className="bg-zinc-950 border-t border-zinc-800 p-6 flex justify-between shrink-0">
+                {/* Footer */}
+                <div className="bg-white dark:bg-zinc-950 border-t border-slate-100 dark:border-zinc-800 px-6 py-4 flex justify-between items-center shrink-0">
                     <button
                         onClick={() => setStep(Math.max(1, step - 1))}
                         disabled={step === 1}
-                        className="px-6 py-3 rounded text-zinc-500 font-bold uppercase text-xs tracking-widest hover:text-white disabled:opacity-30"
+                        className="px-5 py-2.5 text-slate-400 dark:text-zinc-500 font-bold uppercase text-xs tracking-widest hover:text-slate-700 dark:hover:text-white transition-colors disabled:opacity-30"
                     >
                         Back
                     </button>
@@ -220,7 +243,7 @@ export const TournamentSetup: React.FC = () => {
                         <button
                             onClick={() => setStep(step + 1)}
                             disabled={step === 1 && !name}
-                            className="bg-white hover:bg-zinc-200 text-black px-8 py-3 rounded font-black uppercase text-xs tracking-widest transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+                            className="bg-slate-900 hover:bg-slate-700 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black px-8 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest transition-all hover:-translate-y-0.5 disabled:opacity-50"
                         >
                             Next Step
                         </button>
@@ -228,9 +251,9 @@ export const TournamentSetup: React.FC = () => {
                         <button
                             onClick={handleCreate}
                             disabled={isSubmitting}
-                            className="bg-yellow-600 hover:bg-yellow-500 text-black px-8 py-3 rounded font-black uppercase text-xs tracking-widest shadow-lg shadow-yellow-900/20 transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+                            className="bg-red-600 hover:bg-red-700 dark:bg-yellow-600 dark:hover:bg-yellow-500 text-white dark:text-black px-8 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest transition-all hover:-translate-y-0.5 disabled:opacity-50"
                         >
-                            {isSubmitting ? 'Initializing...' : 'Launch Tournament'}
+                            {isSubmitting ? 'Creating...' : 'Launch Tournament'}
                         </button>
                     )}
                 </div>

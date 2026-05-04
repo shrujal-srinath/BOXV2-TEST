@@ -124,43 +124,48 @@ setInterval(() => {
 }, 100);
 
 // ── 5. PICO UART ──────────────────────────────────────────────
-let picoPort = null;
-let picoReconnectTimer = null;
+const SERIAL_SOURCES = [
+    { path: '/dev/serial0', label: 'Pico W',    baudRate: 115200 },
+    { path: '/dev/ttyACM0', label: 'C3 Dongle', baudRate: 115200 },
+];
+const serialPorts = new Map();
+const serialReconnectTimers = new Map();
 let picoConnected = false;
 
-function initializePico() {
-    if (picoReconnectTimer) { clearTimeout(picoReconnectTimer); picoReconnectTimer = null; }
+function initializeSerial(source) {
+    const { path, label, baudRate } = source;
+    const existing = serialReconnectTimers.get(path);
+    if (existing) { clearTimeout(existing); serialReconnectTimers.delete(path); }
 
-    console.log('🔌 Connecting to Pico via UART...');
+    console.log(`🔌 Connecting to ${label} on ${path}...`);
     let port;
     try {
-        port = new SerialPort({ path: '/dev/serial0', baudRate: 115200 });
+        port = new SerialPort({ path, baudRate });
     } catch (e) {
-        console.warn(`⚠️  Could not open serial port: ${e.message} — retrying in 3s`);
-        picoReconnectTimer = setTimeout(initializePico, 3000);
+        console.warn(`⚠️  ${label}: Could not open ${path}: ${e.message} — retrying in 3s`);
+        serialReconnectTimers.set(path, setTimeout(() => initializeSerial(source), 3000));
         return;
     }
 
-    picoPort = port;
-
+    serialPorts.set(path, port);
     const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
     port.on('open', () => {
-        picoConnected = true;
-        console.log('✅ Pico UART connected');
-        io.emit('pico_status', { connected: true });
+        if (path === '/dev/serial0') picoConnected = true;
+        console.log(`✅ ${label} connected`);
+        io.emit('pico_status', { connected: true, source: label });
     });
 
     port.on('error', (e) => {
-        console.error(`❌ UART error: ${e.message}`);
+        console.error(`❌ ${label} error: ${e.message}`);
     });
 
     port.on('close', () => {
-        picoConnected = false;
-        picoPort = null;
-        console.warn('⚠️  Pico UART closed — reconnecting in 3s...');
-        io.emit('pico_status', { connected: false });
-        picoReconnectTimer = setTimeout(initializePico, 3000);
+        if (path === '/dev/serial0') picoConnected = false;
+        serialPorts.delete(path);
+        console.warn(`⚠️  ${label} closed — reconnecting in 3s...`);
+        io.emit('pico_status', { connected: false, source: label });
+        serialReconnectTimers.set(path, setTimeout(() => initializeSerial(source), 3000));
     });
 
     parser.on('data', (line) => {
@@ -183,7 +188,7 @@ function handlePicoMessage(msg) {
     console.log(`📨 Pico: ${msg}`);
     io.emit('pico_message_raw', msg);
 
-    if (msg === 'PICO_READY') { console.log('✅ Pico handshake'); return; }
+    if (msg === 'PICO_READY' || msg === 'ESPNOW_READY') { console.log(`✅ ${msg} handshake`); return; }
 
     if (!state.meta.gameActive) {
         console.log('> No active game — ignoring');
@@ -394,13 +399,13 @@ server.listen(PORT, () => {
     console.log(`║   Listening on :${PORT}              ║`);
     console.log(`╚═══════════════════════════════════╝\n`);
     initializeBuzzer();
-    initializePico();
+    SERIAL_SOURCES.forEach(source => initializeSerial(source));
 });
 
 process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down...');
-    if (picoReconnectTimer) clearTimeout(picoReconnectTimer);
-    if (picoPort) picoPort.close();
+    serialReconnectTimers.forEach(t => clearTimeout(t));
+    serialPorts.forEach(p => p.close());
     if (buzzerPin) buzzerPin.digitalWrite(0);
     teardownChannel();
     process.exit(0);

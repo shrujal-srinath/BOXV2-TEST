@@ -49,7 +49,7 @@ const InlineEdit: React.FC<{
             onChange={e => setLocal(e.target.value)}
             onBlur={save}
             onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
-            className={`bg-zinc-900 border border-yellow-600 rounded px-2 py-0.5 text-white text-xs font-bold focus:outline-none w-24 ${className}`}
+            className={`bg-white dark:bg-zinc-900 border border-slate-300 dark:border-yellow-600 rounded px-2 py-0.5 text-slate-900 dark:text-white text-xs font-bold focus:outline-none w-24 ${className}`}
             autoFocus
         />
     );
@@ -57,11 +57,11 @@ const InlineEdit: React.FC<{
     return (
         <button
             onClick={() => setEditing(true)}
-            className={`text-xs font-bold text-left truncate hover:text-yellow-400 transition-colors group ${className}
-                ${value && value !== 'Pending' && value !== 'Unassigned' ? 'text-white' : 'text-zinc-600'}`}
+            className={`text-xs font-bold text-left truncate hover:text-red-600 dark:hover:text-yellow-400 transition-colors group ${className}
+                ${value && value !== 'Pending' && value !== 'Unassigned' ? 'text-slate-800 dark:text-white' : 'text-slate-400 dark:text-zinc-600'}`}
         >
             {value && value !== 'Pending' && value !== 'Unassigned' ? value : (
-                <span className="italic text-zinc-700 group-hover:text-yellow-600">{placeholder}</span>
+                <span className="italic text-slate-400 dark:text-zinc-700 group-hover:text-red-500 dark:group-hover:text-yellow-600">{placeholder}</span>
             )}
         </button>
     );
@@ -76,7 +76,7 @@ const CourtSelect: React.FC<{
     <select
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 text-white text-[10px] font-black uppercase tracking-widest rounded px-2 py-1 focus:outline-none focus:border-yellow-600 transition-colors cursor-pointer"
+        className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-slate-400 dark:hover:border-zinc-600 text-slate-800 dark:text-white text-[10px] font-black uppercase tracking-widest rounded px-2 py-1 focus:outline-none focus:border-violet-500 dark:focus:border-yellow-600 transition-colors cursor-pointer"
     >
         <option value="Unassigned">— Court —</option>
         {courts.map(c => <option key={c} value={c}>{c}</option>)}
@@ -151,48 +151,48 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
-            <div className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl my-4">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
+            <div className="w-full max-w-3xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-2xl my-4">
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-zinc-900">
+                <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-zinc-900">
                     <div>
-                        <h2 className="text-lg font-black italic uppercase tracking-tight text-white">Schedule Matches</h2>
-                        <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                        <h2 className="text-lg font-black italic uppercase tracking-tight text-slate-900 dark:text-white">Schedule Matches</h2>
+                        <p className="text-slate-500 dark:text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-0.5">
                             Assign courts & times — click any cell to edit
                         </p>
                     </div>
-                    <button onClick={onClose} className="text-zinc-600 hover:text-white transition-colors p-1">
+                    <button onClick={onClose} className="text-slate-400 dark:text-zinc-600 hover:text-slate-900 dark:hover:text-white transition-colors p-1">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
 
                 {/* Bulk schedule tool */}
-                <div className="p-4 bg-zinc-900/40 border-b border-zinc-900">
-                    <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Quick Schedule — Auto-fill all match times</div>
+                <div className="p-4 bg-slate-50 dark:bg-zinc-900/40 border-b border-slate-100 dark:border-zinc-900">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-zinc-500 mb-3">Quick Schedule — Auto-fill all match times</div>
                     <div className="flex flex-wrap items-center gap-3">
                         <div className="flex items-center gap-2">
-                            <label className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">Start</label>
+                            <label className="text-[10px] text-slate-500 dark:text-zinc-600 font-bold uppercase tracking-widest">Start</label>
                             <input
                                 type="time"
                                 value={bulkStartTime}
                                 onChange={e => setBulkStartTime(e.target.value)}
-                                className="bg-zinc-900 border border-zinc-800 text-white text-xs font-bold rounded px-2 py-1 focus:outline-none focus:border-yellow-600"
+                                className="bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-800 text-slate-900 dark:text-white text-xs font-bold rounded px-2 py-1 focus:outline-none focus:border-violet-500 dark:focus:border-yellow-600"
                             />
                         </div>
                         <div className="flex items-center gap-2">
-                            <label className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">Interval</label>
+                            <label className="text-[10px] text-slate-500 dark:text-zinc-600 font-bold uppercase tracking-widest">Interval</label>
                             <div className="flex items-center gap-1">
                                 <button onClick={() => setBulkInterval(Math.max(15, bulkInterval - 15))}
-                                    className="w-6 h-6 bg-zinc-800 rounded text-white text-xs hover:bg-zinc-700 transition-colors font-bold">-</button>
-                                <span className="text-white font-bold text-xs w-12 text-center">{bulkInterval}m</span>
+                                    className="w-6 h-6 bg-slate-100 dark:bg-zinc-800 rounded text-slate-700 dark:text-white text-xs hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors font-bold">-</button>
+                                <span className="text-slate-800 dark:text-white font-bold text-xs w-12 text-center">{bulkInterval}m</span>
                                 <button onClick={() => setBulkInterval(Math.min(180, bulkInterval + 15))}
-                                    className="w-6 h-6 bg-zinc-800 rounded text-white text-xs hover:bg-zinc-700 transition-colors font-bold">+</button>
+                                    className="w-6 h-6 bg-slate-100 dark:bg-zinc-800 rounded text-slate-700 dark:text-white text-xs hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors font-bold">+</button>
                             </div>
                         </div>
                         <button
                             onClick={applyBulkSchedule}
-                            className="px-4 py-1.5 bg-yellow-600 hover:bg-yellow-500 text-black font-black uppercase text-[10px] tracking-widest rounded-lg transition-all"
+                            className="px-4 py-1.5 bg-red-600 hover:bg-red-700 dark:bg-yellow-600 dark:hover:bg-yellow-500 text-white dark:text-black font-black uppercase text-[10px] tracking-widest rounded-lg transition-all"
                         >
                             Apply to All
                         </button>
@@ -205,12 +205,12 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                         <div key={rNum}>
                             {/* Round header + bulk court */}
                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">
-                                    {getRoundLabel(rNum)} <span className="text-zinc-700">({rounds[rNum].length} matches)</span>
+                                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-500">
+                                    {getRoundLabel(rNum)} <span className="text-slate-400 dark:text-zinc-700">({rounds[rNum].length} matches)</span>
                                 </div>
                                 {courts.length > 1 && (
                                     <div className="flex items-center gap-2">
-                                        <span className="text-[9px] text-zinc-700 font-bold uppercase tracking-widest">Assign all to:</span>
+                                        <span className="text-[9px] text-slate-400 dark:text-zinc-700 font-bold uppercase tracking-widest">Assign all to:</span>
                                         <CourtSelect
                                             value="Unassigned"
                                             courts={courts}
@@ -220,29 +220,29 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                                 )}
                             </div>
 
-                            <div className="bg-zinc-900/30 rounded-xl overflow-hidden">
+                            <div className="bg-slate-50 dark:bg-zinc-900/30 rounded-xl overflow-hidden">
                                 {/* Table header */}
-                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-0 border-b border-zinc-900">
-                                    <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-700">Matchup</div>
-                                    <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-700">Court</div>
-                                    <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-700">Time</div>
+                                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-0 border-b border-slate-100 dark:border-zinc-900">
+                                    <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-700">Matchup</div>
+                                    <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-700">Court</div>
+                                    <div className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-zinc-700">Time</div>
                                     <div className="w-8" />
                                 </div>
 
                                 {rounds[rNum].map((f, idx) => (
                                     <div
                                         key={f.id}
-                                        className={`grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center transition-colors ${idx % 2 === 0 ? 'bg-transparent' : 'bg-zinc-900/20'} ${f.status === 'live' ? 'bg-green-950/10' : ''} ${f.status === 'completed' ? 'opacity-50' : ''}`}
+                                        className={`grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center transition-colors ${idx % 2 === 0 ? 'bg-transparent' : 'bg-slate-50/60 dark:bg-zinc-900/20'} ${f.status === 'live' ? 'bg-green-50 dark:bg-green-950/10' : ''} ${f.status === 'completed' ? 'opacity-50' : ''}`}
                                     >
                                         {/* Matchup */}
                                         <div className="px-4 py-2.5">
-                                            <div className="text-xs font-black text-white uppercase tracking-tight">
-                                                {f.teamA === 'TBD' ? <span className="text-zinc-700 italic font-normal">TBD</span> : f.teamA}
+                                            <div className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tight">
+                                                {f.teamA === 'TBD' ? <span className="text-slate-400 dark:text-zinc-700 italic font-normal">TBD</span> : f.teamA}
                                             </div>
-                                            <div className="text-[9px] text-zinc-600 font-bold my-0.5">vs</div>
-                                            <div className="text-xs font-black text-white uppercase tracking-tight">
-                                                {f.teamB === 'TBD' ? <span className="text-zinc-700 italic font-normal">TBD</span> :
-                                                    f.teamB === 'BYE' ? <span className="text-zinc-700 italic font-normal">BYE</span> :
+                                            <div className="text-[9px] text-slate-400 dark:text-zinc-600 font-bold my-0.5">vs</div>
+                                            <div className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tight">
+                                                {f.teamB === 'TBD' ? <span className="text-slate-400 dark:text-zinc-700 italic font-normal">TBD</span> :
+                                                    f.teamB === 'BYE' ? <span className="text-slate-400 dark:text-zinc-700 italic font-normal">BYE</span> :
                                                         f.teamB}
                                             </div>
                                         </div>
@@ -250,7 +250,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                                         {/* Court */}
                                         <div className="px-4 py-2.5">
                                             {courts.length <= 1 ? (
-                                                <span className="text-[10px] text-zinc-600 font-bold">Court 1</span>
+                                                <span className="text-[10px] text-slate-400 dark:text-zinc-600 font-bold">Court 1</span>
                                             ) : (
                                                 <CourtSelect
                                                     value={f.court}
@@ -272,7 +272,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                                         {/* Save indicator */}
                                         <div className="w-8 flex items-center justify-center">
                                             {saving.has(f.id) && (
-                                                <span className="w-3 h-3 rounded-full border border-yellow-600/50 border-t-yellow-500 animate-spin" />
+                                                <span className="w-3 h-3 rounded-full border border-slate-300 dark:border-yellow-600/50 border-t-red-600 dark:border-t-yellow-500 animate-spin" />
                                             )}
                                         </div>
                                     </div>
@@ -283,11 +283,11 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-zinc-900 flex items-center justify-between">
-                    <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">Changes save instantly</div>
+                <div className="p-4 border-t border-slate-100 dark:border-zinc-900 flex items-center justify-between">
+                    <div className="text-[10px] text-slate-400 dark:text-zinc-600 font-bold uppercase tracking-widest">Changes save instantly</div>
                     <button
                         onClick={onClose}
-                        className="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all"
+                        className="px-6 py-2.5 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all"
                     >
                         Done
                     </button>

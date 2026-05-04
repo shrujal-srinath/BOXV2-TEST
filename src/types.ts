@@ -359,6 +359,24 @@ export interface PlayerProfile {
   bio: string | null;
   profile_photo_url: string | null;
 
+  // Extended athletic
+  secondary_position: string | null;
+  wingspan_cm: number | null;
+  vertical_leap_cm: number | null;
+  shuttle_run_sec: number | null;
+  bench_press_kg: number | null;
+  achievements: string[] | null;
+
+  // Media / social
+  highlight_video_url: string | null;
+  instagram_handle: string | null;
+  youtube_channel: string | null;
+  twitter_handle: string | null;
+
+  // Academic extended
+  academic_year: string | null;
+  graduation_year: number | null;
+
   // Passport
   player_code: string;
   is_verified: boolean;

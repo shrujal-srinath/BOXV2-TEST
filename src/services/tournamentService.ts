@@ -579,7 +579,7 @@ export const getAdminPin = async (tournamentId: string): Promise<string | null> 
         const { data, error } = await supabase
             .from('tournament_secrets')
             .select('scorerPin')
-            .eq('tournament_id', tournamentId)
+            .eq('tournamentId', tournamentId)
             .single();
         if (error) {
             console.error('[getAdminPin] RLS/not-found error:', error.message);
