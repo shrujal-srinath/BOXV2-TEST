@@ -21,8 +21,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { HalfCourtCanvas } from './HalfCourtCanvas';
-import type { CourtTheme } from './HalfCourtCanvas';
+import { AdvancedCourtHex } from './AdvancedCourtHex';
+import type { CourtTheme } from './AdvancedCourtHex';
 import { classifyZone, SHOT_ATTRIBUTES, COURT } from './courtZones';
 import type {
     ShotEvent, ShotAttribute, ShotZoneId, ShotType, GameActionType,
@@ -31,7 +31,6 @@ import type { Player } from '../../types';
 import { TimedPlayerPopup } from './TimedPlayerPopup';
 import { JumpBallModal } from './JumpBallModal';
 import { SubstitutionPanel } from './SubstitutionPanel';
-import { CourtGraphicsModal } from './CourtGraphicsModal';
 
 // ── CSS ──────────────────────────────────────────────────────────────────────
 
@@ -132,7 +131,9 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
     // ── Court graphics settings ──
     const [courtTheme, setCourtTheme] = useState<CourtTheme>('dark');
     const [hexOpacity, setHexOpacity] = useState(0);
-    const [showCourtSettings, setShowCourtSettings] = useState(false);
+    const [showZoneHL, setShowZoneHL] = useState(true);
+    const [fullCourt, setFullCourt] = useState(false);
+    const [hexRadius, setHexRadius] = useState(1.9);
 
     // ── New component state ──
     const [deferredShot, setDeferredShot] = useState<{
@@ -324,18 +325,6 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                     <TeamScoreBlock side="B" name={teamBName} color={teamBColor} score={teamBScore} fouls={teamBFouls} timeouts={teamBTimeouts} possession={possession} onStatsClick={() => setShowStats(showStats === 'B' ? null : 'B')} />
 
                     {gameCode && <span className="text-[9px] font-mono text-zinc-700 bg-zinc-900 px-2 py-1 rounded border border-zinc-800 shrink-0">{gameCode}</span>}
-
-                    {/* Settings button */}
-                    <button
-                        onClick={() => setShowCourtSettings(true)}
-                        title="Court Graphics Settings"
-                        className="w-9 h-9 flex items-center justify-center rounded bg-zinc-900 border border-zinc-800 hover:border-zinc-500 text-zinc-500 hover:text-white transition-all active:scale-95 shrink-0"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="3" />
-                            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-                        </svg>
-                    </button>
                 </div>
             </div>
 
@@ -345,40 +334,110 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                 {/* Left sidebar */}
                 <TeamSidebar side="A" color={teamAColor} name={teamAName} players={pA} selId={selA} setSel={setSelA}
                     onMade={(p, t) => handleMade('A', p, t)} onMiss={(p, t) => handleMiss('A', p, t)} onMissFT={() => handleMissFT('A')}
-                    onSec={(a) => onSecondaryAction('A', a)} onSub={() => setShowSubPanel('A')} isPending={pending?.teamSide === 'A'} locked={!!isWebLocked} />
+                    onSec={(a) => onSecondaryAction('A', a)} onSub={() => setShowSubPanel('A')} isPending={pending?.teamSide === 'A'} locked={!!isWebLocked}
+                    courtSettings={
+                        <div className="mt-auto pt-1 space-y-2">
+                            <div className="border-t border-zinc-800" />
+                            <div className="flex items-center gap-1.5 px-1">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                                <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Court</span>
+                            </div>
+                            {/* Theme */}
+                            <div className="space-y-1">
+                                <span className="text-[8px] text-zinc-700 uppercase tracking-widest px-1">Theme</span>
+                                <div className="flex gap-1">
+                                    {(['dark', 'wooden', 'white'] as CourtTheme[]).map(t => (
+                                        <button key={t} onClick={() => setCourtTheme(t)}
+                                            className={`flex-1 py-1 rounded text-[8px] font-bold uppercase tracking-wide transition-all active:scale-95 ${courtTheme === t ? 'bg-violet-600 text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-zinc-300'}`}>
+                                            {t === 'wooden' ? 'Wood' : t[0].toUpperCase() + t.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {/* Court view */}
+                            <div className="space-y-1">
+                                <span className="text-[8px] text-zinc-700 uppercase tracking-widest px-1">View</span>
+                                <div className="flex gap-1">
+                                    <button onClick={() => setFullCourt(false)}
+                                        className={`flex-1 h-7 rounded text-[8px] font-bold uppercase tracking-wide transition-all active:scale-95 ${!fullCourt ? 'bg-violet-600 text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-zinc-300'}`}>
+                                        Half
+                                    </button>
+                                    <button onClick={() => setFullCourt(true)}
+                                        className={`flex-1 h-7 rounded text-[8px] font-bold uppercase tracking-wide transition-all active:scale-95 ${fullCourt ? 'bg-violet-600 text-white' : 'bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-zinc-300'}`}>
+                                        Full
+                                    </button>
+                                </div>
+                            </div>
+                            {/* Zones + Heat */}
+                            <div className="flex gap-1">
+                                <button onClick={() => setShowZoneHL(v => !v)}
+                                    className={`flex-1 h-7 rounded text-[8px] font-bold uppercase tracking-wide transition-all active:scale-95 ${showZoneHL ? 'bg-violet-600/20 text-violet-400 border border-violet-700/40' : 'bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-zinc-400'}`}>
+                                    Zones
+                                </button>
+                                <button onClick={() => setHeatMap(v => !v)}
+                                    className={`flex-1 h-7 rounded text-[8px] font-bold uppercase tracking-wide transition-all active:scale-95 ${heatMap ? 'bg-orange-600/20 text-orange-400 border border-orange-700/40' : 'bg-zinc-900 border border-zinc-800 text-zinc-600 hover:text-zinc-400'}`}>
+                                    Heat
+                                </button>
+                            </div>
+                            {/* Hex size */}
+                            <div className="space-y-1 px-0.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[8px] text-zinc-700 uppercase tracking-widest">Hex Size</span>
+                                    <span className="text-[8px] font-mono text-zinc-500 tabular-nums">{hexRadius.toFixed(1)}</span>
+                                </div>
+                                <input type="range" min="0.8" max="3.0" step="0.1" value={hexRadius}
+                                    onChange={e => setHexRadius(Number(e.target.value))}
+                                    className="w-full cursor-pointer accent-violet-500" style={{ height: 2 }}
+                                />
+                            </div>
+                            {/* Grid opacity */}
+                            <div className="space-y-1 px-0.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[8px] text-zinc-700 uppercase tracking-widest">Grid</span>
+                                    <span className="text-[8px] font-mono text-zinc-500 tabular-nums">{Math.round(hexOpacity * 100)}%</span>
+                                </div>
+                                <input type="range" min="0" max="100" value={Math.round(hexOpacity * 100)}
+                                    onChange={e => setHexOpacity(Number(e.target.value) / 100)}
+                                    className="w-full cursor-pointer accent-violet-500" style={{ height: 2 }}
+                                />
+                            </div>
+                        </div>
+                    }
+                />
 
                 {/* Court center */}
                 <div className="flex-1 flex flex-col min-w-0">
-                    {/* Court toolbar */}
-                    <div className="shrink-0 flex items-center justify-between px-4 py-2">
-                        <div className="flex items-center gap-2">
-                            {pending ? (
-                                <div className="flex items-center gap-2" style={{ animation: 'acPulse 1.5s infinite' }}>
-                                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: ac }} />
-                                    <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: ac, fontFamily: '"Barlow Condensed", sans-serif' }}>
-                                        {pending.made ? '+' : 'MISS '}{pending.points}PT{pending.playerName ? ` — ${pending.playerName}` : ''} — TAP COURT
-                                    </span>
-                                    <button onClick={() => finalize(null, null, 'unlocated')}
-                                        className="text-[9px] font-bold uppercase text-zinc-500 hover:text-white px-2 py-1 bg-zinc-900 border border-zinc-800 hover:border-zinc-500 rounded transition-all active:scale-95">
-                                        Skip
-                                    </button>
-                                </div>
-                            ) : (
-                                <span className="text-[9px] font-bold text-zinc-700 uppercase tracking-[0.25em]">Shot Chart</span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <button onClick={() => setHeatMap(!heatMap)}
-                                className={`px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-widest rounded border transition-all active:scale-95 ${heatMap ? 'bg-zinc-800 border-orange-800/50 text-orange-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600 hover:text-zinc-400 hover:border-zinc-600'}`}>
-                                Heat Map
+                    {/* Pending shot indicator */}
+                    {pending && (
+                        <div className="shrink-0 flex items-center gap-2 px-4 py-1.5" style={{ animation: 'acPulse 1.5s infinite' }}>
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: ac }} />
+                            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: ac, fontFamily: '"Barlow Condensed", sans-serif' }}>
+                                {pending.made ? '+' : 'MISS '}{pending.points}PT{pending.playerName ? ` — ${pending.playerName}` : ''} — TAP COURT
+                            </span>
+                            <button onClick={() => finalize(null, null, 'unlocated')}
+                                className="text-[9px] font-bold uppercase text-zinc-500 hover:text-white px-2 py-1 bg-zinc-900 border border-zinc-800 hover:border-zinc-500 rounded transition-all active:scale-95">
+                                Skip
                             </button>
                         </div>
-                    </div>
+                    )}
 
                     {/* Court */}
                     <div className={`flex-1 relative mx-3 mb-2 rounded-lg overflow-hidden border transition-all duration-300 ${pending ? 'border-zinc-600' : 'border-zinc-800/50'}`}
                         style={{ boxShadow: pending ? `0 0 40px ${ac}10` : 'none' }}>
-                        <HalfCourtCanvas shots={courtDots} zoneOverlays={heatMap ? zoneOverlays : undefined} onCourtTap={handleCourtTap} interactive={!!pending} activeColor={ac} activeEdge={pending ? pending.teamSide : null} pendingInfo={pending ? { made: pending.made, points: pending.points } : null} courtTheme={courtTheme} hexOpacity={hexOpacity} />
+                        <AdvancedCourtHex
+                            shots={courtDots}
+                            zoneOverlays={heatMap ? zoneOverlays : undefined}
+                            onCourtTap={handleCourtTap}
+                            interactive={!!pending}
+                            activeColor={ac}
+                            activeEdge={pending ? pending.teamSide : null}
+                            pendingInfo={pending ? { made: pending.made, points: pending.points } : null}
+                            courtTheme={courtTheme}
+                            hexOpacity={hexOpacity}
+                            showZoneHL={showZoneHL}
+                            fullCourt={fullCourt}
+                            hexRadius={hexRadius}
+                        />
                     </div>
 
                     {/* Attribute ribbon */}
@@ -539,15 +598,6 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                 />
             )}
 
-            {showCourtSettings && (
-                <CourtGraphicsModal
-                    theme={courtTheme}
-                    hexOpacity={hexOpacity}
-                    onThemeChange={setCourtTheme}
-                    onHexOpacityChange={setHexOpacity}
-                    onClose={() => setShowCourtSettings(false)}
-                />
-            )}
         </div>
     );
 };

@@ -262,11 +262,11 @@ const broadcastClient = supabaseUrl && anonKey
 export const broadcastToCloud = (gameCode, state) => {
     if (!broadcastClient || !gameCode) return;
 
-    if (!activeChannel || activeChannel._topic !== `realtime:game-${gameCode}`) {
+    if (!activeChannel || activeChannel._topic !== `realtime:box-${gameCode}`) {
         if (activeChannel) broadcastClient.removeChannel(activeChannel);
-        activeChannel = broadcastClient.channel(`game-${gameCode}`);
+        activeChannel = broadcastClient.channel(`box-${gameCode}`);
         activeChannel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') console.log(`☁️  Broadcasting on channel [game-${gameCode}]`);
+            if (status === 'SUBSCRIBED') console.log(`☁️  Broadcasting on channel [box-${gameCode}]`);
         });
     }
 

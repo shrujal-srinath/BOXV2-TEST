@@ -48,6 +48,7 @@ import ArenaView from './pages/ArenaView';         // <-- Added Arena Route
 import PiLauncher from './pages/PiLauncher';
 import PiReceiverSetup from './pages/PiReceiverSetup';
 import PiDisplay from './pages/PiDisplay';
+import CourtHexMapPage from './pages/CourtHexMapPage';
 
 // ── Tablet PWA pages (NO auth wrapper — these must be public) ─
 import { StandaloneTablet } from './pages/StandaloneTablet';
@@ -149,6 +150,7 @@ function App() {
               <Route path="/tv" element={<TvKiosk />} />
               <Route path="/wall" element={<WallView />} />
               <Route path="/referee" element={<RefereeScreen />} />
+              <Route path="/court-hex" element={<CourtHexMapPage />} />
               <Route path="/arena" element={<ArenaView />} />
               <Route path="/pi-launcher" element={<PiLauncher />} />
               <Route path="/pi-receiver" element={<PiReceiverSetup />} />

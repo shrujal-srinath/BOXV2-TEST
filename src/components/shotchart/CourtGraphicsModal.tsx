@@ -2,7 +2,7 @@
 // Court graphics settings modal — theme picker + hex grid opacity
 
 import React from 'react';
-import type { CourtTheme } from './HalfCourtCanvas';
+import type { CourtTheme } from './AdvancedCourtHex';
 
 interface CourtGraphicsModalProps {
     theme: CourtTheme;
@@ -13,9 +13,9 @@ interface CourtGraphicsModalProps {
 }
 
 const THEMES: { id: CourtTheme; label: string; bg: string; floor: string; line: string; paint: string }[] = [
-    { id: 'dark', label: 'Dark', bg: '#0a0a0a', floor: '#0D0C0A', line: 'rgba(255,255,255,0.3)', paint: '#100E08' },
-    { id: 'light', label: 'Light', bg: '#c8c0b4', floor: '#E8E0D4', line: 'rgba(0,0,0,0.35)', paint: '#D8CFC4' },
-    { id: 'wood', label: 'Wood', bg: '#6a3c14', floor: '#B87840', line: 'rgba(255,255,255,0.45)', paint: '#9A6030' },
+    { id: 'dark',   label: 'Dark',   bg: '#0a0a0a', floor: '#0D0C0A', line: 'rgba(255,255,255,0.3)', paint: '#100E08' },
+    { id: 'white',  label: 'White',  bg: '#e8e2d4', floor: '#F8F5EE', line: 'rgba(0,0,0,0.35)',      paint: '#EDE5DA' },
+    { id: 'wooden', label: 'Wooden', bg: '#6a3c14', floor: '#C8965A', line: 'rgba(255,255,255,0.45)', paint: '#9A6030' },
 ];
 
 const CourtPreview: React.FC<{ t: typeof THEMES[0]; selected: boolean; onClick: () => void }> = ({ t, selected, onClick }) => (
@@ -122,7 +122,7 @@ export const CourtGraphicsModal: React.FC<CourtGraphicsModalProps> = ({
                                 <defs>
                                     <pattern id="hexPrev" x="0" y="0" width="3.46" height="6" patternUnits="userSpaceOnUse">
                                         <polygon points="1.73,0 3.46,1 3.46,3 1.73,4 0,3 0,1" fill="none"
-                                            stroke={theme === 'light' ? `rgba(0,0,0,${hexOpacity * 0.5})` : `rgba(255,255,255,${hexOpacity})`}
+                                            stroke={theme === 'white' || theme === 'wooden' ? `rgba(0,0,0,${hexOpacity * 0.5})` : `rgba(255,255,255,${hexOpacity})`}
                                             strokeWidth="0.15" />
                                     </pattern>
                                 </defs>

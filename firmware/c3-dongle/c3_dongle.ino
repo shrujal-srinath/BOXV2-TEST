@@ -14,6 +14,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  action;
     uint16_t seq;
     uint32_t timestamp;
+    uint8_t  senderMac[6];
 } EspNowPacket;
 
 static const char* ACTION_STRINGS[] = {
@@ -30,7 +31,6 @@ static QueueHandle_t recvQueue;
 static uint16_t      lastSeq[20];
 static uint8_t       senderMacs[20][6];
 static int           senderCount = 0;
-static uint8_t       lastSenderMac[6] = {0};
 
 void sendClockTick(uint32_t gameMs, bool running) {
     // Stub — bidirectional clock sync, not yet active
@@ -40,8 +40,8 @@ static void IRAM_ATTR onRecv(const esp_now_recv_info_t* info,
                               const uint8_t* data, int len) {
     if (len != sizeof(EspNowPacket)) return;
     EspNowPacket pkt;
-    memcpy(&pkt, data, sizeof(pkt));
-    memcpy(lastSenderMac, info->src_addr, 6);
+    memcpy(&pkt, data, sizeof(EspNowPacket) - 6);
+    memcpy(pkt.senderMac, info->src_addr, 6);
     BaseType_t woke = pdFALSE;
     xQueueSendFromISR(recvQueue, &pkt, &woke);
     portYIELD_FROM_ISR(woke);
@@ -61,7 +61,7 @@ static void bridgeTask(void* arg) {
     for (;;) {
         if (xQueueReceive(recvQueue, &pkt, portMAX_DELAY) != pdTRUE) continue;
         if (pkt.msgType != 0) continue;
-        int idx = getSenderIdx(lastSenderMac);
+        int idx = getSenderIdx(pkt.senderMac);
         uint16_t diff = pkt.seq - lastSeq[idx];
         if (diff == 0 || diff > 32768) continue;
         lastSeq[idx] = pkt.seq;
