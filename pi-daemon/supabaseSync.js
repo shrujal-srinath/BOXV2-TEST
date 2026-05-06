@@ -301,6 +301,36 @@ export const broadcastClockToCloud = (gameCode, clockState) => {
     });
 };
 
+// ─── Shot Event Writer ─────────────────────────────────────────
+/**
+ * Writes a single shot attribution event to shot_events table.
+ * Throws if Supabase is unavailable — caller should catch and queue.
+ */
+export const writeShotEvent = async (gameCode, event) => {
+    if (!supabase) throw new Error('Supabase unavailable');
+
+    const { error } = await supabase
+        .from('shot_events')
+        .insert({
+            game_code: gameCode,
+            player_id: event.playerId ?? null,
+            team_side: event.team,
+            x: event.x ?? null,
+            y: event.y ?? null,
+            zone: event.zone ?? 'unlocated',
+            made: true,
+            points: event.points,
+            shot_type: event.points === 1 ? 'free_throw' : 'field_goal',
+            period: event.period ?? 1,
+            game_clock_sec: event.gameClockSec ?? null,
+            attributes: [],
+            input_method: 'live',
+            created_at: event.createdAt ?? new Date().toISOString(),
+        });
+
+    if (error) throw new Error(error.message);
+};
+
 // ─── Channel Teardown ──────────────────────────────────────────
 export const teardownChannel = () => {
     if (activeChannel && broadcastClient) {

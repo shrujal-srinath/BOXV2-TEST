@@ -11,7 +11,7 @@ import { readFileSync } from 'fs';
 import { OUTPUT_CONFIG } from './buttonMap.js';
 import {
     createGame, persistGameState, finishGame,
-    broadcastToCloud, broadcastClockToCloud, teardownChannel,
+    broadcastToCloud, broadcastClockToCloud, teardownChannel, writeShotEvent,
 } from './supabaseSync.js';
 
 let currentGameCode = null;
@@ -58,6 +58,36 @@ let state = getInitialState();
 let history = [];
 const cloneState = (s) => JSON.parse(JSON.stringify(s));
 const saveHistory = () => { history.push(cloneState(state)); if (history.length > 50) history.shift(); };
+
+// ── Shot queue (offline buffer) ───────────────────────────────
+// Shot events are queued here when Supabase is unreachable and
+// flushed automatically the next time a write succeeds.
+const shotQueue = [];
+
+async function persistShotEvent(eventData) {
+    const payload = { ...eventData, createdAt: new Date().toISOString() };
+    try {
+        await writeShotEvent(currentGameCode, payload);
+        // Success — try to flush any previously queued shots
+        flushShotQueue();
+    } catch {
+        shotQueue.push({ gameCode: currentGameCode, ...payload });
+        console.warn(`[ShotQueue] Queued offline — queue length: ${shotQueue.length}`);
+    }
+}
+
+async function flushShotQueue() {
+    while (shotQueue.length > 0) {
+        const item = shotQueue[0];
+        try {
+            await writeShotEvent(item.gameCode, item);
+            shotQueue.shift();
+            console.log(`[ShotQueue] Flushed 1 shot — ${shotQueue.length} remaining`);
+        } catch {
+            break; // Still offline, stop trying
+        }
+    }
+}
 
 // ── 3. BUZZER ─────────────────────────────────────────────────
 let buzzerPin = null, buzzerTimeout = null;
@@ -327,10 +357,22 @@ io.on('connection', (socket) => {
     });
 
     // Shot attribution — sent back from UI after popup completes
-    // Daemon logs it but score is already counted
+    // Score already counted; this persists the location/player metadata.
     socket.on('shot_attributed', (data) => {
-        console.log(`📊 Shot attributed: Team ${data.team} +${data.points} | Player: ${data.playerName || 'unknown'} | Zone: ${data.zone || 'unlocated'}`);
-        // Could persist shot detail to Supabase here in the future
+        console.log(`📊 Shot: Team ${data.team} +${data.points} | Player: ${data.playerName || 'none'} | Zone: ${data.zone || 'unlocated'}`);
+        if (currentGameCode && state.meta.gameMode !== 'quick') {
+            persistShotEvent({
+                team: data.team,
+                points: data.points,
+                playerId: data.playerId ?? null,
+                playerName: data.playerName ?? null,
+                zone: data.zone ?? 'unlocated',
+                x: data.x ?? null,
+                y: data.y ?? null,
+                period: data.period ?? state.clock.period,
+                gameClockSec: data.gameClockSec ?? Math.ceil(state.clock.gameMs / 1000),
+            });
+        }
     });
 
     socket.on('ui_action', (action) => {

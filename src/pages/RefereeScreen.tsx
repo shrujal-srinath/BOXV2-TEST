@@ -1,36 +1,37 @@
 // src/pages/RefereeScreen.tsx
 // ═══════════════════════════════════════════════════════════════
-// THE BOX — MASTER REFEREE SCREEN CONTROLLER v3
+// THE BOX — MASTER REFEREE SCREEN CONTROLLER v4
 //
 // Screen state machine:
-//   SPLASH → MODE_SELECT
+//   SPLASH → DASHBOARD
 //     → OFFLINE_SETUP → CONNECTING → PRE_GAME
-//     → ONLINE_SETUP  →             PRE_GAME
+//     → WATCH (stub, back → DASHBOARD)
 //   PRE_GAME → LIVE_GAME ↔ SETTINGS
 //   SETTINGS → END_GAME_CONFIRM → POST_GAME
 //   LIVE_GAME → END_GAME_CONFIRM → POST_GAME
+//   DASHBOARD (hold SETTINGS) → QUICK_GAME_CONFIRM → CONNECTING
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRefereeBox } from '../hooks/useRefereeBox';
 import type { GameConfig } from '../hooks/useRefereeBox';
-import { getGameByCode } from '../services/supabaseGameService';
-import { markBoxLive, resetBoxUnit } from '../services/boxUnitService';
+import { resetBoxUnit } from '../services/boxUnitService';
 
 import SplashScreen from '../components/refereebox/SplashScreen';
-import ModeSelect from '../components/refereebox/ModeSelect';
-import OnlineSetup from '../components/refereebox/OnlineSetup';
+import PiDashboard from '../components/refereebox/PiDashboard';
+import PiWatchScreen from '../components/refereebox/PiWatchScreen';
 import OfflineSetup from '../components/refereebox/OfflineSetup';
 import PreGameConfirm from '../components/refereebox/PreGameConfirm';
 import LiveScoreboard from '../components/refereebox/LockedScoreboard';
 import SettingsPanel from '../components/refereebox/UnlockedSettings';
+import PiAdvancedShotFlow from '../components/refereebox/PiAdvancedShotFlow';
 
 // ─── Screen type ──────────────────────────────────────────────
 
 type Screen =
     | 'splash'
-    | 'mode_select'
-    | 'online_setup'
+    | 'dashboard'
+    | 'watch'
     | 'offline_setup'
     | 'connecting'
     | 'pre_game'
@@ -64,34 +65,13 @@ export default function RefereeScreen() {
     const [screen, setScreen] = useState<Screen>('splash');
     const [pendingConfig, setPendingConfig] = useState<GameConfig | null>(null);
     const [activeGameCode, setActiveGameCode] = useState<string | null>(null);
-    const [isOnline, setIsOnline] = useState(false);
     const [boxCode, setBoxCode] = useState<string | null>(null);
     const [possession, setPossession] = useState<'A' | 'B' | null>(null);
-    const [modeSelectIndex, setModeSelectIndex] = useState(1); // 0=online, 1=offline (default offline)
+    const [dashboardIndex, setDashboardIndex] = useState(1); // 0=watch, 1=start (default start)
     const settingsHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [finalScore, setFinalScore] = useState<{
         a: number; b: number; teamA: string; teamB: string;
     } | null>(null);
-
-    // ── Internet check ────────────────────────────────────────
-    useEffect(() => {
-        const check = async () => {
-            try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 3000);
-                await fetch('https://www.google.com/generate_204', {
-                    method: 'HEAD', signal: controller.signal, mode: 'no-cors',
-                });
-                clearTimeout(timeout);
-                setIsOnline(true);
-            } catch {
-                setIsOnline(false);
-            }
-        };
-        check();
-        const interval = setInterval(check, 10000);
-        return () => clearInterval(interval);
-    }, []);
 
     // ── Load box code ─────────────────────────────────────────
     useEffect(() => {
@@ -110,30 +90,26 @@ export default function RefereeScreen() {
                 return;
             }
 
-            // MODE_SELECT — Score A/B toggle, Shot Clock confirms
-            if (screen === 'mode_select') {
+            // DASHBOARD — Score A=watch, Score B=start, Shot Clock=confirm
+            if (screen === 'dashboard') {
                 if (msg === 'SCORE_A_PLUS1' || msg === 'SCORE_A_PLUS2' || msg === 'SCORE_A_PLUS3') {
-                    setModeSelectIndex(0); // online
+                    setDashboardIndex(0); // watch
                 } else if (msg === 'SCORE_B_PLUS1' || msg === 'SCORE_B_PLUS2' || msg === 'SCORE_B_PLUS3') {
-                    setModeSelectIndex(1); // offline
+                    setDashboardIndex(1); // start
                 } else if (msg === 'SHOT_CLOCK_24' || msg === 'SHOT_CLOCK_14') {
-                    // Confirm selection
-                    if (modeSelectIndex === 0 && isOnline) {
-                        setScreen('online_setup');
+                    if (dashboardIndex === 0) {
+                        setScreen('watch');
                     } else {
                         setScreen('offline_setup');
                     }
                 } else if (msg === 'SETTINGS') {
-                    // Long-press detection: start timer on SETTINGS press
                     if (!settingsHoldTimer.current) {
                         settingsHoldTimer.current = setTimeout(() => {
                             settingsHoldTimer.current = null;
                             setScreen('quick_game_confirm');
                         }, 2000);
-                        // Also clear on any other message (acts as release)
                     }
                 } else {
-                    // Any non-SETTINGS button clears the hold timer
                     if (settingsHoldTimer.current) {
                         clearTimeout(settingsHoldTimer.current);
                         settingsHoldTimer.current = null;
@@ -142,12 +118,18 @@ export default function RefereeScreen() {
                 return;
             }
 
+            // WATCH — Undo = back to dashboard
+            if (screen === 'watch') {
+                if (msg === 'UNDO') setScreen('dashboard');
+                return;
+            }
+
             // QUICK_GAME_CONFIRM — Shot Clock = start, Undo = cancel
             if (screen === 'quick_game_confirm') {
                 if (msg === 'SHOT_CLOCK_24' || msg === 'SHOT_CLOCK_14') {
                     handleQuickGameStart();
                 } else if (msg === 'UNDO') {
-                    setScreen('mode_select');
+                    setScreen('dashboard');
                 }
                 return;
             }
@@ -161,7 +143,7 @@ export default function RefereeScreen() {
                 settingsHoldTimer.current = null;
             }
         };
-    }, [screen, modeSelectIndex, isOnline]);
+    }, [screen, dashboardIndex]);
 
     // ── OFFLINE: CONNECTING → PRE_GAME ───────────────────────
     useEffect(() => {
@@ -219,42 +201,13 @@ export default function RefereeScreen() {
 
     // ── Handlers ──────────────────────────────────────────────
 
-    const handleSplashComplete = useCallback(() => setScreen('mode_select'), []);
+    const handleSplashComplete = useCallback(() => setScreen('dashboard'), []);
 
     const handleOfflineConfirm = useCallback((config: GameConfig) => {
         setPendingConfig(config);
         setScreen('connecting');
         setupGame(config);
     }, [setupGame]);
-
-    const handleGameAssigned = useCallback(async (assignedCode: string) => {
-        try {
-            const game = await getGameByCode(assignedCode);
-            if (!game) throw new Error('Game not found');
-
-            const config: GameConfig = {
-                teamAName: game.teamA.name,
-                teamBName: game.teamB.name,
-                teamAColor: game.teamA.color,
-                teamBColor: game.teamB.color,
-                periodMinutes: game.settings.periodDuration,
-                shotClockSeconds: game.settings.shotClockDuration || 24,
-                periods: game.settings.periods || 4,
-                periodType: game.settings.periodType || 'quarter',
-                timeoutsPerTeam: game.teamA.timeouts,
-            };
-
-            setPendingConfig(config);
-            setActiveGameCode(assignedCode);
-            setupGame({ ...config, existingGameCode: assignedCode });
-
-            if (boxCode) markBoxLive(boxCode);
-            setScreen('pre_game');
-        } catch (err) {
-            console.error('[RefereeScreen] handleGameAssigned failed:', err);
-            setScreen('mode_select');
-        }
-    }, [setupGame, boxCode]);
 
     const handleBeginGame = useCallback(() => setScreen('live_game'), []);
 
@@ -292,8 +245,8 @@ export default function RefereeScreen() {
         setFinalScore(null);
         setActiveGameCode(null);
         setPossession(null);
-        setModeSelectIndex(1);
-        setScreen('mode_select');
+        setDashboardIndex(1);
+        setScreen('dashboard');
     }, []);
 
     // ── Quick Game (hardware-only) ────────────────────────────
@@ -319,7 +272,7 @@ export default function RefereeScreen() {
             setScreen('connecting');
             setupGame(pendingConfig);
         } else {
-            setScreen('mode_select');
+            setScreen('dashboard');
         }
     }, [pendingConfig, setupGame]);
 
@@ -334,13 +287,20 @@ export default function RefereeScreen() {
         case 'splash':
             return <SplashScreen isDaemonConnected={isConnected} onComplete={handleSplashComplete} />;
 
-        case 'mode_select':
+        case 'dashboard':
             return (
-                <ModeSelect
-                    onSelectOnline={() => setScreen('online_setup')}
-                    onSelectOffline={() => setScreen('offline_setup')}
-                    isOnline={isOnline}
-                    selectedIndex={modeSelectIndex}
+                <PiDashboard
+                    onSelectWatch={() => setScreen('watch')}
+                    onSelectStart={() => setScreen('offline_setup')}
+                    selectedIndex={dashboardIndex}
+                />
+            );
+
+        case 'watch':
+            return (
+                <PiWatchScreen
+                    onBack={() => setScreen('dashboard')}
+                    castCode={boxCode?.slice(-4).toUpperCase() ?? 'BOX1'}
                 />
             );
 
@@ -348,7 +308,7 @@ export default function RefereeScreen() {
             return (
                 <QuickGameConfirmScreen
                     onConfirm={handleQuickGameStart}
-                    onCancel={() => setScreen('mode_select')}
+                    onCancel={() => setScreen('dashboard')}
                 />
             );
 
@@ -356,15 +316,7 @@ export default function RefereeScreen() {
             return (
                 <OfflineSetup
                     onConfirm={handleOfflineConfirm}
-                    onBack={() => setScreen('mode_select')}
-                />
-            );
-
-        case 'online_setup':
-            return (
-                <OnlineSetup
-                    onGameAssigned={handleGameAssigned}
-                    onBack={() => setScreen('mode_select')}
+                    onBack={() => setScreen('dashboard')}
                 />
             );
 
@@ -374,7 +326,7 @@ export default function RefereeScreen() {
                     config={pendingConfig}
                     error={setupError}
                     onRetry={handleRetry}
-                    onBack={() => setScreen('mode_select')}
+                    onBack={() => setScreen('dashboard')}
                 />
             );
 
@@ -384,11 +336,26 @@ export default function RefereeScreen() {
                     config={pendingConfig}
                     gameCode={displayGameCode}
                     onStart={handleBeginGame}
-                    onBack={() => setScreen('mode_select')}
+                    onBack={() => setScreen('dashboard')}
                 />
             ) : null;
 
         case 'live_game':
+            // Stats/advanced mode: show shot attribution screen when a score is pending
+            if (gameState && scorePending && gameState.meta.gameMode !== 'quick') {
+                return (
+                    <PiAdvancedShotFlow
+                        event={scorePending}
+                        teamA={gameState.teamA}
+                        teamB={gameState.teamB}
+                        teamAColor={teamAColor}
+                        teamBColor={teamBColor}
+                        clock={gameState.clock}
+                        onAttribute={attributeShot}
+                        onSkip={dismissScorePending}
+                    />
+                );
+            }
             return gameState ? (
                 <LiveScoreboard
                     teamA={gameState.teamA}
@@ -403,6 +370,7 @@ export default function RefereeScreen() {
                     isTouchUnlocked={gameState.ui?.isTouchUnlocked}
                     undoFlash={undoFlash}
                     settingsFlash={settingsFlash}
+                    gameMode={gameState.meta?.gameMode}
                 />
             ) : <DaemonReconnectingScreen />;
 
