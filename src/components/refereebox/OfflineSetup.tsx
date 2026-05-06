@@ -1,8 +1,8 @@
-// src/components/refereebox/OfflineSetup.tsx — THE BOX Offline Setup v2
-// Adds: mode selector (Quick/Stats/Advanced) + optional player roster entry
+// src/components/refereebox/OfflineSetup.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface Player { id: string; name: string; number: string; }
 
 interface GameConfig {
@@ -20,333 +20,708 @@ interface OfflineSetupProps {
     onBack: () => void;
 }
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const BG    = '#080808';
+const CARD  = '#111111';
+const BDR   = '#2a2a2a';
+const RED   = '#DC2626';
+const INBG  = '#0a0a0a';
+const TXT   = '#ffffff';
+const DIM   = 'rgba(255,255,255,0.5)';
+const MUTED = 'rgba(255,255,255,0.3)';
+const OW    = "'Oswald', sans-serif";
+const RM    = "'Roboto Mono', monospace";
+const SG    = "'Space Grotesk', sans-serif";
+
 const COLOR_PRESETS = [
-    { value: '#3B82F6' }, { value: '#EF4444' }, { value: '#22C55E' },
-    { value: '#8B5CF6' }, { value: '#F97316' }, { value: '#06B6D4' },
-    { value: '#EC4899' }, { value: '#EAB308' }, { value: '#FFFFFF' },
+    '#3B82F6','#EF4444','#22C55E','#8B5CF6',
+    '#F97316','#06B6D4','#EC4899','#EAB308','#FFFFFF',
 ];
 
-const PERIOD_OPTIONS = [
-    { label: '5', value: 5 }, { label: '8', value: 8 },
-    { label: '10', value: 10 }, { label: '12', value: 12 },
-];
+// ── Chip style helper ─────────────────────────────────────────────────────────
+const chip = (active: boolean): React.CSSProperties => ({
+    fontFamily: RM, fontSize: 10,
+    padding: '4px 10px', borderRadius: 0,
+    cursor: 'pointer',
+    border: `1px solid ${active ? RED : BDR}`,
+    background: active ? RED : 'transparent',
+    color: active ? TXT : DIM,
+    textTransform: 'uppercase',
+});
 
-const MODES = [
-    { id: 'quick' as const, label: 'QUICK', icon: '⚡', desc: 'Score only, no stats' },
-    { id: 'stats' as const, label: 'STATS', icon: '📊', desc: 'Player attribution' },
-    { id: 'advanced' as const, label: 'ADVANCED', icon: '🏀', desc: 'Full shot chart' },
-];
+// ── Input base style ──────────────────────────────────────────────────────────
+const inputBase: React.CSSProperties = {
+    background: INBG, border: `1px solid ${BDR}`,
+    color: TXT, fontFamily: RM, fontSize: 12,
+    textTransform: 'uppercase', padding: '8px 12px',
+    borderRadius: 0, outline: 'none',
+    width: '100%', boxSizing: 'border-box',
+};
 
-const font = { fontFamily: "'JetBrains Mono', monospace" };
-const displayFont = { fontFamily: "'Oswald', sans-serif" };
+// ── Section label ─────────────────────────────────────────────────────────────
+const sectionLabel = (text: string): React.CSSProperties => ({
+    fontFamily: SG, fontSize: 10, color: MUTED,
+    letterSpacing: '0.2em', textTransform: 'uppercase',
+    marginBottom: 10,
+});
 
+// ── Component ─────────────────────────────────────────────────────────────────
 const OfflineSetup: React.FC<OfflineSetupProps> = ({ onConfirm, onBack }) => {
-    const [step, setStep] = useState<'config' | 'roster'>('config');
-    const [config, setConfig] = useState<Omit<GameConfig, 'playersA' | 'playersB'>>({
-        teamAName: '', teamBName: '',
-        teamAColor: '#3B82F6', teamBColor: '#EF4444',
-        periodMinutes: 10, shotClockSeconds: 24,
-        periods: 4, periodType: 'quarter',
-        timeoutsPerTeam: 2, gameMode: 'quick',
-    });
 
-    const [playersA, setPlayersA] = useState<Player[]>([]);
-    const [playersB, setPlayersB] = useState<Player[]>([]);
-    const [activeTeam, setActiveTeam] = useState<'A' | 'B'>('A');
-    const [playerName, setPlayerName] = useState('');
-    const [playerNumber, setPlayerNumber] = useState('');
+    const [gameMode,        setGameMode]        = useState<'quick' | 'stats' | 'advanced'>('quick');
+    const [teamAName,       setTeamAName]        = useState('');
+    const [teamBName,       setTeamBName]        = useState('');
+    const [teamAColor,      setTeamAColor]       = useState('#3B82F6');
+    const [teamBColor,      setTeamBColor]       = useState('#EF4444');
+    const [periodMinutes,   setPeriodMinutes]    = useState(10);
+    const [periods,         setPeriods]          = useState(4);
+    const [periodType,      setPeriodType]       = useState<'quarter' | 'half'>('quarter');
+    const [shotClockEnabled,setShotClockEnabled] = useState(true);
+    const [shotClockSeconds]                     = useState(24);
+    const [timeoutsPerTeam, setTimeoutsPerTeam]  = useState(2);
+    const [playersA,        setPlayersA]         = useState<Player[]>([]);
+    const [playersB,        setPlayersB]         = useState<Player[]>([]);
+    const [playerNameA,     setPlayerNameA]      = useState('');
+    const [playerNumA,      setPlayerNumA]       = useState('');
+    const [playerNameB,     setPlayerNameB]      = useState('');
+    const [playerNumB,      setPlayerNumB]       = useState('');
+    const [cursorVisible,   setCursorVisible]    = useState(true);
 
-    const isValid = config.teamAName.trim().length > 0 && config.teamBName.trim().length > 0;
-    const needsRoster = config.gameMode === 'stats' || config.gameMode === 'advanced';
+    useEffect(() => {
+        const t = setInterval(() => setCursorVisible(v => !v), 530);
+        return () => clearInterval(t);
+    }, []);
 
-    const handleNext = () => {
-        if (needsRoster) { setStep('roster'); }
-        else { onConfirm({ ...config, playersA: [], playersB: [] }); }
+    const isValid = teamAName.trim().length > 0 && teamBName.trim().length > 0;
+
+    const setPeriodOption = (p: number) => {
+        setPeriods(p);
+        setPeriodType(p === 2 ? 'half' : 'quarter');
     };
 
-    const handleFinish = () => {
-        onConfirm({ ...config, playersA, playersB });
+    const addPlayerA = () => {
+        if (!playerNameA.trim() || !playerNumA.trim() || playersA.length >= 12) return;
+        setPlayersA(prev => [...prev, {
+            id: `pa-${Date.now()}`,
+            name: playerNameA.trim().toUpperCase(),
+            number: playerNumA.trim(),
+        }]);
+        setPlayerNameA(''); setPlayerNumA('');
     };
 
-    const addPlayer = () => {
-        if (!playerName.trim() || !playerNumber.trim()) return;
-        const player: Player = { id: `p-${Date.now()}`, name: playerName.trim().toUpperCase(), number: playerNumber.trim() };
-        if (activeTeam === 'A') setPlayersA(prev => [...prev, player]);
-        else setPlayersB(prev => [...prev, player]);
-        setPlayerName(''); setPlayerNumber('');
+    const addPlayerB = () => {
+        if (!playerNameB.trim() || !playerNumB.trim() || playersB.length >= 12) return;
+        setPlayersB(prev => [...prev, {
+            id: `pb-${Date.now()}`,
+            name: playerNameB.trim().toUpperCase(),
+            number: playerNumB.trim(),
+        }]);
+        setPlayerNameB(''); setPlayerNumB('');
     };
 
-    const removePlayer = (team: 'A' | 'B', id: string) => {
-        if (team === 'A') setPlayersA(prev => prev.filter(p => p.id !== id));
-        else setPlayersB(prev => prev.filter(p => p.id !== id));
+    const handleConfirm = () => {
+        if (!isValid) return;
+        onConfirm({
+            teamAName: teamAName.trim(), teamBName: teamBName.trim(),
+            teamAColor, teamBColor, periodMinutes,
+            shotClockSeconds: shotClockEnabled ? shotClockSeconds : 0,
+            periods, periodType, timeoutsPerTeam, gameMode,
+            playersA, playersB,
+        });
     };
 
-    const inputStyle: React.CSSProperties = {
-        width: '100%', height: '48px',
-        background: '#111', border: '2px solid #2a2a2a',
-        borderRadius: '10px', color: '#fff',
-        ...displayFont, fontSize: '20px', fontWeight: 600,
-        letterSpacing: '0.08em', textTransform: 'uppercase',
-        padding: '0 16px', outline: 'none',
-        transition: 'border-color 0.15s',
-    };
+    return (
+        <>
+            <style>{`
+                @keyframes pulse-dot {
+                    0%, 100% { opacity: 1; }
+                    50%       { opacity: 0.25; }
+                }
+            `}</style>
 
-    // ── ROSTER STEP ──────────────────────────────────────────
-    if (step === 'roster') {
-        const activePlayers = activeTeam === 'A' ? playersA : playersB;
-        const activeColor = activeTeam === 'A' ? config.teamAColor : config.teamBColor;
-        const activeName = activeTeam === 'A' ? config.teamAName : config.teamBName;
+            <div style={{
+                width: '100vw', height: '100vh',
+                background: BG,
+                display: 'flex', flexDirection: 'column',
+                overflow: 'hidden',
+                userSelect: 'none',
+            }}>
 
-        return (
-            <div style={{ width: '100vw', height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                {/* Header */}
-                <div style={{ height: 52, background: '#080808', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0 }}>
-                    <button onClick={() => setStep('config')} style={{ background: 'none', border: '1px solid #222', borderRadius: 6, color: '#555', ...font, fontSize: 11, letterSpacing: '0.1em', padding: '6px 14px', cursor: 'pointer' }}>← BACK</button>
-                    <span style={{ ...font, fontSize: 11, color: '#444', letterSpacing: '0.2em' }}>ROSTER SETUP</span>
-                    <button onClick={handleFinish} style={{ background: '#22C55E', border: 'none', borderRadius: 8, color: '#fff', ...displayFont, fontSize: 14, fontWeight: 700, letterSpacing: '0.1em', padding: '8px 20px', cursor: 'pointer' }}>
-                        START GAME →
+                {/* ── HEADER 32px ────────────────────────────────────────── */}
+                <div style={{
+                    height: 32, flexShrink: 0,
+                    background: BG, borderBottom: `1px solid ${BDR}`,
+                    display: 'flex', alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0 20px',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{
+                            fontFamily: SG, fontWeight: 700, fontStyle: 'italic',
+                            fontSize: 11, color: TXT, letterSpacing: '0.05em',
+                        }}>SCORE_CORE_V1.0</span>
+                        <span style={{ color: '#3a3a3a', fontSize: 12, lineHeight: 1 }}>|</span>
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            border: `1px solid ${BDR}`, padding: '2px 8px',
+                        }}>
+                            <div style={{
+                                width: 5, height: 5,
+                                borderRadius: '9999px',
+                                background: RED,
+                                animation: 'pulse-dot 1.2s ease-in-out infinite',
+                            }} />
+                            <span style={{
+                                fontFamily: SG, fontSize: 9, color: DIM,
+                                letterSpacing: '0.1em', textTransform: 'uppercase',
+                            }}>CFG: MATCH_INIT</span>
+                        </div>
+                    </div>
+                    <button
+                        onClick={onBack}
+                        style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontFamily: SG, fontSize: 10, color: MUTED,
+                            letterSpacing: '0.15em', textTransform: 'uppercase',
+                            padding: 0,
+                        }}
+                    >BACK</button>
+                </div>
+
+                {/* ── MAIN SCROLLABLE ────────────────────────────────────── */}
+                <div style={{
+                    flex: 1, overflowY: 'auto', overflowX: 'hidden',
+                    padding: 24,
+                    display: 'flex', flexDirection: 'column', gap: 22,
+                }}>
+
+                    {/* Hero */}
+                    <div>
+                        <div style={{
+                            fontFamily: OW, fontStyle: 'italic', fontWeight: 700,
+                            fontSize: 28, color: TXT, textTransform: 'uppercase',
+                            letterSpacing: '0.02em', marginBottom: 6,
+                        }}>INIT_NEW_MATCH</div>
+                        <div style={{ width: 160, height: 4, background: RED, marginBottom: 8 }} />
+                        <div style={{ fontFamily: RM, fontSize: 11, color: DIM }}>
+                            {'SYS_MSG: CONFIGURE MATCH PARAMETERS > '}
+                            <span style={{
+                                display: 'inline-block', width: 7, height: 12,
+                                background: cursorVisible ? DIM : 'transparent',
+                                verticalAlign: 'middle', marginLeft: 1,
+                            }} />
+                        </div>
+                    </div>
+
+                    {/* ── SECTION 1: MATCH_MODE ──────────────────────────── */}
+                    <div>
+                        <div style={sectionLabel('MATCH_MODE')}>MATCH_MODE</div>
+                        <div style={{ display: 'flex', gap: 12 }}>
+
+                            {/* QUICK MATCH */}
+                            <div
+                                onClick={() => setGameMode('quick')}
+                                style={{
+                                    flex: 1, padding: '12px 14px', cursor: 'pointer',
+                                    border: gameMode === 'quick' ? `2px solid ${RED}` : `1px solid ${BDR}`,
+                                    background: gameMode === 'quick' ? '#0f0000' : CARD,
+                                    display: 'flex', flexDirection: 'column', gap: 8,
+                                }}
+                            >
+                                <div style={{
+                                    alignSelf: 'flex-start', fontFamily: SG, fontSize: 9,
+                                    border: `1px solid ${BDR}`, padding: '2px 6px', color: MUTED,
+                                }}>OPT_01</div>
+                                <div style={{
+                                    fontFamily: OW, fontStyle: 'italic', fontWeight: 700,
+                                    fontSize: 18, textTransform: 'uppercase',
+                                    color: gameMode === 'quick' ? TXT : DIM,
+                                }}>QUICK MATCH</div>
+                                <div style={{ fontFamily: RM, fontSize: 10, color: DIM, flex: 1 }}>
+                                    &gt; Score + clock only. Zero overhead.
+                                </div>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                    stroke={DIM} strokeWidth="1.5" strokeLinecap="round">
+                                    <circle cx="12" cy="13" r="8"/>
+                                    <path d="M12 9v4l2.5 2"/>
+                                    <line x1="9" y1="2" x2="15" y2="2"/>
+                                    <line x1="12" y1="2" x2="12" y2="5"/>
+                                </svg>
+                            </div>
+
+                            {/* PLAYER STATS */}
+                            <div
+                                onClick={() => setGameMode('stats')}
+                                style={{
+                                    flex: 1, padding: '12px 14px', cursor: 'pointer',
+                                    border: gameMode === 'stats' ? `2px solid ${RED}` : `1px solid ${BDR}`,
+                                    background: gameMode === 'stats' ? '#0f0000' : CARD,
+                                    display: 'flex', flexDirection: 'column', gap: 8,
+                                }}
+                            >
+                                <div style={{
+                                    alignSelf: 'flex-start', fontFamily: SG, fontSize: 9,
+                                    border: `1px solid ${BDR}`, padding: '2px 6px', color: MUTED,
+                                }}>OPT_02</div>
+                                <div style={{
+                                    fontFamily: OW, fontStyle: 'italic', fontWeight: 700,
+                                    fontSize: 18, textTransform: 'uppercase',
+                                    color: gameMode === 'stats' ? TXT : DIM,
+                                }}>PLAYER STATS</div>
+                                <div style={{ fontFamily: RM, fontSize: 10, color: DIM, flex: 1 }}>
+                                    &gt; Player attribution + fouls + timeouts.
+                                </div>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                    <rect x="3"   y="14" width="5" height="8"  fill={DIM}/>
+                                    <rect x="9.5" y="9"  width="5" height="13" fill={DIM}/>
+                                    <rect x="16"  y="4"  width="5" height="18" fill={DIM}/>
+                                </svg>
+                            </div>
+
+                            {/* FULL ANALYTICS */}
+                            <div
+                                onClick={() => setGameMode('advanced')}
+                                style={{
+                                    flex: 1, padding: '12px 14px', cursor: 'pointer',
+                                    border: gameMode === 'advanced' ? `2px solid ${RED}` : `1px solid ${BDR}`,
+                                    background: gameMode === 'advanced' ? '#0f0000' : CARD,
+                                    display: 'flex', flexDirection: 'column', gap: 8,
+                                }}
+                            >
+                                <div style={{
+                                    alignSelf: 'flex-start', fontFamily: SG, fontSize: 9,
+                                    border: `1px solid ${BDR}`, padding: '2px 6px', color: MUTED,
+                                }}>OPT_03</div>
+                                <div style={{
+                                    fontFamily: OW, fontStyle: 'italic', fontWeight: 700,
+                                    fontSize: 18, textTransform: 'uppercase',
+                                    color: gameMode === 'advanced' ? TXT : DIM,
+                                }}>FULL ANALYTICS</div>
+                                <div style={{ fontFamily: RM, fontSize: 10, color: DIM, flex: 1 }}>
+                                    &gt; Shot chart + full performance data.
+                                </div>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                    stroke={DIM} strokeWidth="1.5" strokeLinecap="round">
+                                    <circle cx="12" cy="12" r="9"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <line x1="12" y1="2"  x2="12" y2="6"/>
+                                    <line x1="12" y1="18" x2="12" y2="22"/>
+                                    <line x1="2"  y1="12" x2="6"  y2="12"/>
+                                    <line x1="18" y1="12" x2="22" y2="12"/>
+                                </svg>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    {/* ── SECTION 2: TEAM_CONFIG ─────────────────────────── */}
+                    <div>
+                        <div style={sectionLabel('TEAM_CONFIGURATION')}>TEAM_CONFIGURATION</div>
+                        <div style={{ display: 'flex', gap: 12 }}>
+
+                            {/* TEAM A */}
+                            <div style={{ flex: 1, background: CARD, border: `1px solid ${BDR}`, padding: 14 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                                    <span style={{
+                                        fontFamily: SG, fontSize: 10, color: RED,
+                                        letterSpacing: '0.15em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                                    }}>TEAM_A</span>
+                                    <div style={{ flex: 1, borderBottom: `1px solid ${BDR}` }} />
+                                </div>
+                                <div style={{ marginBottom: 10 }}>
+                                    <div style={{ fontFamily: RM, fontSize: 10, color: DIM, marginBottom: 6 }}>
+                                        &gt; IDENTIFIER:
+                                    </div>
+                                    <input
+                                        value={teamAName}
+                                        onChange={e => setTeamAName(e.target.value)}
+                                        placeholder="TEAM_ALPHA"
+                                        onFocus={e => (e.target.style.borderColor = RED)}
+                                        onBlur={e  => (e.target.style.borderColor = BDR)}
+                                        style={inputBase}
+                                        autoComplete="off"
+                                        maxLength={16}
+                                    />
+                                </div>
+                                <div>
+                                    <div style={{ fontFamily: RM, fontSize: 10, color: DIM, marginBottom: 6 }}>
+                                        &gt; JERSEY_COLOR:
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                        {COLOR_PRESETS.map(c => (
+                                            <div
+                                                key={c}
+                                                onClick={() => setTeamAColor(c)}
+                                                style={{
+                                                    width: 24, height: 24, background: c,
+                                                    cursor: 'pointer', borderRadius: 0,
+                                                    ...(teamAColor === c
+                                                        ? { outline: `2px solid ${RED}`, outlineOffset: 2 }
+                                                        : { border: `1px solid ${BDR}`, opacity: 0.5 }
+                                                    ),
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* TEAM B */}
+                            <div style={{ flex: 1, background: CARD, border: `1px solid ${BDR}`, padding: 14 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                                    <span style={{
+                                        fontFamily: SG, fontSize: 10, color: RED,
+                                        letterSpacing: '0.15em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                                    }}>TEAM_B</span>
+                                    <div style={{ flex: 1, borderBottom: `1px solid ${BDR}` }} />
+                                </div>
+                                <div style={{ marginBottom: 10 }}>
+                                    <div style={{ fontFamily: RM, fontSize: 10, color: DIM, marginBottom: 6 }}>
+                                        &gt; IDENTIFIER:
+                                    </div>
+                                    <input
+                                        value={teamBName}
+                                        onChange={e => setTeamBName(e.target.value)}
+                                        placeholder="TEAM_BRAVO"
+                                        onFocus={e => (e.target.style.borderColor = RED)}
+                                        onBlur={e  => (e.target.style.borderColor = BDR)}
+                                        style={inputBase}
+                                        autoComplete="off"
+                                        maxLength={16}
+                                    />
+                                </div>
+                                <div>
+                                    <div style={{ fontFamily: RM, fontSize: 10, color: DIM, marginBottom: 6 }}>
+                                        &gt; JERSEY_COLOR:
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                        {COLOR_PRESETS.map(c => (
+                                            <div
+                                                key={c}
+                                                onClick={() => setTeamBColor(c)}
+                                                style={{
+                                                    width: 24, height: 24, background: c,
+                                                    cursor: 'pointer', borderRadius: 0,
+                                                    ...(teamBColor === c
+                                                        ? { outline: `2px solid ${RED}`, outlineOffset: 2 }
+                                                        : { border: `1px solid ${BDR}`, opacity: 0.5 }
+                                                    ),
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    {/* ── SECTION 3: MATCH_PARAMETERS ────────────────────── */}
+                    <div>
+                        <div style={sectionLabel('MATCH_PARAMETERS')}>MATCH_PARAMETERS</div>
+                        <div style={{
+                            background: CARD, border: `1px solid ${BDR}`,
+                            padding: '12px 16px',
+                            display: 'flex', flexDirection: 'column', gap: 10,
+                        }}>
+                            {/* Row 1 */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{
+                                    fontFamily: SG, fontSize: 9, color: MUTED,
+                                    letterSpacing: '0.15em', textTransform: 'uppercase',
+                                    whiteSpace: 'nowrap', marginRight: 4,
+                                }}>PERIOD_DURATION</span>
+                                {[5, 8, 10, 12].map(m => (
+                                    <button key={m} onClick={() => setPeriodMinutes(m)} style={chip(periodMinutes === m)}>
+                                        {m} MIN
+                                    </button>
+                                ))}
+                                <div style={{ flex: 1 }} />
+                                <span style={{
+                                    fontFamily: SG, fontSize: 9, color: MUTED,
+                                    letterSpacing: '0.15em', textTransform: 'uppercase',
+                                    whiteSpace: 'nowrap', marginRight: 4,
+                                }}>PERIODS</span>
+                                <button onClick={() => setPeriodOption(4)} style={chip(periods === 4)}>4 QTR</button>
+                                <button onClick={() => setPeriodOption(2)} style={chip(periods === 2)}>2 HLV</button>
+                                <button onClick={() => setPeriodOption(1)} style={chip(periods === 1)}>1 PRD</button>
+                            </div>
+
+                            <div style={{ borderTop: `1px solid ${BDR}` }} />
+
+                            {/* Row 2 */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{
+                                    fontFamily: SG, fontSize: 9, color: MUTED,
+                                    letterSpacing: '0.15em', textTransform: 'uppercase',
+                                    whiteSpace: 'nowrap', marginRight: 4,
+                                }}>SHOT_CLOCK</span>
+                                <button onClick={() => setShotClockEnabled(true)} style={chip(shotClockEnabled)}>
+                                    ON / 24s
+                                </button>
+                                {shotClockEnabled && (
+                                    <div style={{
+                                        fontFamily: RM, fontSize: 9,
+                                        border: `1px solid ${BDR}`, padding: '3px 8px',
+                                        color: MUTED,
+                                    }}>14s RESET</div>
+                                )}
+                                <button onClick={() => setShotClockEnabled(false)} style={chip(!shotClockEnabled)}>
+                                    OFF
+                                </button>
+                                <div style={{ flex: 1 }} />
+                                <span style={{
+                                    fontFamily: SG, fontSize: 9, color: MUTED,
+                                    letterSpacing: '0.15em', textTransform: 'uppercase',
+                                    whiteSpace: 'nowrap', marginRight: 4,
+                                }}>TIMEOUTS</span>
+                                {[1, 2, 3].map(n => (
+                                    <button key={n} onClick={() => setTimeoutsPerTeam(n)} style={chip(timeoutsPerTeam === n)}>
+                                        {n}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── SECTION 4: ROSTER_INPUT (conditional) ──────────── */}
+                    {(gameMode === 'stats' || gameMode === 'advanced') && (
+                        <div>
+                            <div style={{
+                                fontFamily: SG, fontSize: 10, color: RED,
+                                letterSpacing: '0.2em', textTransform: 'uppercase',
+                                marginBottom: 10,
+                            }}>ROSTER_INPUT — REQUIRED FOR SELECTED MODE</div>
+
+                            <div style={{ display: 'flex', gap: 12 }}>
+
+                                {/* TEAM A ROSTER */}
+                                <div style={{ flex: 1, background: CARD, border: `1px solid ${BDR}`, padding: 14 }}>
+                                    <div style={{
+                                        display: 'flex', justifyContent: 'space-between',
+                                        alignItems: 'center', marginBottom: 10,
+                                    }}>
+                                        <div style={{
+                                            fontFamily: OW, fontStyle: 'italic',
+                                            fontSize: 14, color: TXT, textTransform: 'uppercase',
+                                        }}>TEAM_A_ROSTER</div>
+                                        <div style={{ fontFamily: RM, fontSize: 9, color: MUTED }}>
+                                            ROSTER: {playersA.length}/12
+                                        </div>
+                                    </div>
+
+                                    {/* Player list */}
+                                    <div style={{ marginBottom: 10 }}>
+                                        {playersA.map(p => (
+                                            <div key={p.id} style={{
+                                                display: 'flex', alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                fontFamily: RM, fontSize: 11, color: DIM,
+                                                padding: '4px 0',
+                                                borderBottom: `1px solid ${BDR}`,
+                                            }}>
+                                                <span>&gt; #{p.number}{'  '}{p.name}</span>
+                                                <button
+                                                    onClick={() => setPlayersA(prev => prev.filter(x => x.id !== p.id))}
+                                                    style={{
+                                                        background: 'none', border: 'none', cursor: 'pointer',
+                                                        fontFamily: RM, fontSize: 10, color: MUTED, padding: '0 4px',
+                                                    }}
+                                                >[×]</button>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Add row */}
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                        <input
+                                            value={playerNameA}
+                                            onChange={e => setPlayerNameA(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && addPlayerA()}
+                                            placeholder="PLAYER_NAME"
+                                            style={{
+                                                background: INBG, border: `1px solid ${BDR}`,
+                                                color: TXT, fontFamily: RM, fontSize: 10,
+                                                textTransform: 'uppercase', padding: '6px 8px',
+                                                borderRadius: 0, outline: 'none', flex: 1,
+                                                opacity: playersA.length >= 12 ? 0.3 : 1,
+                                            }}
+                                            disabled={playersA.length >= 12}
+                                            autoComplete="off"
+                                        />
+                                        <input
+                                            value={playerNumA}
+                                            onChange={e => setPlayerNumA(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && addPlayerA()}
+                                            placeholder="NO."
+                                            style={{
+                                                background: INBG, border: `1px solid ${BDR}`,
+                                                color: TXT, fontFamily: RM, fontSize: 10,
+                                                textTransform: 'uppercase', padding: '6px 8px',
+                                                borderRadius: 0, outline: 'none', width: 80,
+                                                textAlign: 'center',
+                                                opacity: playersA.length >= 12 ? 0.3 : 1,
+                                            }}
+                                            disabled={playersA.length >= 12}
+                                            autoComplete="off"
+                                        />
+                                        <button
+                                            onClick={addPlayerA}
+                                            disabled={playersA.length >= 12}
+                                            style={{
+                                                background: RED, color: TXT,
+                                                border: 'none', cursor: playersA.length >= 12 ? 'not-allowed' : 'pointer',
+                                                fontFamily: RM, fontSize: 10,
+                                                padding: '6px 12px', borderRadius: 0,
+                                                opacity: playersA.length >= 12 ? 0.3 : 1,
+                                            }}
+                                        >+ ADD</button>
+                                    </div>
+                                </div>
+
+                                {/* TEAM B ROSTER */}
+                                <div style={{ flex: 1, background: CARD, border: `1px solid ${BDR}`, padding: 14 }}>
+                                    <div style={{
+                                        display: 'flex', justifyContent: 'space-between',
+                                        alignItems: 'center', marginBottom: 10,
+                                    }}>
+                                        <div style={{
+                                            fontFamily: OW, fontStyle: 'italic',
+                                            fontSize: 14, color: TXT, textTransform: 'uppercase',
+                                        }}>TEAM_B_ROSTER</div>
+                                        <div style={{ fontFamily: RM, fontSize: 9, color: MUTED }}>
+                                            ROSTER: {playersB.length}/12
+                                        </div>
+                                    </div>
+
+                                    {/* Player list */}
+                                    <div style={{ marginBottom: 10 }}>
+                                        {playersB.map(p => (
+                                            <div key={p.id} style={{
+                                                display: 'flex', alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                fontFamily: RM, fontSize: 11, color: DIM,
+                                                padding: '4px 0',
+                                                borderBottom: `1px solid ${BDR}`,
+                                            }}>
+                                                <span>&gt; #{p.number}{'  '}{p.name}</span>
+                                                <button
+                                                    onClick={() => setPlayersB(prev => prev.filter(x => x.id !== p.id))}
+                                                    style={{
+                                                        background: 'none', border: 'none', cursor: 'pointer',
+                                                        fontFamily: RM, fontSize: 10, color: MUTED, padding: '0 4px',
+                                                    }}
+                                                >[×]</button>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Add row */}
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                        <input
+                                            value={playerNameB}
+                                            onChange={e => setPlayerNameB(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && addPlayerB()}
+                                            placeholder="PLAYER_NAME"
+                                            style={{
+                                                background: INBG, border: `1px solid ${BDR}`,
+                                                color: TXT, fontFamily: RM, fontSize: 10,
+                                                textTransform: 'uppercase', padding: '6px 8px',
+                                                borderRadius: 0, outline: 'none', flex: 1,
+                                                opacity: playersB.length >= 12 ? 0.3 : 1,
+                                            }}
+                                            disabled={playersB.length >= 12}
+                                            autoComplete="off"
+                                        />
+                                        <input
+                                            value={playerNumB}
+                                            onChange={e => setPlayerNumB(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && addPlayerB()}
+                                            placeholder="NO."
+                                            style={{
+                                                background: INBG, border: `1px solid ${BDR}`,
+                                                color: TXT, fontFamily: RM, fontSize: 10,
+                                                textTransform: 'uppercase', padding: '6px 8px',
+                                                borderRadius: 0, outline: 'none', width: 80,
+                                                textAlign: 'center',
+                                                opacity: playersB.length >= 12 ? 0.3 : 1,
+                                            }}
+                                            disabled={playersB.length >= 12}
+                                            autoComplete="off"
+                                        />
+                                        <button
+                                            onClick={addPlayerB}
+                                            disabled={playersB.length >= 12}
+                                            style={{
+                                                background: RED, color: TXT,
+                                                border: 'none', cursor: playersB.length >= 12 ? 'not-allowed' : 'pointer',
+                                                fontFamily: RM, fontSize: 10,
+                                                padding: '6px 12px', borderRadius: 0,
+                                                opacity: playersB.length >= 12 ? 0.3 : 1,
+                                            }}
+                                        >+ ADD</button>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                    <div style={{ height: 8 }} />
+                </div>
+
+                {/* ── FOOTER 40px ─────────────────────────────────────────── */}
+                <div style={{
+                    height: 40, flexShrink: 0,
+                    background: INBG, borderTop: `1px solid ${BDR}`,
+                    display: 'flex', alignItems: 'center',
+                }}>
+                    {/* Left: daemon status */}
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        paddingLeft: 20, flex: 1,
+                    }}>
+                        <span style={{ color: '#22C55E', fontSize: 10 }}>■</span>
+                        <span style={{ fontFamily: RM, fontSize: 10, color: DIM }}>
+                            DAEMON: CONNECTED
+                        </span>
+                    </div>
+
+                    {/* Center: validation */}
+                    <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+                        {!isValid && (
+                            <span style={{ fontFamily: RM, fontSize: 10, color: RED }}>
+                                ⚠ TEAM IDENTIFIERS REQUIRED
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Right: Initialize button */}
+                    <button
+                        onClick={handleConfirm}
+                        disabled={!isValid}
+                        style={{
+                            height: '100%',
+                            padding: '0 24px',
+                            borderRadius: 0,
+                            borderTop: 'none',
+                            borderBottom: 'none',
+                            borderLeft: isValid ? 'none' : `1px solid ${BDR}`,
+                            borderRight: 'none',
+                            background: isValid ? RED : '#1a1a1a',
+                            color: isValid ? TXT : 'rgba(255,255,255,0.2)',
+                            fontFamily: RM, fontSize: 11,
+                            fontWeight: isValid ? 700 : 400,
+                            letterSpacing: '0.1em', textTransform: 'uppercase',
+                            cursor: isValid ? 'pointer' : 'not-allowed',
+                        }}
+                    >
+                        ▶ INITIALIZE MATCH
                     </button>
                 </div>
 
-                {/* Team tabs */}
-                <div style={{ display: 'flex', borderBottom: '1px solid #111', flexShrink: 0 }}>
-                    {(['A', 'B'] as const).map(t => {
-                        const name = t === 'A' ? config.teamAName : config.teamBName;
-                        const color = t === 'A' ? config.teamAColor : config.teamBColor;
-                        const count = t === 'A' ? playersA.length : playersB.length;
-                        const active = activeTeam === t;
-                        return (
-                            <button key={t} onClick={() => setActiveTeam(t)} style={{
-                                flex: 1, height: 48, background: active ? '#0a0a0a' : '#050505',
-                                border: 'none', borderBottom: active ? `2px solid ${color}` : '2px solid transparent',
-                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                            }}>
-                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
-                                <span style={{ ...displayFont, fontWeight: 700, fontSize: 16, color: active ? '#fff' : '#555', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{name}</span>
-                                <span style={{ ...font, fontSize: 11, color: color, background: `${color}20`, padding: '2px 8px', borderRadius: 10 }}>{count}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-
-                {/* Body */}
-                <div style={{ flex: 1, display: 'flex', gap: 0, overflow: 'hidden' }}>
-                    {/* Add player form */}
-                    <div style={{ width: 300, borderRight: '1px solid #111', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0 }}>
-                        <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em' }}>ADD PLAYER</div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <input
-                                value={playerNumber} onChange={e => setPlayerNumber(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && addPlayer()}
-                                placeholder="#" style={{ ...inputStyle, width: 80, fontSize: 18, textAlign: 'center', flexShrink: 0 }}
-                            />
-                            <input
-                                value={playerName} onChange={e => setPlayerName(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && addPlayer()}
-                                placeholder="NAME" style={{ ...inputStyle, flex: 1 }}
-                            />
-                        </div>
-                        <button onClick={addPlayer} disabled={!playerName.trim() || !playerNumber.trim()} style={{
-                            height: 48, background: playerName.trim() && playerNumber.trim() ? activeColor : '#111',
-                            border: 'none', borderRadius: 10, color: '#fff', ...displayFont, fontWeight: 700,
-                            fontSize: 16, letterSpacing: '0.1em', cursor: 'pointer', transition: 'background 0.2s', opacity: playerName.trim() && playerNumber.trim() ? 1 : 0.4,
-                        }}>+ ADD</button>
-                        <div style={{ ...font, fontSize: 9, color: '#333', letterSpacing: '0.1em', marginTop: 8 }}>
-                            You can skip roster — players can be attributed as "UNKNOWN"
-                        </div>
-                    </div>
-
-                    {/* Player list */}
-                    <div style={{ flex: 1, padding: 24, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {activePlayers.length === 0 ? (
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', ...font, fontSize: 11, color: '#333', letterSpacing: '0.15em' }}>
-                                NO PLAYERS ADDED YET
-                            </div>
-                        ) : activePlayers.map(p => (
-                            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#0a0a0a', border: '1px solid #111', borderRadius: 10 }}>
-                                <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${activeColor}20`, border: `1px solid ${activeColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', ...displayFont, fontWeight: 700, fontSize: 14, color: activeColor, flexShrink: 0 }}>
-                                    {p.number}
-                                </div>
-                                <span style={{ ...displayFont, fontWeight: 600, fontSize: 16, color: '#fff', letterSpacing: '0.08em', flex: 1 }}>{p.name}</span>
-                                <button onClick={() => removePlayer(activeTeam, p.id)} style={{ background: 'none', border: '1px solid #222', borderRadius: 6, color: '#555', ...font, fontSize: 11, padding: '4px 10px', cursor: 'pointer' }}>✕</button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
             </div>
-        );
-    }
-
-    // ── CONFIG STEP ──────────────────────────────────────────
-    return (
-        <div style={{ width: '100vw', height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {/* Header */}
-            <div style={{ height: 52, background: '#080808', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0 }}>
-                <button onClick={onBack} style={{ background: 'none', border: '1px solid #222', borderRadius: 6, color: '#555', ...font, fontSize: 11, letterSpacing: '0.1em', padding: '6px 14px', cursor: 'pointer' }}>← BACK</button>
-                <span style={{ ...font, fontSize: 11, color: '#444', letterSpacing: '0.2em' }}>OFFLINE SETUP</span>
-                <div style={{ width: 80 }} />
-            </div>
-
-            <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-
-                {/* MODE SELECTOR */}
-                <div>
-                    <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em', marginBottom: 12 }}>SCORING MODE</div>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                        {MODES.map(mode => (
-                            <div key={mode.id} onClick={() => setConfig({ ...config, gameMode: mode.id })} style={{
-                                flex: 1, padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
-                                background: config.gameMode === mode.id ? '#111' : '#080808',
-                                border: `2px solid ${config.gameMode === mode.id ? '#3B82F6' : '#1a1a1a'}`,
-                                transition: 'all 0.15s', display: 'flex', flexDirection: 'column', gap: 6,
-                            }}>
-                                <div style={{ fontSize: 22 }}>{mode.icon}</div>
-                                <div style={{ ...displayFont, fontWeight: 700, fontSize: 14, color: config.gameMode === mode.id ? '#fff' : '#555', letterSpacing: '0.1em' }}>{mode.label}</div>
-                                <div style={{ ...font, fontSize: 9, color: '#444', letterSpacing: '0.05em' }}>{mode.desc}</div>
-                            </div>
-                        ))}
-                    </div>
-                    {config.gameMode !== 'quick' && (
-                        <div style={{ marginTop: 10, padding: '10px 14px', background: '#0a0a0a', borderRadius: 8, border: '1px solid #111' }}>
-                            <span style={{ ...font, fontSize: 10, color: '#555' }}>
-                                {config.gameMode === 'stats' ? '📊 After each score, you\'ll be prompted to select which player scored.' : '🏀 After each score, select the player AND tap the court location.'}
-                                {' You can skip attribution — score updates immediately regardless.'}
-                            </span>
-                        </div>
-                    )}
-                </div>
-
-                {/* TEAMS */}
-                <div style={{ display: 'flex', gap: 20 }}>
-                    {/* Team A */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em' }}>TEAM A</div>
-                        <input
-                            value={config.teamAName} onChange={e => setConfig({ ...config, teamAName: e.target.value })}
-                            placeholder="TEAM A NAME" style={{ ...inputStyle, borderColor: config.teamAColor + '60' }}
-                            onFocus={e => (e.target.style.borderColor = config.teamAColor)}
-                            onBlur={e => (e.target.style.borderColor = config.teamAColor + '60')}
-                            maxLength={12} autoComplete="off"
-                        />
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {COLOR_PRESETS.map(c => (
-                                <div key={c.value + 'A'} onClick={() => setConfig({ ...config, teamAColor: c.value })} style={{ width: 30, height: 30, borderRadius: 6, background: c.value, border: config.teamAColor === c.value ? '3px solid #fff' : '3px solid transparent', cursor: 'pointer', opacity: config.teamAColor === c.value ? 1 : 0.5, transition: 'all 0.15s' }} />
-                            ))}
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', ...font, fontSize: 12, color: '#333', fontWeight: 700 }}>VS</div>
-
-                    {/* Team B */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em' }}>TEAM B</div>
-                        <input
-                            value={config.teamBName} onChange={e => setConfig({ ...config, teamBName: e.target.value })}
-                            placeholder="TEAM B NAME" style={{ ...inputStyle, borderColor: config.teamBColor + '60' }}
-                            onFocus={e => (e.target.style.borderColor = config.teamBColor)}
-                            onBlur={e => (e.target.style.borderColor = config.teamBColor + '60')}
-                            maxLength={12} autoComplete="off"
-                        />
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {COLOR_PRESETS.map(c => (
-                                <div key={c.value + 'B'} onClick={() => setConfig({ ...config, teamBColor: c.value })} style={{ width: 30, height: 30, borderRadius: 6, background: c.value, border: config.teamBColor === c.value ? '3px solid #fff' : '3px solid transparent', cursor: 'pointer', opacity: config.teamBColor === c.value ? 1 : 0.5, transition: 'all 0.15s' }} />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* RULES */}
-                <div style={{ display: 'flex', gap: 20 }}>
-                    {/* Period length */}
-                    <div style={{ flex: 1 }}>
-                        <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em', marginBottom: 8 }}>PERIOD LENGTH</div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                            {PERIOD_OPTIONS.map(opt => (
-                                <div key={opt.value} onClick={() => setConfig({ ...config, periodMinutes: opt.value })} style={{
-                                    flex: 1, height: 40, background: config.periodMinutes === opt.value ? '#1a2a1a' : '#111',
-                                    border: `1.5px solid ${config.periodMinutes === opt.value ? '#22C55E' : '#222'}`,
-                                    borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    ...font, fontSize: 13, color: config.periodMinutes === opt.value ? '#22C55E' : '#555',
-                                    cursor: 'pointer', transition: 'all 0.15s',
-                                }}>
-                                    {opt.label}m
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Shot clock */}
-                    <div style={{ flex: 1 }}>
-                        <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em', marginBottom: 8 }}>SHOT CLOCK</div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                            {[24, 14, 0].map(s => (
-                                <div key={s} onClick={() => setConfig({ ...config, shotClockSeconds: s })} style={{
-                                    flex: 1, height: 40, background: config.shotClockSeconds === s ? '#1a2a3a' : '#111',
-                                    border: `1.5px solid ${config.shotClockSeconds === s ? '#3B82F6' : '#222'}`,
-                                    borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    ...font, fontSize: 13, color: config.shotClockSeconds === s ? '#3B82F6' : '#555',
-                                    cursor: 'pointer', transition: 'all 0.15s',
-                                }}>
-                                    {s === 0 ? 'OFF' : `${s}s`}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Periods */}
-                    <div style={{ flex: 1 }}>
-                        <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em', marginBottom: 8 }}>FORMAT</div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                            {[{ label: '4Q', periods: 4, type: 'quarter' as const }, { label: '2H', periods: 2, type: 'half' as const }].map(opt => (
-                                <div key={opt.label} onClick={() => setConfig({ ...config, periods: opt.periods, periodType: opt.type })} style={{
-                                    flex: 1, height: 40, background: config.periods === opt.periods ? '#1a1a2a' : '#111',
-                                    border: `1.5px solid ${config.periods === opt.periods ? '#8B5CF6' : '#222'}`,
-                                    borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    ...font, fontSize: 13, color: config.periods === opt.periods ? '#8B5CF6' : '#555',
-                                    cursor: 'pointer', transition: 'all 0.15s',
-                                }}>
-                                    {opt.label}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Timeouts */}
-                <div>
-                    <div style={{ ...font, fontSize: 10, color: '#555', letterSpacing: '0.2em', marginBottom: 8 }}>TIMEOUTS PER TEAM</div>
-                    <div style={{ display: 'flex', gap: 6, width: 200 }}>
-                        {[1, 2, 3, 4].map(n => (
-                            <div key={n} onClick={() => setConfig({ ...config, timeoutsPerTeam: n })} style={{
-                                width: 44, height: 40, background: config.timeoutsPerTeam === n ? '#111' : '#080808',
-                                border: `1.5px solid ${config.timeoutsPerTeam === n ? '#F59E0B' : '#1a1a1a'}`,
-                                borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                ...font, fontSize: 14, color: config.timeoutsPerTeam === n ? '#F59E0B' : '#444',
-                                cursor: 'pointer', transition: 'all 0.15s',
-                            }}>
-                                {n}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* CTA */}
-            <div style={{ padding: '16px 32px', borderTop: '1px solid #111', flexShrink: 0 }}>
-                <div onClick={isValid ? handleNext : undefined} style={{
-                    width: '100%', height: 56,
-                    background: isValid ? 'linear-gradient(135deg, #22C55E, #16A34A)' : '#111',
-                    borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                    cursor: isValid ? 'pointer' : 'not-allowed', opacity: isValid ? 1 : 0.3, transition: 'all 0.2s',
-                }}>
-                    <span style={{ ...displayFont, fontWeight: 700, fontSize: 20, letterSpacing: '0.15em', color: isValid ? '#fff' : '#444' }}>
-                        {needsRoster ? 'NEXT: ROSTER →' : 'START GAME →'}
-                    </span>
-                </div>
-            </div>
-
-            <style>{`@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=JetBrains+Mono:wght@400;600;700&display=swap');`}</style>
-        </div>
+        </>
     );
 };
 
