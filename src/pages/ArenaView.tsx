@@ -1,120 +1,214 @@
 // src/pages/ArenaView.tsx
-// ─────────────────────────────────────────────────────────────
-// ZERO-LATENCY ARENA DISPLAY
-// This file uses your exact SpectatorView UI, but connects locally
-// to the pi-daemon via WebSockets. No internet required.
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  ARENA DISPLAY — Multi-Court LED Wall View
+//
+//  Route: /arena/:arenaCode (public, no auth)
+//  Purpose: Displays 1–6 live game scoreboards simultaneously.
+//  Always dark/black — designed for LED walls and large TVs.
+// ═══════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useRefereeBox } from '../hooks/useRefereeBox';
+import { useParams } from 'react-router-dom';
+import {
+    fetchArenaSession,
+    subscribeToArenaSession,
+    type ArenaSession,
+    type PendingRequest,
+} from '../services/arenaSessionService';
+import { subscribeToGameBroadcast } from '../services/supabaseBroadcastService';
+import { subscribeToGame } from '../services/supabaseGameService';
+import type { BasketballGame } from '../types';
 
-// ─── UTILITY ─────────────────────────────────────────────────────────────────
+// ─── Global Styles ────────────────────────────────────────────────────────────
 
-const pad = (n: number) => String(n).padStart(2, '0');
-const getPeriodLabel = (period: number) => period <= 4 ? `Q${period}` : `OT${period - 4}`;
-const getFullPeriodLabel = (period: number) => period <= 4 ? `QUARTER ${period}` : `OVERTIME ${period - 4}`;
+const ARENA_STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;700;900&display=swap');
+  html, body, #root { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  @keyframes arena-pulse { 0%,100%{opacity:0.3} 50%{opacity:0.8} }
+  @keyframes arena-spin  { to{transform:rotate(360deg)} }
+  @keyframes arena-score { 0%{transform:scale(1)} 15%{transform:scale(1.12)} 100%{transform:scale(1)} }
+  @keyframes arena-slot-in { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+  @keyframes arena-pending-blink { 0%,100%{opacity:0.4} 50%{opacity:0.7} }
+`;
 
-// ─── SCORE DISPLAY ───────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const ScoreDisplay: React.FC<{ score: number; color: string; hasPossession: boolean; }> = ({ score, color, hasPossession }) => {
-    const [prevScore, setPrevScore] = useState(score);
-    const [pulse, setPulse] = useState(false);
+interface LiveScore {
+    teamAScore: number;
+    teamBScore: number;
+    teamAName: string;
+    teamBName: string;
+    teamAColor: string;
+    teamBColor: string;
+    minutes: number;
+    seconds: number;
+    period: number;
+    isRunning: boolean;
+    shotClock: number;
+}
+
+// ─── Grid Layout ──────────────────────────────────────────────────────────────
+
+const getGridStyle = (count: number): React.CSSProperties => {
+    if (count <= 1) return { display: 'grid', gridTemplateColumns: '1fr', gridTemplateRows: '1fr' };
+    if (count === 2) return { display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr' };
+    if (count <= 4) return { display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr' };
+    return { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gridTemplateRows: '1fr 1fr' };
+};
+
+const getScoreFontSize = (count: number): string => {
+    if (count <= 1) return '8rem';
+    if (count === 2) return '7rem';
+    if (count <= 4) return '5rem';
+    return '3rem';
+};
+
+// ─── ArenaScoreCard ───────────────────────────────────────────────────────────
+
+const ArenaScoreCard: React.FC<{ gameCode: string; courtNumber: number; totalCourts: number }> = ({
+    gameCode,
+    courtNumber,
+    totalCourts,
+}) => {
+    const [live, setLive] = useState<LiveScore>({
+        teamAScore: 0, teamBScore: 0,
+        teamAName: 'TEAM A', teamBName: 'TEAM B',
+        teamAColor: '#DC2626', teamBColor: '#2563EB',
+        minutes: 10, seconds: 0, period: 1, isRunning: false, shotClock: 24,
+    });
+    const [pulseA, setPulseA] = useState(false);
+    const [pulseB, setPulseB] = useState(false);
+
+    const scoreSize = getScoreFontSize(totalCourts);
+    const teamFontSize = totalCourts <= 2 ? '1.4rem' : totalCourts <= 4 ? '1rem' : '0.75rem';
+    const metaFontSize = totalCourts <= 2 ? '0.9rem' : '0.65rem';
+    const courtLabelSize = totalCourts <= 2 ? '0.7rem' : '0.55rem';
 
     useEffect(() => {
-        if (score !== prevScore) {
-            setPulse(true);
-            const t = setTimeout(() => {
-                setPulse(false);
-                setPrevScore(score);
-            }, 800);
-            return () => clearTimeout(t);
-        }
-    }, [score, prevScore]);
+        // Subscribe to game row for team names/colors
+        const unsubGame = subscribeToGame(gameCode, (game: BasketballGame | null) => {
+            if (!game) return;
+            setLive(prev => ({
+                ...prev,
+                teamAName: (game.teamA?.name || 'TEAM A').toUpperCase(),
+                teamBName: (game.teamB?.name || 'TEAM B').toUpperCase(),
+                teamAColor: game.teamA?.color || '#DC2626',
+                teamBColor: game.teamB?.color || '#2563EB',
+                teamAScore: game.teamA?.score ?? prev.teamAScore,
+                teamBScore: game.teamB?.score ?? prev.teamBScore,
+            }));
+        });
+
+        // Subscribe to live broadcast for clock + score
+        const unsubBcast = subscribeToGameBroadcast(gameCode, {
+            onScoreUpdate: (score) => {
+                setLive(prev => {
+                    if (score.teamA !== prev.teamAScore) { setPulseA(true); setTimeout(() => setPulseA(false), 800); }
+                    if (score.teamB !== prev.teamBScore) { setPulseB(true); setTimeout(() => setPulseB(false), 800); }
+                    return { ...prev, teamAScore: score.teamA, teamBScore: score.teamB };
+                });
+            },
+            onClockTick: (p) => {
+                setLive(prev => ({ ...prev, minutes: p.minutes, seconds: p.seconds, shotClock: p.shotClock }));
+            },
+            onClockStart: (clock) => {
+                setLive(prev => ({ ...prev, minutes: clock.minutes, seconds: clock.seconds, period: clock.period, isRunning: true, shotClock: clock.shotClock }));
+            },
+            onClockStop: (clock) => {
+                setLive(prev => ({ ...prev, minutes: clock.minutes, seconds: clock.seconds, period: clock.period, isRunning: false, shotClock: clock.shotClock }));
+            },
+            onPeriodChange: (clock) => {
+                setLive(prev => ({ ...prev, period: clock.period, minutes: clock.minutes, seconds: clock.seconds }));
+            },
+            onGameSnapshot: (snapshot) => {
+                const { clock, score } = snapshot;
+                setLive(prev => ({
+                    ...prev,
+                    teamAScore: score.teamA, teamBScore: score.teamB,
+                    minutes: clock.minutes, seconds: clock.seconds,
+                    period: clock.period, isRunning: clock.gameRunning,
+                    shotClock: clock.shotClock,
+                }));
+            },
+        });
+
+        return () => { unsubGame(); unsubBcast(); };
+    }, [gameCode]);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const periodLabel = live.period <= 4 ? `Q${live.period}` : `OT${live.period - 4}`;
 
     return (
-        <div style={{ position: 'relative', display: 'inline-block' }}>
-            {pulse && (
-                <div style={{ position: 'absolute', inset: '-20%', borderRadius: '50%', background: `radial-gradient(circle, ${color}55 0%, transparent 70%)`, animation: 'burstFade 0.8s ease-out forwards', pointerEvents: 'none', zIndex: 0 }} />
-            )}
-            <div style={{ position: 'relative', zIndex: 1, fontFamily: '"Oswald", "Barlow Condensed", "Arial Narrow", sans-serif', fontWeight: 900, fontSize: 'clamp(10rem, 18vw, 22rem)', lineHeight: 0.9, letterSpacing: '-0.02em', color: '#FFFFFF', textShadow: pulse ? `0 0 80px ${color}, 0 0 40px ${color}99, 0 0 160px ${color}33` : `0 0 40px ${color}33`, transition: 'text-shadow 0.3s ease', fontVariantNumeric: 'tabular-nums' }}>
-                {pad(score)}
-            </div>
-            {hasPossession && (
-                <div style={{ position: 'absolute', bottom: '-2rem', left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '1.2rem solid transparent', borderRight: '1.2rem solid transparent', borderBottom: `2rem solid ${color}`, filter: `drop-shadow(0 0 12px ${color})`, animation: 'possessionBlink 1.2s ease-in-out infinite' }} />
-            )}
-        </div>
-    );
-};
+        <div style={{
+            position: 'relative', background: '#050505',
+            borderRight: '1px solid #111', borderBottom: '1px solid #111',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            animation: 'arena-slot-in 0.4s ease both',
+        }}>
+            {/* Team color strips */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', background: live.teamAColor, opacity: 0.7 }} />
+            <div style={{ position: 'absolute', top: 0, right: 0, width: 4, height: '100%', background: live.teamBColor, opacity: 0.7 }} />
 
-// ─── CLOCK DISPLAY ───────────────────────────────────────────────────────────
-
-const ClockDisplay: React.FC<{ minutes: number; seconds: number; running: boolean; }> = ({ minutes, seconds, running }) => {
-    const isLow = minutes === 0 && seconds <= 30;
-    const isCritical = minutes === 0 && seconds <= 10;
-    const timeStr = `${pad(minutes)}:${pad(seconds)}`;
-
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'clamp(0.3rem, 0.5vw, 0.8rem)' }}>
-            <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.7rem, 1.2vw, 1.4rem)', letterSpacing: '0.3em', color: isCritical ? '#FF6060' : '#666666' }}>
-                GAME CLOCK
-            </div>
-            <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 900, fontSize: 'clamp(5rem, 9vw, 12rem)', lineHeight: 1, color: isCritical ? '#FF3030' : isLow ? '#FF8C00' : '#FFFFFF', textShadow: isCritical ? '0 0 40px #FF3030' : isLow ? '0 0 30px #FF8C0066' : '0 0 20px rgba(255,255,255,0.1)', fontVariantNumeric: 'tabular-nums', animation: running && isCritical ? 'clockPulse 0.5s ease-in-out infinite alternate' : 'none' }}>
-                {timeStr}
-            </div>
-            <span style={{ fontSize: 'clamp(0.55rem, 0.9vw, 1rem)', fontWeight: 700, letterSpacing: '0.2em', color: running ? '#00FF88' : '#FF4444', opacity: 0.9 }}>
-                {running ? 'LIVE' : 'PAUSED'}
-            </span>
-        </div>
-    );
-};
-
-// ─── SHOT CLOCK ──────────────────────────────────────────────────────────────
-
-const ShotClock: React.FC<{ value: number }> = ({ value }) => {
-    const isCritical = value <= 5;
-    const isWarning = value <= 10;
-
-    return (
-        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', background: isCritical ? 'linear-gradient(135deg, #3A0000 0%, #200000 100%)' : 'linear-gradient(135deg, #1A1A1A 0%, #0A0A0A 100%)', border: `2px solid ${isCritical ? '#FF3030' : isWarning ? '#FF8C00' : '#333333'}`, borderRadius: '1.2rem', padding: 'clamp(0.8rem, 1.5vw, 2rem) clamp(1.5rem, 3vw, 4rem)', boxShadow: isCritical ? '0 0 40px #FF303066, inset 0 0 20px #FF303011' : '0 0 20px rgba(0,0,0,0.5)', transition: 'all 0.3s ease', animation: isCritical ? 'criticalFlash 0.3s ease-in-out infinite alternate' : 'none' }}>
-            <span style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.7rem, 1.2vw, 1.4rem)', letterSpacing: '0.3em', color: isCritical ? '#FF6060' : '#888888', marginBottom: '0.3rem' }}>SHOT CLOCK</span>
-            <span style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 900, fontSize: 'clamp(3.5rem, 7vw, 8rem)', lineHeight: 1, color: isCritical ? '#FF3030' : isWarning ? '#FF8C00' : '#FFFFFF', textShadow: isCritical ? '0 0 30px #FF3030' : isWarning ? '0 0 20px #FF8C00' : 'none', fontVariantNumeric: 'tabular-nums' }}>
-                {pad(value)}
-            </span>
-        </div>
-    );
-};
-
-// ─── TEAM PANEL ──────────────────────────────────────────────────────────────
-
-const TeamPanel: React.FC<{ name: string; score: number; fouls: number; timeouts: number; color: string; hasPossession: boolean; side: 'left' | 'right'; }> = ({ name, score, fouls, timeouts, color, hasPossession, side }) => {
-    return (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: side === 'left' ? 'flex-start' : 'flex-end', justifyContent: 'center', padding: 'clamp(2rem, 4vw, 6rem)', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, [side === 'left' ? 'left' : 'right']: 0, width: '60%', height: '100%', background: `radial-gradient(ellipse at ${side === 'left' ? '0%' : '100%'} 50%, ${color}0D 0%, transparent 70%)`, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', top: 0, [side === 'left' ? 'left' : 'right']: 0, width: '6px', height: '100%', background: `linear-gradient(to bottom, transparent, ${color}, transparent)` }} />
-
-            <div style={{ fontFamily: '"Oswald", "Barlow Condensed", sans-serif', fontWeight: 700, fontSize: 'clamp(2rem, 4.5vw, 5.5rem)', letterSpacing: '0.08em', textTransform: 'uppercase', color, textShadow: `0 0 30px ${color}55`, textAlign: side === 'left' ? 'left' : 'right', marginBottom: 'clamp(0.5rem, 1vw, 1.5rem)', lineHeight: 1.1, maxWidth: '90%' }}>
-                {name}
+            {/* Court label bar */}
+            <div style={{
+                background: '#0a0a0a', borderBottom: '1px solid #1a1a1a',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: `${totalCourts <= 2 ? '6px 16px' : '4px 10px'}`,
+                flexShrink: 0,
+            }}>
+                <span style={{ fontFamily: 'Oswald, monospace', fontWeight: 700, fontSize: courtLabelSize, letterSpacing: '0.3em', color: '#444', textTransform: 'uppercase' }}>
+                    COURT {courtNumber}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {live.isRunning && (
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 6px #22c55e', animation: 'arena-pulse 1s ease-in-out infinite' }} />
+                    )}
+                    <span style={{ fontFamily: 'Oswald, monospace', fontWeight: 400, fontSize: courtLabelSize, letterSpacing: '0.25em', color: '#333' }}>
+                        {periodLabel} {pad(live.minutes)}:{pad(live.seconds)}
+                    </span>
+                </div>
             </div>
 
-            <div style={{ textAlign: side === 'left' ? 'left' : 'right' }}>
-                <ScoreDisplay score={score} color={color} hasPossession={hasPossession} />
-            </div>
-
-            <div style={{ display: 'flex', gap: 'clamp(1.5rem, 2.5vw, 3.5rem)', marginTop: 'clamp(1.5rem, 2.5vw, 3.5rem)', flexDirection: side === 'left' ? 'row' : 'row-reverse' }}>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.6rem, 1vw, 1.1rem)', letterSpacing: '0.25em', color: '#666666', marginBottom: '0.4rem' }}>FOULS</div>
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                        {[...Array(5)].map((_, i) => (
-                            <div key={i} style={{ width: 'clamp(0.8rem, 1.2vw, 1.6rem)', height: 'clamp(0.8rem, 1.2vw, 1.6rem)', borderRadius: '50%', background: i < fouls ? '#FF8C00' : 'transparent', border: `2px solid ${i < fouls ? '#FF8C00' : '#333333'}`, boxShadow: i < fouls ? '0 0 8px #FF8C0066' : 'none', transition: 'all 0.3s ease' }} />
-                        ))}
+            {/* Main score area */}
+            <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', minHeight: 0 }}>
+                {/* Team A */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: totalCourts <= 2 ? '1.5rem' : '0.75rem', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: `radial-gradient(ellipse at 20% 50%, ${live.teamAColor}0A 0%, transparent 70%)`, pointerEvents: 'none' }} />
+                    <div style={{ fontFamily: 'Oswald, monospace', fontWeight: 700, fontSize: teamFontSize, color: live.teamAColor, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: '0.4rem', lineHeight: 1.1, textShadow: `0 0 20px ${live.teamAColor}40` }}>
+                        {live.teamAName}
+                    </div>
+                    <div style={{
+                        fontFamily: 'Oswald, monospace', fontWeight: 900, fontSize: scoreSize,
+                        color: '#fff', lineHeight: 0.9, fontVariantNumeric: 'tabular-nums',
+                        textShadow: pulseA ? `0 0 40px ${live.teamAColor}, 0 0 80px ${live.teamAColor}66` : `0 0 20px ${live.teamAColor}22`,
+                        animation: pulseA ? 'arena-score 0.6s ease' : 'none',
+                        transition: 'text-shadow 0.4s ease',
+                    }}>
+                        {pad(live.teamAScore)}
                     </div>
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.6rem, 1vw, 1.1rem)', letterSpacing: '0.25em', color: '#666666', marginBottom: '0.4rem' }}>T.O.</div>
-                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
-                        {[...Array(3)].map((_, i) => (
-                            <div key={i} style={{ width: 'clamp(0.6rem, 1vw, 1.3rem)', height: 'clamp(0.6rem, 1vw, 1.3rem)', borderRadius: '2px', background: i < timeouts ? color : 'transparent', border: `2px solid ${i < timeouts ? color : '#333333'}`, opacity: i < timeouts ? 0.9 : 0.3, transition: 'all 0.3s ease' }} />
-                        ))}
+
+                {/* Center divider */}
+                <div style={{ width: 1, background: 'linear-gradient(to bottom, transparent, #1e1e1e 20%, #1e1e1e 80%, transparent)', flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 0.5rem', flexShrink: 0 }}>
+                    <span style={{ fontFamily: 'Oswald, monospace', fontWeight: 400, fontSize: metaFontSize, color: '#2a2a2a', letterSpacing: '0.1em' }}>VS</span>
+                </div>
+                <div style={{ width: 1, background: 'linear-gradient(to bottom, transparent, #1e1e1e 20%, #1e1e1e 80%, transparent)', flexShrink: 0 }} />
+
+                {/* Team B */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: totalCourts <= 2 ? '1.5rem' : '0.75rem', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: `radial-gradient(ellipse at 80% 50%, ${live.teamBColor}0A 0%, transparent 70%)`, pointerEvents: 'none' }} />
+                    <div style={{ fontFamily: 'Oswald, monospace', fontWeight: 700, fontSize: teamFontSize, color: live.teamBColor, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', marginBottom: '0.4rem', lineHeight: 1.1, textShadow: `0 0 20px ${live.teamBColor}40` }}>
+                        {live.teamBName}
+                    </div>
+                    <div style={{
+                        fontFamily: 'Oswald, monospace', fontWeight: 900, fontSize: scoreSize,
+                        color: '#fff', lineHeight: 0.9, fontVariantNumeric: 'tabular-nums',
+                        textShadow: pulseB ? `0 0 40px ${live.teamBColor}, 0 0 80px ${live.teamBColor}66` : `0 0 20px ${live.teamBColor}22`,
+                        animation: pulseB ? 'arena-score 0.6s ease' : 'none',
+                        transition: 'text-shadow 0.4s ease',
+                    }}>
+                        {pad(live.teamBScore)}
                     </div>
                 </div>
             </div>
@@ -122,136 +216,184 @@ const TeamPanel: React.FC<{ name: string; score: number; fouls: number; timeouts
     );
 };
 
-// ─── CENTER COLUMN ────────────────────────────────────────────────────────────
+// ─── Pending Court Placeholder ────────────────────────────────────────────────
 
-const CenterPanel: React.FC<{ state: any }> = ({ state }) => {
-    const { clock, teamA, teamB } = state;
-    const scoreDiff = Math.abs(teamA.score - teamB.score);
-    const leader = teamA.score > teamB.score ? 'A' : teamB.score > teamA.score ? 'B' : null;
-
-    const minutes = Math.floor(clock.gameMs / 60000);
-    const seconds = Math.floor((clock.gameMs % 60000) / 1000);
-    const shotSeconds = Math.ceil(clock.shotMs / 1000);
-
-    return (
-        <div style={{ width: 'clamp(280px, 28vw, 480px)', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'clamp(1rem, 2vw, 3rem)', padding: 'clamp(1rem, 2vw, 3rem) 0' }}>
-            <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 700, fontSize: 'clamp(1.2rem, 2.5vw, 3rem)', letterSpacing: '0.25em', color: '#FFFFFF', textAlign: 'center', background: 'linear-gradient(135deg, #1A1A1A 0%, #111111 100%)', border: '1px solid #2A2A2A', borderRadius: '0.8rem', padding: 'clamp(0.4rem, 0.8vw, 1rem) clamp(1rem, 2vw, 2.5rem)' }}>
-                {getFullPeriodLabel(clock.period)}
-            </div>
-            <ClockDisplay minutes={minutes} seconds={seconds} running={clock.isRunning} />
-            <ShotClock value={shotSeconds} />
-
-            {scoreDiff > 0 && leader && (
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.55rem, 0.85vw, 1rem)', letterSpacing: '0.2em', color: '#444444', marginBottom: '0.3rem' }}>LEAD</div>
-                    <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 900, fontSize: 'clamp(2rem, 4vw, 5rem)', color: leader === 'A' ? '#DC2626' : '#2563EB', lineHeight: 1 }}>+{scoreDiff}</div>
-                </div>
-            )}
-            <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.55rem, 0.85vw, 1rem)', letterSpacing: '0.2em', color: '#2A2A2A', textTransform: 'uppercase', textAlign: 'center' }}>BMSCE BASKETBALL</div>
+const PendingCourtTile: React.FC<{ courtNumber: number; request: PendingRequest }> = ({ courtNumber, request }) => (
+    <div style={{
+        position: 'relative', background: '#050505',
+        borderRight: '1px solid #111', borderBottom: '1px solid #111',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
+        border: '1px dashed #222',
+    }}>
+        <div style={{ width: 2, height: '60%', background: 'linear-gradient(to bottom, transparent, #222, transparent)', position: 'absolute', left: '50%' }} />
+        <div style={{ fontFamily: 'Oswald, monospace', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.35em', color: '#333', textTransform: 'uppercase' }}>
+            COURT {courtNumber}
         </div>
-    );
-};
-
-// ─── HEADER & TICKER ─────────────────────────────────────────────────────────
-
-const Header: React.FC<{ period: number }> = ({ period }) => (
-    <div style={{ height: 'clamp(3rem, 5vh, 5rem)', background: '#050505', borderBottom: '1px solid #1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 clamp(1.5rem, 3vw, 4rem)', flexShrink: 0, zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ width: 'clamp(0.5rem, 0.8vw, 1rem)', height: 'clamp(0.5rem, 0.8vw, 1rem)', borderRadius: '50%', background: '#FF3030', boxShadow: '0 0 8px #FF3030', animation: 'ledPulse 1s ease-in-out infinite alternate' }} />
-            <span style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.6rem, 1vw, 1.2rem)', letterSpacing: '0.3em', color: '#FF3030' }}>LOCAL HARDWARE LINK</span>
+        <div style={{ fontFamily: 'Oswald, monospace', fontWeight: 400, fontSize: '0.55rem', letterSpacing: '0.2em', color: '#2a2a2a', animation: 'arena-pending-blink 2s ease-in-out infinite', textTransform: 'uppercase' }}>
+            Awaiting Approval
         </div>
-        <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 700, fontSize: 'clamp(0.8rem, 1.4vw, 1.8rem)', letterSpacing: '0.3em', color: '#FFFFFF', textTransform: 'uppercase' }}>THE BOX</div>
-        <div style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.6rem, 1vw, 1.2rem)', letterSpacing: '0.2em', color: '#444444' }}>{getPeriodLabel(period)}</div>
+        <div style={{ fontFamily: 'monospace', fontSize: '0.5rem', color: '#1e1e1e', letterSpacing: '0.1em' }}>
+            {request.game_name}
+        </div>
     </div>
 );
 
-const TickerBar: React.FC<{ state: any }> = ({ state }) => {
-    const diff = state.teamA.score - state.teamB.score;
-    const diffStr = diff > 0 ? `${state.teamA.name} leads by +${diff}` : diff < 0 ? `${state.teamB.name} leads by +${Math.abs(diff)}` : 'GAME IS TIED';
+// ─── Empty Court Slot ─────────────────────────────────────────────────────────
 
-    const minutes = Math.floor(state.clock.gameMs / 60000);
-    const seconds = Math.floor((state.clock.gameMs % 60000) / 1000);
-
-    const items = [
-        `🏀 BMSCE BASKETBALL`,
-        `${getPeriodLabel(state.clock.period)} — ${pad(minutes)}:${pad(seconds)}`,
-        diffStr,
-        `${state.teamA.name.toUpperCase()}  ${pad(state.teamA.score)}  :  ${pad(state.teamB.score)}  ${state.teamB.name.toUpperCase()}`,
-        `FOULS — ${state.teamA.name}: ${state.teamA.fouls}  |  ${state.teamB.name}: ${state.teamB.fouls}`,
-        state.clock.isRunning ? '▶ CLOCK RUNNING' : '⏸ CLOCK STOPPED',
-    ];
-
-    return (
-        <div style={{ height: 'clamp(2rem, 3.5vh, 3.5rem)', background: '#050505', borderTop: '1px solid #1A1A1A', display: 'flex', alignItems: 'center', overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{ background: '#FF3030', height: '100%', padding: '0 1.5rem', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <span style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 700, fontSize: 'clamp(0.6rem, 1vw, 1rem)', letterSpacing: '0.2em', color: '#FFFFFF' }}>LIVE FEED</span>
-            </div>
-            <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-                <div style={{ display: 'flex', gap: 'clamp(2rem, 4vw, 6rem)', animation: 'ticker 30s linear infinite', whiteSpace: 'nowrap' }}>
-                    {[...items, ...items].map((item, i) => (
-                        <span key={i} style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 400, fontSize: 'clamp(0.6rem, 1vw, 1.1rem)', letterSpacing: '0.15em', color: '#555555', flexShrink: 0 }}>{item}</span>
-                    ))}
-                </div>
-            </div>
+const EmptyCourtTile: React.FC<{ courtNumber: number }> = ({ courtNumber }) => (
+    <div style={{
+        position: 'relative', background: '#030303',
+        borderRight: '1px solid #0d0d0d', borderBottom: '1px solid #0d0d0d',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+        border: '1px dashed #111',
+    }}>
+        <div style={{ fontFamily: 'Oswald, monospace', fontWeight: 700, fontSize: '0.55rem', letterSpacing: '0.35em', color: '#1e1e1e', textTransform: 'uppercase' }}>
+            COURT {courtNumber}
         </div>
-    );
-};
-
-// ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
-
-const GlobalStyles = () => (
-    <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&display=swap');
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body, #root { width: 100%; height: 100%; background: #000000; overflow: hidden; }
-    @keyframes burstFade { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
-    @keyframes ledPulse { from { opacity: 0.6; } to { opacity: 1; } }
-    @keyframes possessionBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-    @keyframes clockPulse { from { transform: scale(1); } to { transform: scale(1.015); } }
-    @keyframes criticalFlash { from { border-color: #FF303066; } to { border-color: #FF3030; box-shadow: 0 0 60px #FF303099; } }
-    @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.7; } }
-  `}</style>
+        <div style={{ fontFamily: 'monospace', fontSize: '0.5rem', color: '#181818', letterSpacing: '0.15em', animation: 'arena-pulse 3s ease-in-out infinite' }}>
+            Waiting for cast...
+        </div>
+    </div>
 );
 
-// ─── MAIN ARENA VIEW ─────────────────────────────────────────────────────────
+// ─── Idle State ───────────────────────────────────────────────────────────────
+
+const IdleScreen: React.FC<{ arenaCode: string; label?: string }> = ({ arenaCode, label }) => (
+    <div style={{ width: '100vw', height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2rem', fontFamily: 'Oswald, monospace' }}>
+        <style>{ARENA_STYLES}</style>
+        <div style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '0.4em', color: '#DC2626' }}>THE BOX</div>
+        <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 400, letterSpacing: '0.3em', color: '#333', marginBottom: '0.75rem' }}>ARENA</div>
+            <div style={{ fontSize: '5rem', fontWeight: 900, letterSpacing: '0.5em', color: '#fff', fontVariantNumeric: 'tabular-nums', padding: '0 1rem' }}>
+                {arenaCode}
+            </div>
+        </div>
+        <div style={{ fontSize: '0.65rem', fontWeight: 400, letterSpacing: '0.25em', color: '#2a2a2a', animation: 'arena-pulse 2s ease-in-out infinite' }}>
+            Waiting for courts to connect...
+        </div>
+        {label && (
+            <div style={{ position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', fontFamily: 'Oswald, monospace', fontSize: '0.55rem', letterSpacing: '0.25em', color: '#1e1e1e', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                {label}
+            </div>
+        )}
+    </div>
+);
+
+// ─── Loading State ────────────────────────────────────────────────────────────
+
+const LoadingScreen: React.FC = () => (
+    <div style={{ width: '100vw', height: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <style>{ARENA_STYLES}</style>
+        <div style={{ width: 48, height: 48, border: '2px solid #1a1a1a', borderTopColor: '#DC2626', borderRadius: '50%', animation: 'arena-spin 0.8s linear infinite' }} />
+    </div>
+);
+
+// ─── Not Found State ──────────────────────────────────────────────────────────
+
+const NotFoundScreen: React.FC<{ arenaCode: string }> = ({ arenaCode }) => (
+    <div style={{ width: '100vw', height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', fontFamily: 'Oswald, monospace' }}>
+        <style>{ARENA_STYLES}</style>
+        <div style={{ fontSize: '0.65rem', letterSpacing: '0.35em', color: '#DC2626', textTransform: 'uppercase' }}>Arena Not Found</div>
+        <div style={{ fontSize: '3rem', fontWeight: 900, letterSpacing: '0.4em', color: '#1a1a1a' }}>{arenaCode}</div>
+        <div style={{ fontSize: '0.55rem', letterSpacing: '0.2em', color: '#222' }}>Check the arena code and try again</div>
+    </div>
+);
+
+// ─── Main Arena View ──────────────────────────────────────────────────────────
 
 export const ArenaView: React.FC = () => {
-    const { gameState, isConnected } = useRefereeBox();
+    const { arenaCode } = useParams<{ arenaCode: string }>();
+    const [session, setSession] = useState<ArenaSession | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [notFound, setNotFound] = useState(false);
 
-    if (!isConnected || !gameState) {
-        return (
-            <div style={{ minHeight: '100vh', background: '#000000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3rem', fontFamily: '"Oswald", sans-serif' }}>
-                <GlobalStyles />
-                <div style={{ position: 'relative', width: '8rem', height: '8rem' }}>
-                    <div style={{ position: 'absolute', inset: 0, border: '3px solid #1A1A1A', borderTopColor: '#FF3030', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                    <div style={{ position: 'absolute', inset: '1.5rem', border: '2px solid #1A1A1A', borderTopColor: '#FF3030', borderRadius: '50%', animation: 'spin 0.6s linear infinite reverse', opacity: 0.5 }} />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '3rem', fontWeight: 700, letterSpacing: '0.4em', color: '#333333', animation: 'breathe 2s ease-in-out infinite' }}>CONNECTING</div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 400, letterSpacing: '0.2em', color: '#1A1A1A', marginTop: '0.5rem' }}>WAITING FOR LOCAL HARDWARE DAEMON</div>
-                </div>
-            </div>
-        );
+    const code = (arenaCode || '').toUpperCase();
+
+    useEffect(() => {
+        if (!code) { setNotFound(true); setLoading(false); return; }
+
+        fetchArenaSession(code).then((s) => {
+            if (!s) { setNotFound(true); }
+            else { setSession(s); }
+            setLoading(false);
+        });
+
+        const unsub = subscribeToArenaSession(code, (updated) => {
+            setSession(updated);
+        });
+
+        return unsub;
+    }, [code]);
+
+    if (loading) return <LoadingScreen />;
+    if (notFound || !session) return <NotFoundScreen arenaCode={code} />;
+
+    const activeCodes = session.game_codes;
+    const pendingRequests = session.pending_requests;
+    const totalSlots = session.max_slots;
+
+    // No games yet — idle
+    if (activeCodes.length === 0 && pendingRequests.length === 0) {
+        return <IdleScreen arenaCode={code} label={session.label} />;
     }
+
+    // Build slot array: active courts + pending placeholders + empty slots
+    const slots: Array<{ type: 'active'; gameCode: string } | { type: 'pending'; request: PendingRequest } | { type: 'empty' }> = [];
+
+    activeCodes.forEach(gc => slots.push({ type: 'active', gameCode: gc }));
+    pendingRequests.forEach(r => slots.push({ type: 'pending', request: r }));
+
+    const filled = slots.length;
+    // Show empty slots only up to totalSlots (or at least fill to next grid boundary)
+    const targetCount = Math.max(filled, Math.min(totalSlots, filled <= 2 ? filled : filled <= 4 ? 4 : 6));
+    for (let i = filled; i < targetCount; i++) slots.push({ type: 'empty' });
+
+    const displayCount = slots.length;
+    const gridStyle = getGridStyle(displayCount);
 
     return (
         <>
-            <GlobalStyles />
-            <div style={{ width: '100vw', height: '100vh', background: '#000000', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px)', pointerEvents: 'none', zIndex: 100 }} />
-                <Header period={gameState.clock.period} />
-
-                <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflow: 'hidden', minHeight: 0 }}>
-                    <TeamPanel name={gameState.teamA.name} score={gameState.teamA.score} fouls={gameState.teamA.fouls} timeouts={gameState.teamA.timeouts} color={'#DC2626'} hasPossession={false} side="left" />
-                    <div style={{ width: '1px', background: 'linear-gradient(to bottom, transparent 0%, #1E1E1E 20%, #1E1E1E 80%, transparent 100%)', flexShrink: 0 }} />
-                    <CenterPanel state={gameState} />
-                    <div style={{ width: '1px', background: 'linear-gradient(to bottom, transparent 0%, #1E1E1E 20%, #1E1E1E 80%, transparent 100%)', flexShrink: 0 }} />
-                    <TeamPanel name={gameState.teamB.name} score={gameState.teamB.score} fouls={gameState.teamB.fouls} timeouts={gameState.teamB.timeouts} color={'#2563EB'} hasPossession={false} side="right" />
+            <style>{ARENA_STYLES}</style>
+            <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {/* Header bar */}
+                <div style={{ background: '#050505', borderBottom: '1px solid #0d0d0d', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 36, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#DC2626', boxShadow: '0 0 6px #DC2626', animation: 'arena-pulse 1.5s ease-in-out infinite' }} />
+                        <span style={{ fontFamily: 'Oswald, monospace', fontWeight: 700, fontSize: '0.6rem', letterSpacing: '0.35em', color: '#DC2626' }}>THE BOX</span>
+                    </div>
+                    <div style={{ fontFamily: 'Oswald, monospace', fontWeight: 400, fontSize: '0.55rem', letterSpacing: '0.3em', color: '#2a2a2a' }}>
+                        ARENA {code} · {session.label.toUpperCase()} · {activeCodes.length}/{totalSlots} COURTS LIVE
+                    </div>
+                    <div style={{ fontFamily: 'Oswald, monospace', fontWeight: 400, fontSize: '0.55rem', letterSpacing: '0.2em', color: '#1e1e1e' }}>
+                        MULTI-COURT DISPLAY
+                    </div>
                 </div>
 
-                <TickerBar state={gameState} />
+                {/* Grid */}
+                <div style={{ flex: 1, ...gridStyle, minHeight: 0 }}>
+                    {slots.map((slot, i) => {
+                        if (slot.type === 'active') {
+                            return (
+                                <ArenaScoreCard
+                                    key={slot.gameCode}
+                                    gameCode={slot.gameCode}
+                                    courtNumber={i + 1}
+                                    totalCourts={displayCount}
+                                />
+                            );
+                        }
+                        if (slot.type === 'pending') {
+                            return (
+                                <PendingCourtTile
+                                    key={slot.request.game_code}
+                                    courtNumber={i + 1}
+                                    request={slot.request}
+                                />
+                            );
+                        }
+                        return <EmptyCourtTile key={`empty-${i}`} courtNumber={i + 1} />;
+                    })}
+                </div>
             </div>
         </>
     );

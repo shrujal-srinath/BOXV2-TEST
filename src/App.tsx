@@ -151,7 +151,7 @@ function App() {
               <Route path="/wall" element={<WallView />} />
               <Route path="/referee" element={<RefereeScreen />} />
               <Route path="/court-hex" element={<CourtHexMapPage />} />
-              <Route path="/arena" element={<ArenaView />} />
+              <Route path="/arena/:arenaCode" element={<ArenaView />} />
               <Route path="/pi-launcher" element={<PiLauncher />} />
               <Route path="/pi-receiver" element={<PiReceiverSetup />} />
               <Route path="/pi-display/:gameCode" element={<PiDisplay />} />

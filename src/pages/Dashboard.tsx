@@ -14,6 +14,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { SPORT_REGISTRY, CORE_SPORTS, EXTENDED_SPORTS } from '../sports/registry';
 import type { SportDevStatus } from '../types';
 import { PlayerPassportSection } from '../components/PlayerPassportSection';
+import { ArenaSessionSection } from '../components/ArenaSessionSection';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -550,7 +551,10 @@ export const Dashboard: React.FC = () => {
           </div>
         </section>
 
-        {/* 2. PLAYER PASSPORT */}
+        {/* 2. ARENA SESSION */}
+        <ArenaSessionSection user={user} />
+
+        {/* 3. PLAYER PASSPORT */}
         <PlayerPassportSection user={user} />
 
         {/* 3. LIVE GAMES & TOURNAMENTS TABS */}

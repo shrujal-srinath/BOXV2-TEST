@@ -25,6 +25,12 @@ import {
     type TvDisplay,
     type CastChannel,
 } from '../services/tvDisplayService';
+import {
+    validateArenaCode,
+    joinArenaSession,
+    leaveArenaSession,
+    type ArenaSession,
+} from '../services/arenaSessionService';
 import { supabase } from '../services/supabase';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -32,6 +38,8 @@ import { supabase } from '../services/supabase';
 interface CastModalProps {
     gameCode: string;
     gameName?: string;
+    teamA?: string;
+    teamB?: string;
     onClose: () => void;
 }
 
@@ -379,7 +387,76 @@ const ErrorState: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClose }) => {
+export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, teamA, teamB, onClose }) => {
+    const [activeTab, setActiveTab] = useState<'tv' | 'arena'>('tv');
+
+    // ── Arena tab state ───────────────────────────────────────────────────────
+    const [arenaCodeInput, setArenaCodeInput] = useState('');
+    const [arenaValidating, setArenaValidating] = useState(false);
+    const [arenaFound, setArenaFound] = useState<ArenaSession | null>(null);
+    const [arenaError, setArenaError] = useState('');
+    const [arenaJoining, setArenaJoining] = useState(false);
+    const [arenaJoined, setArenaJoined] = useState<{ slotIndex?: number; sessionLabel: string; arenaCode: string; isPending: boolean } | null>(null);
+    const [arenaLeaving, setArenaLeaving] = useState(false);
+
+    const arenaValidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Auto-validate arena code as user types
+    useEffect(() => {
+        if (arenaCodeInput.length !== 4) {
+            setArenaFound(null);
+            setArenaError('');
+            return;
+        }
+        if (arenaValidateTimer.current) clearTimeout(arenaValidateTimer.current);
+        arenaValidateTimer.current = setTimeout(async () => {
+            setArenaValidating(true);
+            const result = await validateArenaCode(arenaCodeInput);
+            setArenaValidating(false);
+            if (result.valid && result.session) {
+                setArenaFound(result.session);
+                setArenaError('');
+            } else {
+                setArenaFound(null);
+                setArenaError(result.message);
+            }
+        }, 400);
+    }, [arenaCodeInput]);
+
+    useEffect(() => {
+        return () => { if (arenaValidateTimer.current) clearTimeout(arenaValidateTimer.current); };
+    }, []);
+
+    const handleArenaJoin = async () => {
+        if (!arenaFound) return;
+        setArenaJoining(true);
+        const result = await joinArenaSession(arenaFound.arena_code, gameCode, {
+            gameName, teamA, teamB,
+        });
+        setArenaJoining(false);
+        if (result.success) {
+            setArenaJoined({
+                slotIndex: result.slotIndex,
+                sessionLabel: arenaFound.label,
+                arenaCode: arenaFound.arena_code,
+                isPending: !!result.isPending,
+            });
+        } else {
+            setArenaError(result.message);
+        }
+    };
+
+    const handleArenaLeave = async () => {
+        if (!arenaJoined) return;
+        setArenaLeaving(true);
+        await leaveArenaSession(arenaJoined.arenaCode, gameCode);
+        setArenaLeaving(false);
+        setArenaJoined(null);
+        setArenaFound(null);
+        setArenaCodeInput('');
+    };
+
+    // ── TV tab state (unchanged) ──────────────────────────────────────────────
     const [phase, setPhase] = useState<Phase>('loading');
     const [displays, setDisplays] = useState<RichDisplay[]>([]);
     const [inputCode, setInputCode] = useState('');
@@ -628,7 +705,7 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                             </div>
                             <div className="font-black uppercase text-white leading-none"
                                 style={{ fontSize: 17, letterSpacing: '-0.01em' }}>
-                                {phase === 'casting' ? 'Cast Active' : 'Cast to Screen'}
+                                {activeTab === 'arena' ? 'Cast to Arena' : phase === 'casting' ? 'Cast Active' : 'Cast to Screen'}
                             </div>
                             {gameName && (
                                 <div className="font-mono text-zinc-600 mt-0.5 uppercase tracking-wider"
@@ -648,8 +725,108 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                         </button>
                     </div>
 
+                    {/* Tab Switcher */}
+                    <div className="flex-shrink-0 flex gap-1 px-5 pt-3 pb-0">
+                        {(['tv', 'arena'] as const).map(tab => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full transition-all"
+                                style={{
+                                    fontSize: 10, fontWeight: 800, fontFamily: 'monospace',
+                                    letterSpacing: '0.18em', textTransform: 'uppercase',
+                                    background: activeTab === tab ? 'rgba(220,38,38,0.15)' : 'transparent',
+                                    border: `1px solid ${activeTab === tab ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                                    color: activeTab === tab ? '#ef4444' : 'rgba(255,255,255,0.3)',
+                                }}
+                            >
+                                {tab === 'tv' ? '📺 Cast to TV' : '🏟 Cast to Arena'}
+                            </button>
+                        ))}
+                    </div>
+
                     {/* Body */}
                     <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+
+                    {/* ── ARENA TAB ── */}
+                    {activeTab === 'arena' && (
+                        <div className="flex flex-col gap-4">
+                            {/* Joined state */}
+                            {arenaJoined ? (
+                                <div className="rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-4 flex flex-col gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                        <span style={{ fontSize: 9, fontWeight: 800, fontFamily: 'monospace', letterSpacing: '0.25em', color: '#22c55e', textTransform: 'uppercase' }}>
+                                            {arenaJoined.isPending ? 'Request Sent' : "You're In"}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                        {arenaJoined.isPending
+                                            ? `Pending approval on "${arenaJoined.sessionLabel}"`
+                                            : `Court ${(arenaJoined.slotIndex ?? 0) + 1} on "${arenaJoined.sessionLabel}"`
+                                        }
+                                    </div>
+                                    <button
+                                        onClick={handleArenaLeave}
+                                        disabled={arenaLeaving}
+                                        className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-red-900/30 bg-black text-red-500 hover:bg-red-900/20 transition-all"
+                                        style={{ fontSize: 9, fontWeight: 900, fontFamily: 'monospace', letterSpacing: '0.18em', textTransform: 'uppercase', minHeight: 36 }}
+                                    >
+                                        {arenaLeaving ? <Spinner size={10} color="#ef4444" /> : '■'} Leave Arena
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Code input label */}
+                                    <div>
+                                        <div className="font-mono font-black uppercase tracking-[0.32em] text-zinc-600 mb-2.5" style={{ fontSize: 8 }}>
+                                            Arena Code
+                                        </div>
+                                        <CodeInput
+                                            value={arenaCodeInput}
+                                            onChange={setArenaCodeInput}
+                                            disabled={arenaJoining}
+                                            shake={false}
+                                        />
+
+                                        {/* Status hint */}
+                                        <div className="text-center mt-2 font-mono uppercase tracking-[0.14em] transition-colors duration-200" style={{ fontSize: 10, minHeight: 14 }}>
+                                            {arenaValidating && (
+                                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>Searching...</span>
+                                            )}
+                                            {!arenaValidating && arenaFound && (
+                                                <span style={{ color: 'rgba(34,197,94,0.7)' }}>
+                                                    ✓ "{arenaFound.label}" — {arenaFound.game_codes.length}/{arenaFound.max_slots} courts
+                                                </span>
+                                            )}
+                                            {!arenaValidating && arenaError && arenaCodeInput.length === 4 && (
+                                                <span style={{ color: 'rgba(239,68,68,0.7)' }}>⚠ {arenaError}</span>
+                                            )}
+                                            {!arenaValidating && !arenaFound && !arenaError && arenaCodeInput.length < 4 && arenaCodeInput.length > 0 && (
+                                                <span style={{ color: 'rgba(255,255,255,0.14)' }}>
+                                                    {4 - arenaCodeInput.length} more character{4 - arenaCodeInput.length > 1 ? 's' : ''}…
+                                                </span>
+                                            )}
+                                            {arenaCodeInput.length === 0 && (
+                                                <span style={{ color: 'rgba(255,255,255,0.14)' }}>Enter the 4-char arena code from your host</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Approval mode notice */}
+                                    {arenaFound?.join_mode === 'approval' && (
+                                        <div className="px-3 py-2.5 rounded-lg border border-amber-900/30 bg-amber-900/10"
+                                            style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(251,191,36,0.6)', letterSpacing: '0.06em' }}>
+                                            This session requires host approval. Your request will be queued.
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── TV TAB ── */}
+                    {activeTab === 'tv' && (<>
 
                         {/* Loading */}
                         {phase === 'loading' && (
@@ -770,10 +947,36 @@ export const CastModal: React.FC<CastModalProps> = ({ gameCode, gameName, onClos
                                 )}
                             </>
                         )}
+                    </>)}
                     </div>
 
-                    {/* Footer — Cast button */}
-                    {(phase === 'idle' || phase === 'casting') && (
+                    {/* Footer — Arena Join button */}
+                    {activeTab === 'arena' && !arenaJoined && (
+                        <div className="flex-shrink-0 px-5 pb-4 pt-3"
+                            style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                            <button
+                                onClick={handleArenaJoin}
+                                disabled={!arenaFound || arenaJoining}
+                                className="w-full py-3 rounded-xl font-black uppercase transition-all flex items-center justify-center gap-2"
+                                style={{
+                                    fontSize: 12, letterSpacing: '0.1em', fontFamily: 'monospace',
+                                    background: arenaFound && !arenaJoining ? 'rgba(220,38,38,0.9)' : 'rgba(255,255,255,0.04)',
+                                    border: `1px solid ${arenaFound ? 'rgba(220,38,38,0.7)' : 'rgba(255,255,255,0.08)'}`,
+                                    color: arenaFound ? '#fff' : 'rgba(255,255,255,0.2)',
+                                    cursor: arenaFound && !arenaJoining ? 'pointer' : 'not-allowed',
+                                }}
+                            >
+                                {arenaJoining
+                                    ? <><Spinner size={13} color="#fff" /> Joining...</>
+                                    : arenaFound
+                                        ? `Join Arena ${arenaFound.arena_code}`
+                                        : 'Enter arena code above'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Footer — TV Cast button */}
+                    {activeTab === 'tv' && (phase === 'idle' || phase === 'casting') && (
                         <div className="flex-shrink-0 px-5 pb-4 pt-3"
                             style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                             <button
