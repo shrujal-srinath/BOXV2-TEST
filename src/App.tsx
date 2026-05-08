@@ -81,7 +81,7 @@ const isPWA =
 const RootRedirect: React.FC<{ userId: string | null; authLoading: boolean }> = ({ userId, authLoading }) => {
   if (isPWA) return <Navigate to="/tablet/standalone" replace />;
   if (authLoading) return (
-    <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
+    <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
       <div className="animate-pulse text-slate-400 dark:text-zinc-600 font-mono text-xs uppercase tracking-widest">Loading...</div>
     </div>
   );
@@ -128,7 +128,7 @@ function App() {
     <ThemeProvider>
       <Router>
         <HardwareProvider userId={userId}>
-          <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-black dark:text-white font-sans transition-colors duration-300">
+          <div className="min-h-screen bg-white text-slate-900 dark:bg-black dark:text-white font-sans transition-colors duration-300">
             <Routes>
 
               {/* ══════════════════════════════════════════════

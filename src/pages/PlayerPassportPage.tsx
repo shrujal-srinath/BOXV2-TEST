@@ -52,10 +52,11 @@ const GRAD_YEARS      = Array.from({ length: 12 }, (_, i) => String(currentYear 
 
 const inputCls = [
   'w-full h-12 px-4 text-[15px] font-medium tracking-tight',
-  'bg-zinc-900/80 border border-white/15 text-white placeholder:text-zinc-500',
+  'bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400',
+  'dark:bg-zinc-900/80 dark:border-white/15 dark:text-white dark:placeholder:text-zinc-500',
   'outline-none transition-all duration-200',
-  'hover:border-violet-500/50 hover:bg-zinc-900',
-  'focus:border-violet-400 focus:bg-zinc-900 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.15)]',
+  'hover:border-violet-500/50 dark:hover:bg-zinc-900',
+  'focus:border-violet-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.12)] dark:focus:border-violet-400 dark:focus:bg-zinc-900 dark:focus:shadow-[0_0_0_3px_rgba(139,92,246,0.15)]',
 ].join(' ');
 
 const selectCls = `${inputCls} appearance-none pr-10 bg-[url("data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20fill=%22none%22%20viewBox=%220%200%2024%2024%22%20stroke=%22%23a78bfa%22%20stroke-width=%222%22><path%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%20d=%22M19%209l-7%207-7-7%22/></svg>")] bg-no-repeat bg-[right_12px_center] bg-[length:14px]`;
@@ -64,22 +65,22 @@ const selectCls = `${inputCls} appearance-none pr-10 bg-[url("data:image/svg+xml
 
 /** HUD-style panel with corner bracket accents */
 const HudPanel: React.FC<{ num?: string; title?: string; subtitle?: string; children: React.ReactNode; className?: string }> = ({ num, title, subtitle, children, className = '' }) => (
-  <div className={`relative bg-zinc-950/80 backdrop-blur-sm border border-violet-500/20 ${className}`}>
+  <div className={`relative bg-white border border-slate-200 dark:bg-zinc-950/80 dark:backdrop-blur-sm dark:border-violet-500/20 ${className}`}>
     <span className="absolute -top-px -left-px w-3 h-3 border-t-2 border-l-2 border-violet-400" />
     <span className="absolute -top-px -right-px w-3 h-3 border-t-2 border-r-2 border-violet-400" />
     <span className="absolute -bottom-px -left-px w-3 h-3 border-b-2 border-l-2 border-violet-400" />
     <span className="absolute -bottom-px -right-px w-3 h-3 border-b-2 border-r-2 border-violet-400" />
 
     {(num || title) && (
-      <header className="flex items-center gap-4 px-6 py-4 border-b border-violet-500/15 bg-gradient-to-r from-violet-500/5 via-transparent to-transparent">
+      <header className="flex items-center gap-4 px-6 py-4 border-b border-slate-100 dark:border-violet-500/15 bg-gradient-to-r from-violet-500/5 via-transparent to-transparent">
         {num && (
-          <span className="font-mono text-[11px] text-violet-400 tabular-nums tracking-[0.2em] px-2 py-1 bg-violet-500/10 border border-violet-500/30">
+          <span className="font-mono text-[11px] text-violet-600 dark:text-violet-400 tabular-nums tracking-[0.2em] px-2 py-1 bg-violet-500/10 border border-violet-500/30">
             {num}
           </span>
         )}
         <div className="flex-1 min-w-0">
-          {title && <h3 className="text-sm font-black text-white uppercase tracking-[0.15em]">{title}</h3>}
-          {subtitle && <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{subtitle}</p>}
+          {title && <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.15em]">{title}</h3>}
+          {subtitle && <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono mt-0.5">{subtitle}</p>}
         </div>
         <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
       </header>
@@ -100,15 +101,15 @@ interface FieldProps {
 const Field: React.FC<FieldProps> = ({ label, required, hint, status, children }) => (
   <div>
     <div className="flex items-baseline justify-between mb-2">
-      <label className="font-mono text-[11px] text-zinc-300 uppercase tracking-[0.15em] font-semibold">
-        <span className="text-violet-400/70 mr-1.5">›</span>
+      <label className="font-mono text-[11px] text-slate-700 dark:text-zinc-300 uppercase tracking-[0.15em] font-semibold">
+        <span className="text-violet-500/70 dark:text-violet-400/70 mr-1.5">›</span>
         {label}
-        {required && <span className="text-red-400 ml-1">*</span>}
+        {required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
       </label>
-      {status && <span className="font-mono text-[10px] text-zinc-500 tabular-nums">{status}</span>}
+      {status && <span className="font-mono text-[10px] text-slate-500 dark:text-zinc-500 tabular-nums">{status}</span>}
     </div>
     {children}
-    {hint && <p className="text-[11px] text-zinc-400 mt-1.5 leading-relaxed">{hint}</p>}
+    {hint && <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1.5 leading-relaxed">{hint}</p>}
   </div>
 );
 
@@ -129,7 +130,7 @@ export const PlayerPassportPage: React.FC = () => {
   const [sportToast, setSportToast] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const toastTimer   = useRef<ReturnType<typeof setTimeout>>();
+  const toastTimer   = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const showToast = useCallback((msg: string) => {
     setSportToast(msg);
@@ -330,7 +331,7 @@ export const PlayerPassportPage: React.FC = () => {
   // ── Auth states ────────────────────────────────────────────────────────────
 
   if (authLoading) return (
-    <div className="min-h-dvh bg-black flex items-center justify-center">
+    <div className="min-h-dvh bg-white dark:bg-black flex items-center justify-center">
       <div className="flex flex-col items-center gap-4">
         <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-400 rounded-full animate-spin shadow-[0_0_20px_rgba(139,92,246,0.4)]" />
         <span className="font-mono text-[10px] text-violet-400 uppercase tracking-[0.3em] animate-pulse">Booting</span>
@@ -339,16 +340,16 @@ export const PlayerPassportPage: React.FC = () => {
   );
 
   if (!user || (user as any).is_anonymous) return (
-    <div className="min-h-dvh bg-black flex items-center justify-center p-6">
-      <div className="relative max-w-sm w-full bg-zinc-950/60 border border-violet-500/20 p-8">
+    <div className="min-h-dvh bg-white dark:bg-black flex items-center justify-center p-6">
+      <div className="relative max-w-sm w-full bg-white border border-slate-200 dark:bg-zinc-950/60 dark:border-violet-500/20 p-8">
         <span className="absolute -top-px -left-px w-3 h-3 border-t-2 border-l-2 border-violet-400" />
         <span className="absolute -top-px -right-px w-3 h-3 border-t-2 border-r-2 border-violet-400" />
         <span className="absolute -bottom-px -left-px w-3 h-3 border-b-2 border-l-2 border-violet-400" />
         <span className="absolute -bottom-px -right-px w-3 h-3 border-b-2 border-r-2 border-violet-400" />
         <div className="text-center">
           <p className="font-mono text-[10px] text-red-400 uppercase tracking-[0.3em] mb-4">Access Denied</p>
-          <h1 className="text-2xl font-black text-white uppercase tracking-tight mb-3">Sign in required</h1>
-          <p className="text-sm text-zinc-400 mb-8 leading-relaxed">Authenticate to register a player passport.</p>
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-3">Sign in required</h1>
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mb-8 leading-relaxed">Authenticate to register a player passport.</p>
           <button
             onClick={() => navigate('/')}
             className="w-full h-12 bg-violet-500 hover:bg-violet-400 text-white font-bold uppercase tracking-[0.2em] text-xs shadow-[0_0_24px_rgba(139,92,246,0.4)] transition-all"
@@ -364,7 +365,7 @@ export const PlayerPassportPage: React.FC = () => {
 
   if (createdProfile) {
     return (
-      <div className="min-h-dvh bg-black flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <div className="min-h-dvh bg-white dark:bg-black flex flex-col items-center justify-center p-6 relative overflow-hidden">
         {/* Ambient glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-violet-600/10 blur-[180px] pointer-events-none" />
         <div className="absolute inset-0 pointer-events-none opacity-40" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.015) 2px, rgba(255,255,255,0.015) 3px)' }} />
@@ -380,10 +381,10 @@ export const PlayerPassportPage: React.FC = () => {
           </div>
 
           <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-black text-white uppercase tracking-tight leading-[0.95] whitespace-pre-line italic">
+            <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-[0.95] whitespace-pre-line italic">
               {forSelf ? 'Welcome to\nThe Box' : createdProfile.full_name}
             </h1>
-            <p className="text-[13px] text-zinc-400 mt-5 leading-relaxed max-w-sm mx-auto">
+            <p className="text-[13px] text-slate-500 dark:text-zinc-400 mt-5 leading-relaxed max-w-sm mx-auto">
               {forSelf
                 ? 'Your passport is live. Stats track automatically from your next match.'
                 : `They can claim this passport by signing in with ${createdProfile.phone_number ?? 'their phone number'}.`}
@@ -392,14 +393,14 @@ export const PlayerPassportPage: React.FC = () => {
 
           <PlayerIdCard profile={createdProfile} className="mb-6" />
 
-          <div className="relative bg-zinc-950/60 border border-violet-500/20 px-5 py-4 flex items-center gap-4 mb-6">
+          <div className="relative bg-white border border-slate-200 dark:bg-zinc-950/60 dark:border-violet-500/20 px-5 py-4 flex items-center gap-4 mb-6">
             <span className="absolute -top-px -left-px w-3 h-3 border-t-2 border-l-2 border-violet-400" />
             <span className="absolute -top-px -right-px w-3 h-3 border-t-2 border-r-2 border-violet-400" />
             <span className="absolute -bottom-px -left-px w-3 h-3 border-b-2 border-l-2 border-violet-400" />
             <span className="absolute -bottom-px -right-px w-3 h-3 border-b-2 border-r-2 border-violet-400" />
             <div className="flex-1">
-              <p className="font-mono text-[10px] text-violet-400 uppercase tracking-[0.25em] mb-1">Player Code</p>
-              <p className="font-mono text-xl font-black text-white tracking-[0.15em]">{createdProfile.player_code}</p>
+              <p className="font-mono text-[10px] text-violet-500 dark:text-violet-400 uppercase tracking-[0.25em] mb-1">Player Code</p>
+              <p className="font-mono text-xl font-black text-slate-900 dark:text-white tracking-[0.15em]">{createdProfile.player_code}</p>
             </div>
             <button
               onClick={() => navigator.clipboard?.writeText(createdProfile.player_code)}
@@ -435,7 +436,7 @@ export const PlayerPassportPage: React.FC = () => {
   // ── Registration form ──────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-dvh bg-black text-white antialiased relative overflow-x-hidden selection:bg-violet-500/30">
+    <div className="min-h-dvh bg-white text-slate-900 dark:bg-black dark:text-white antialiased relative overflow-x-hidden selection:bg-violet-500/30">
 
       {/* ═══════ Global FX layers ═══════════════════════════════════════════ */}
       {/* Grid background */}
@@ -457,11 +458,11 @@ export const PlayerPassportPage: React.FC = () => {
       <div className="fixed bottom-[5%] right-[10%] w-[500px] h-[500px] rounded-full bg-fuchsia-600/10 blur-[180px] pointer-events-none" />
 
       {/* ═══════ HUD HEADER ═══════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-xl border-b border-violet-500/20">
+      <header className="sticky top-0 z-40 bg-white/90 dark:bg-black/80 backdrop-blur-xl border-b border-slate-200 dark:border-violet-500/20">
         <div className="max-w-[1600px] mx-auto px-4 md:px-6 h-16 flex items-center gap-4">
           <button
             onClick={() => navigate('/dashboard')}
-            className="w-10 h-10 -ml-2 flex items-center justify-center border border-transparent hover:border-violet-500/40 hover:bg-violet-500/10 text-zinc-400 hover:text-violet-300 transition-all"
+            className="w-10 h-10 -ml-2 flex items-center justify-center border border-transparent hover:border-violet-500/40 hover:bg-violet-500/10 text-slate-500 dark:text-zinc-400 hover:text-violet-600 dark:hover:text-violet-300 transition-all"
             aria-label="Back"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
@@ -476,13 +477,13 @@ export const PlayerPassportPage: React.FC = () => {
             </div>
             <div className="hidden sm:block">
               <p className="font-mono text-[9px] text-violet-400 uppercase tracking-[0.3em] leading-none">The Box</p>
-              <p className="font-black text-[12px] text-white uppercase tracking-[0.15em] leading-none mt-1">Passport</p>
+              <p className="font-black text-[12px] text-slate-900 dark:text-white uppercase tracking-[0.15em] leading-none mt-1">Passport</p>
             </div>
           </div>
 
           <div className="hidden lg:flex items-center gap-2 ml-4">
-            <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-[0.2em]">Mode</span>
-            <span className="px-2 py-0.5 border border-violet-500/30 bg-violet-500/10 font-mono text-[10px] text-violet-300 uppercase tracking-[0.2em]">
+            <span className="font-mono text-[10px] text-slate-500 dark:text-zinc-600 uppercase tracking-[0.2em]">Mode</span>
+            <span className="px-2 py-0.5 border border-violet-500/30 bg-violet-500/10 font-mono text-[10px] text-violet-600 dark:text-violet-300 uppercase tracking-[0.2em]">
               {forSelf ? 'Self-Register' : 'Create Athlete'}
             </span>
           </div>

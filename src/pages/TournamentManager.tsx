@@ -734,7 +734,7 @@ export const TournamentManager: React.FC = () => {
     };
 
     if (!tournament) return (
-        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
+        <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
             <div className="w-10 h-10 rounded-full border-2 border-slate-200 dark:border-zinc-900 border-t-red-600 dark:border-t-yellow-500 animate-spin" />
         </div>
     );
@@ -757,7 +757,7 @@ export const TournamentManager: React.FC = () => {
     const liveCount = divisionsList.filter(d => d.status === 'published').length;
 
     return (
-        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black text-slate-900 dark:text-white relative">
+        <div className="min-h-screen bg-white dark:bg-black text-slate-900 dark:text-white relative">
             {/* Background */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-0 left-1/4 w-[600px] h-[300px] rounded-full dark:opacity-[0.03] opacity-0"

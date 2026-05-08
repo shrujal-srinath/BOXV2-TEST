@@ -332,13 +332,13 @@ export const Dashboard: React.FC = () => {
 
 
   if (loading) return (
-    <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center transition-colors duration-300">
+    <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center transition-colors duration-300">
       <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
 
   return (
-    <div className={`min-h-screen bg-[#F0EEE9] dark:bg-black font-sans text-slate-900 dark:text-white transition-colors duration-300`}>
+    <div className={`min-h-screen bg-white dark:bg-black font-sans text-slate-900 dark:text-white transition-colors duration-300`}>
       {/* HEADER */}
       <header className="bg-white dark:bg-zinc-900/50 dark:border-b dark:border-zinc-800 px-6 py-4 flex justify-between items-center sticky top-0 z-20 [box-shadow:0_1px_0_rgba(0,0,0,0.08)] dark:shadow-none">
         {/* Left: wordmark + avatar */}

@@ -84,7 +84,7 @@ const getSportMeta = (sport: string) => SPORT_META[sport] ?? SPORT_META.general;
 // ─── Animated background ─────────────────────────────────────────────────────
 const ArenaBackground: React.FC = () => (
     <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[#F0EEE9] dark:bg-black" />
+        <div className="absolute inset-0 bg-white dark:bg-black" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] rounded-full dark:opacity-[0.04] opacity-0"
             style={{ background: 'radial-gradient(circle, #facc15 0%, transparent 70%)' }} />
         <div className="absolute inset-0 dark:opacity-[0.02] opacity-0"
@@ -402,7 +402,7 @@ export const TournamentViewer: React.FC = () => {
     };
 
     if (notFound) return (
-        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
+        <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
             <div className="text-center">
                 <div className="text-5xl font-black italic text-slate-300 dark:text-zinc-800 mb-4">404</div>
                 <div className="text-slate-500 dark:text-zinc-600 font-bold uppercase text-xs tracking-widest">Tournament not found</div>
@@ -411,7 +411,7 @@ export const TournamentViewer: React.FC = () => {
     );
 
     if (!tournament) return (
-        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black flex items-center justify-center">
+        <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
             <div className="w-8 h-8 rounded-full border-2 border-slate-300 dark:border-zinc-800 border-t-slate-500 dark:border-t-zinc-500 animate-spin" />
         </div>
     );

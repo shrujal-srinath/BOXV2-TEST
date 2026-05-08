@@ -74,7 +74,7 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0EEE9] dark:bg-black font-sans text-slate-900 dark:text-white flex flex-col relative overflow-x-hidden animate-in">
+    <div className="min-h-screen bg-white dark:bg-black font-sans text-slate-900 dark:text-white flex flex-col relative overflow-x-hidden animate-in">
 
       {/* HEADER */}
       <header className="sticky top-0 z-40 flex items-center justify-between px-5 md:px-8 h-16 border-b border-slate-200 dark:border-zinc-900 bg-white/90 dark:bg-black/85 backdrop-blur-lg shadow-sm dark:shadow-none">

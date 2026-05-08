@@ -800,7 +800,7 @@ export const HostConsole: React.FC = () => {
     const activePlayers = pendingAction?.team === 'A' ? teamAPlayers : teamBPlayers;
 
     return (
-        <div className={`min-h-screen font-sans flex flex-col overflow-hidden ${L ? 'bg-slate-50 text-slate-900' : 'bg-black text-white'}`}>
+        <div className={`min-h-screen font-sans flex flex-col overflow-hidden ${L ? 'bg-white text-slate-900' : 'bg-black text-white'}`}>
             <style>{CONSOLE_CSS}</style>
 
             {/* ── HEADER ────────────────────────────────────────────────────── */}
