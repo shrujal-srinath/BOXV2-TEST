@@ -32,3 +32,6 @@ dist-ssr
 
 # Vercel
 .vercel
+
+# Local tool configs containing secrets
+.codex/
