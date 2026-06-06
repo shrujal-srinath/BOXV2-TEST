@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { AdvancedCourtHex } from './AdvancedCourtHex';
-import type { CourtTheme } from './AdvancedCourtHex';
+import type { CourtTheme, HoverInfo } from './AdvancedCourtHex';
 import { classifyZone, SHOT_ATTRIBUTES, COURT } from './courtZones';
 import type {
     ShotEvent, ShotAttribute, ShotZoneId, ShotType, GameActionType,
@@ -14,6 +14,11 @@ import type { Player } from '../../types';
 import { TimedPlayerPopup } from './TimedPlayerPopup';
 import { JumpBallModal } from './JumpBallModal';
 import { SubstitutionPanel } from './SubstitutionPanel';
+import { useConsoleAnalytics } from '../../hooks/useConsoleAnalytics';
+import { computeXPPA, playerZoneStats } from '../../lib/xppa';
+import { AndOnePopup } from '../scoring/AndOnePopup';
+import { QEndBanner } from '../scoring/QEndBanner';
+import { PredictiveFollowup } from '../scoring/PredictiveFollowup';
 
 // ── CSS ──────────────────────────────────────────────────────────────────────
 
@@ -153,12 +158,23 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
     const [feedOpen, setFeedOpen] = useState(false);
     const pendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const [courtTheme, setCourtTheme] = useState<CourtTheme>('dark');
-    const [hexOpacity, setHexOpacity] = useState(0);
-    const [showZoneHL, setShowZoneHL] = useState(true);
+    const [courtTheme, setCourtTheme] = useState<CourtTheme>(() => (localStorage.getItem('boxv2-console-theme') as CourtTheme) || 'dark');
+    const [gridMode, setGridMode] = useState<'off' | 'hover' | 'always'>(() => (localStorage.getItem('boxv2-console-grid') as 'off' | 'hover' | 'always') || 'hover');
+    const [verbose, setVerbose] = useState<boolean>(() => localStorage.getItem('boxv2-console-verbose') === '1');
+    useEffect(() => { localStorage.setItem('boxv2-console-theme', courtTheme); }, [courtTheme]);
+    useEffect(() => { localStorage.setItem('boxv2-console-grid', gridMode); }, [gridMode]);
+    useEffect(() => { localStorage.setItem('boxv2-console-verbose', verbose ? '1' : '0'); }, [verbose]);
+    // gridMode → existing AdvancedCourtHex props (no court edits):
+    //   off   → no hexes, no zone highlight
+    //   hover → hexes hidden, zone highlight reveals on hover (the "on hover" mode)
+    //   always→ hexes always tinted + zone highlight
+    const hexOpacity = gridMode === 'always' ? 0.18 : 0;
+    const showZoneHL = gridMode !== 'off';
     const [fullCourt, setFullCourt] = useState(false);
     const [hexRadius, setHexRadius] = useState(1.9);
-    const [showCourtSettings, setShowCourtSettings] = useState(false);
+    const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
+    const [courtSpec, setCourtSpec] = useState<'fiba' | 'nba'>('fiba');
+    const [showLineToRim, setShowLineToRim] = useState(false);
 
     const [deferredShot, setDeferredShot] = useState<{
         x: number; y: number; zone: string;
@@ -183,6 +199,20 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
 
     const playerStatsA = useMemo(() => computePlayerStats(existingShots.filter(s => s.teamSide === 'A'), pA), [existingShots, pA]);
     const playerStatsB = useMemo(() => computePlayerStats(existingShots.filter(s => s.teamSide === 'B'), pB), [existingShots, pB]);
+
+    const analytics = useConsoleAnalytics({
+        period, minutes, seconds, possession,
+        teamAPlayers: pA, teamBPlayers: pB, teamAColor, teamBColor,
+    });
+
+    const activeZoneStats = useMemo(
+        () => playerZoneStats(existingShots, activeSide === 'A' ? selA : selB),
+        [existingShots, activeSide, selA, selB],
+    );
+    const hoverXPPA = useMemo(
+        () => (verbose && hoverInfo ? computeXPPA(hoverInfo.zone, activeZoneStats) : null),
+        [verbose, hoverInfo, activeZoneStats],
+    );
 
     // ── Pending auto-cancel ──
     useEffect(() => {
@@ -212,8 +242,14 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
             setTimeout(() => setDots(prev => prev.filter(dd => dd.id !== d.id)), 15000);
         }
         onShotRecorded({ teamSide: pending.teamSide, playerId: pending.playerId, points: pending.points, made: pending.made, shotType: pending.shotType, x, y, zone, attributes: attrs });
+        if (x !== null && y !== null && zone !== 'unlocated') {
+            if (pending.made && pending.shotType === 'field_goal') {
+                analytics.registerMade(pending.teamSide, pending.playerId, pending.playerName);
+            }
+            analytics.triggerFollowup({ team: pending.teamSide, made: pending.made, shooterPlayerId: pending.playerId });
+        }
         setPending(null); setAttrs([]);
-    }, [pending, attrs, onShotRecorded]);
+    }, [pending, attrs, onShotRecorded, analytics]);
 
     const handleMade = useCallback((side: 'A' | 'B', pts: 1 | 2 | 3, st: ShotType) => {
         if (isWebLocked) return;
@@ -376,101 +412,193 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
 
                 {/* Court card */}
                 <div style={{ ...arcCard, padding: 12, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
-                    {/* Court header */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {/* Active player badge */}
-                            <div style={{
-                                width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                                background: activeSelId ? teamColor(activeSide) : 'var(--surface-elevated)',
-                                color: activeSelId ? '#FFF' : 'var(--text-tertiary)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontWeight: 900, fontSize: 15,
-                            }}>
-                                {activePlayer ? (activePlayer.number || '?') : '—'}
-                            </div>
-                            <div>
-                                <div style={{ fontSize: 13, fontWeight: 700 }}>{activePlayer?.name || 'No player selected'}</div>
-                                <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontFamily: '"JetBrains Mono", monospace' }}>
-                                    {activeStats ? `${activeStats.pts}pts · ${activeStats.fgm}/${activeStats.fga} FG` : `${activeSide === 'A' ? teamAName : teamBName}`}
-                                </div>
+
+                    {/* ── HUD Readout Bar ── */}
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: verbose ? '1.4fr 1fr 1fr 1fr 1fr 1.5fr' : '1.4fr 1fr 1fr 1fr 1fr',
+                        gap: 0, borderRadius: 10, overflow: 'hidden', flexShrink: 0, minHeight: 64,
+                        background: '#040810',
+                        border: '0.5px solid rgba(34,197,94,0.15)',
+                        boxShadow: 'inset 0 0 40px rgba(0,0,0,0.6)',
+                        position: 'relative',
+                    }}>
+                        {/* Green scanline overlay */}
+                        <div style={{
+                            position: 'absolute', inset: 0, pointerEvents: 'none',
+                            background: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(34,197,94,0.03) 3px, rgba(34,197,94,0.03) 4px)',
+                        }} />
+                        {/* Zone */}
+                        <div style={{ padding: '8px 12px', borderRight: '0.5px solid rgba(34,197,94,0.12)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4, position: 'relative' }}>
+                            <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 2, color: 'rgba(34,197,94,0.5)', textTransform: 'uppercase' }}>Zone</div>
+                            <div style={{ fontSize: 13, fontWeight: 900, color: hoverInfo ? '#22C55E' : 'rgba(34,197,94,0.25)', fontFamily: '"JetBrains Mono", monospace', lineHeight: 1, letterSpacing: 0.5 }}>
+                                {hoverInfo ? hoverInfo.zone.replace(/_/g, ' ').toUpperCase() : '— — —'}
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                            <button onClick={() => setHeatMap(v => !v)} className="ac-press" style={{
-                                padding: '5px 10px', borderRadius: 100, cursor: 'pointer', fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                                background: heatMap ? 'rgba(232,17,45,0.12)' : 'var(--surface-elevated)',
-                                border: `0.5px solid ${heatMap ? '#E8112D' : 'var(--border-subtle)'}`,
-                                color: heatMap ? '#E8112D' : 'var(--text-secondary)',
-                            }}>HEATMAP</button>
-                            <button onClick={onTogglePossession} className="ac-press" style={{
-                                padding: '5px 10px', borderRadius: 100, cursor: 'pointer', fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                                background: 'var(--surface-elevated)', border: '0.5px solid var(--border-subtle)',
-                                color: possession === 'A' ? teamAColor : teamBColor,
-                            }}>
-                                POSS · {possession === 'A' ? shortName(teamAName) : shortName(teamBName)} {possession === 'A' ? '→' : '←'}
-                            </button>
-                            <button onClick={() => setShowCourtSettings(v => !v)} className="ac-press" style={{
-                                padding: '5px 8px', borderRadius: 100, cursor: 'pointer', fontSize: 9, fontWeight: 800,
-                                background: showCourtSettings ? 'rgba(139,92,246,0.15)' : 'var(--surface-elevated)',
-                                border: `0.5px solid ${showCourtSettings ? 'rgba(139,92,246,0.5)' : 'var(--border-subtle)'}`,
-                                color: showCourtSettings ? '#a78bfa' : 'var(--text-secondary)',
-                            }}>⚙</button>
+                        {/* Dist · Rim (m) */}
+                        <div style={{ padding: '8px 10px', borderRight: '0.5px solid rgba(34,197,94,0.12)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+                            <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 2, color: 'rgba(34,197,94,0.5)', textTransform: 'uppercase' }}>Rim</div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                                <span style={{ fontSize: 18, fontWeight: 900, fontFamily: '"JetBrains Mono", monospace', color: hoverInfo ? '#F0F4FF' : 'rgba(240,244,255,0.2)', lineHeight: 1 }}>
+                                    {hoverInfo ? hoverInfo.dist.meters.toFixed(1) : '—'}
+                                </span>
+                                <span style={{ fontSize: 8, fontWeight: 700, color: 'rgba(34,197,94,0.5)' }}>m</span>
+                            </div>
                         </div>
+                        {/* Dist · Rim (ft) */}
+                        <div style={{ padding: '8px 10px', borderRight: '0.5px solid rgba(34,197,94,0.12)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+                            <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 2, color: 'rgba(34,197,94,0.5)', textTransform: 'uppercase' }}>Feet</div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                                <span style={{ fontSize: 18, fontWeight: 900, fontFamily: '"JetBrains Mono", monospace', color: hoverInfo ? '#F0F4FF' : 'rgba(240,244,255,0.2)', lineHeight: 1 }}>
+                                    {hoverInfo ? hoverInfo.dist.feet.toFixed(1) : '—'}
+                                </span>
+                                <span style={{ fontSize: 8, fontWeight: 700, color: 'rgba(34,197,94,0.5)' }}>ft</span>
+                            </div>
+                        </div>
+                        {/* X / Y Coords */}
+                        <div style={{ padding: '8px 10px', borderRight: '0.5px solid rgba(34,197,94,0.12)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+                            <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 2, color: 'rgba(34,197,94,0.5)', textTransform: 'uppercase' }}>Coord</div>
+                            <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, fontWeight: 700, color: hoverInfo ? '#F0F4FF' : 'rgba(240,244,255,0.2)', lineHeight: 1.3 }}>
+                                {hoverInfo ? `X ${hoverInfo.x.toFixed(1)}` : 'X —'}
+                                <br />
+                                {hoverInfo ? `Y ${hoverInfo.y.toFixed(1)}` : 'Y —'}
+                            </div>
+                        </div>
+                        {/* Point Value */}
+                        <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', gap: 4 }}>
+                            <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 2, color: 'rgba(34,197,94,0.5)', textTransform: 'uppercase' }}>Pts</div>
+                            {hoverInfo ? (() => {
+                                const is3 = hoverInfo.zone.startsWith('three') || hoverInfo.zone.startsWith('three_corner');
+                                return (
+                                    <div style={{
+                                        padding: '4px 10px', borderRadius: 6, fontSize: 13, fontWeight: 900, fontFamily: '"JetBrains Mono", monospace',
+                                        background: is3 ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)',
+                                        color: is3 ? '#60A5FA' : '#FBBF24',
+                                        border: `0.5px solid ${is3 ? 'rgba(59,130,246,0.5)' : 'rgba(245,158,11,0.5)'}`,
+                                    }}>{is3 ? '3PT' : '2PT'}</div>
+                                );
+                            })() : (
+                                <div style={{ fontSize: 13, fontWeight: 900, color: 'rgba(240,244,255,0.2)', fontFamily: '"JetBrains Mono", monospace' }}>—</div>
+                            )}
+                        </div>
+                        {/* xPPA (verbose only) */}
+                        {verbose && (
+                            <div style={{ padding: '8px 12px', borderLeft: '0.5px solid rgba(34,197,94,0.12)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+                                <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 2, color: 'rgba(34,197,94,0.5)', textTransform: 'uppercase' }}>xPPA · Expected</div>
+                                {hoverXPPA ? (
+                                    <>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                                            <span style={{
+                                                fontSize: 18, fontWeight: 900, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1,
+                                                color: hoverXPPA.ppa >= 1.0 ? '#22C55E' : hoverXPPA.ppa >= 0.85 ? '#F59E0B' : '#EF4444',
+                                            }}>{hoverXPPA.ppa.toFixed(2)}</span>
+                                            <span style={{ fontSize: 8, fontWeight: 700, color: 'rgba(34,197,94,0.5)' }}>pts</span>
+                                        </div>
+                                        <div style={{ fontSize: 9, color: 'var(--text-tertiary)', fontFamily: '"JetBrains Mono", monospace' }}>
+                                            {hoverXPPA.playerAtt > 0 && hoverXPPA.playerPct !== null
+                                                ? `${Math.round(hoverXPPA.playerPct * 100)}% on ${hoverXPPA.playerAtt} · lg ${Math.round(hoverXPPA.leaguePct * 100)}%`
+                                                : `lg prior ${Math.round(hoverXPPA.leaguePct * 100)}%`}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ fontSize: 13, fontWeight: 900, color: 'rgba(240,244,255,0.2)', fontFamily: '"JetBrains Mono", monospace' }}>—</div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Court settings (collapsible) */}
-                    {showCourtSettings && (
-                        <div style={{
-                            display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center',
-                            padding: '8px 10px', borderRadius: 10,
-                            background: 'var(--surface-elevated)', border: '0.5px solid var(--border-subtle)', flexShrink: 0,
-                            animation: 'acRibbonSlide 0.15s ease-out',
-                        }}>
-                            {/* Theme */}
+                    {/* ── Always-visible control bar ── */}
+                    <div style={{
+                        display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+                        padding: '6px 10px', borderRadius: 10, flexShrink: 0,
+                        background: 'var(--surface-elevated)', border: '0.5px solid var(--border-subtle)',
+                    }}>
+                        {/* Theme */}
+                        <div style={{ display: 'flex', gap: 3 }}>
                             {(['dark', 'wooden', 'white'] as CourtTheme[]).map(t => (
                                 <button key={t} onClick={() => setCourtTheme(t)} className="ac-press" style={{
-                                    padding: '4px 10px', borderRadius: 8, fontSize: 9, fontWeight: 800, letterSpacing: 1, cursor: 'pointer',
-                                    background: courtTheme === t ? 'rgba(139,92,246,0.2)' : 'transparent',
-                                    border: `0.5px solid ${courtTheme === t ? 'rgba(139,92,246,0.5)' : 'var(--border-subtle)'}`,
-                                    color: courtTheme === t ? '#a78bfa' : 'var(--text-tertiary)',
-                                }}>{t === 'wooden' ? 'Wood' : t[0].toUpperCase() + t.slice(1)}</button>
+                                    padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, letterSpacing: 0.8, cursor: 'pointer',
+                                    background: courtTheme === t ? 'rgba(139,92,246,0.25)' : 'transparent',
+                                    border: `0.5px solid ${courtTheme === t ? 'rgba(139,92,246,0.6)' : 'var(--border-subtle)'}`,
+                                    color: courtTheme === t ? '#c4b5fd' : 'var(--text-tertiary)',
+                                }}>{t === 'wooden' ? 'WOOD' : t.toUpperCase()}</button>
                             ))}
-                            <div style={{ width: 1, height: 16, background: 'var(--border-subtle)' }} />
+                        </div>
+                        <div style={{ width: 1, height: 14, background: 'var(--border-subtle)', flexShrink: 0 }} />
+                        {/* Court */}
+                        <div style={{ display: 'flex', gap: 3 }}>
                             <button onClick={() => setFullCourt(false)} className="ac-press" style={{
-                                padding: '4px 10px', borderRadius: 8, fontSize: 9, fontWeight: 800, cursor: 'pointer',
-                                background: !fullCourt ? 'rgba(139,92,246,0.2)' : 'transparent',
-                                border: `0.5px solid ${!fullCourt ? 'rgba(139,92,246,0.5)' : 'var(--border-subtle)'}`,
-                                color: !fullCourt ? '#a78bfa' : 'var(--text-tertiary)',
-                            }}>Half</button>
+                                padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, cursor: 'pointer',
+                                background: !fullCourt ? 'rgba(139,92,246,0.25)' : 'transparent',
+                                border: `0.5px solid ${!fullCourt ? 'rgba(139,92,246,0.6)' : 'var(--border-subtle)'}`,
+                                color: !fullCourt ? '#c4b5fd' : 'var(--text-tertiary)',
+                            }}>HALF</button>
                             <button onClick={() => setFullCourt(true)} className="ac-press" style={{
-                                padding: '4px 10px', borderRadius: 8, fontSize: 9, fontWeight: 800, cursor: 'pointer',
-                                background: fullCourt ? 'rgba(139,92,246,0.2)' : 'transparent',
-                                border: `0.5px solid ${fullCourt ? 'rgba(139,92,246,0.5)' : 'var(--border-subtle)'}`,
-                                color: fullCourt ? '#a78bfa' : 'var(--text-tertiary)',
-                            }}>Full</button>
-                            <div style={{ width: 1, height: 16, background: 'var(--border-subtle)' }} />
-                            <button onClick={() => setShowZoneHL(v => !v)} className="ac-press" style={{
-                                padding: '4px 10px', borderRadius: 8, fontSize: 9, fontWeight: 800, cursor: 'pointer',
-                                background: showZoneHL ? 'rgba(139,92,246,0.2)' : 'transparent',
-                                border: `0.5px solid ${showZoneHL ? 'rgba(139,92,246,0.5)' : 'var(--border-subtle)'}`,
-                                color: showZoneHL ? '#a78bfa' : 'var(--text-tertiary)',
-                            }}>Zones</button>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 700 }}>HEX</span>
-                                <input type="range" min="0.8" max="3.0" step="0.1" value={hexRadius}
-                                    onChange={e => setHexRadius(Number(e.target.value))}
-                                    style={{ width: 60, cursor: 'pointer', accentColor: '#a78bfa', height: 2 }} />
-                                <span style={{ fontSize: 8, fontFamily: '"JetBrains Mono", monospace', color: 'var(--text-tertiary)' }}>{hexRadius.toFixed(1)}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 700 }}>GRID</span>
-                                <input type="range" min="0" max="100" value={Math.round(hexOpacity * 100)}
-                                    onChange={e => setHexOpacity(Number(e.target.value) / 100)}
-                                    style={{ width: 60, cursor: 'pointer', accentColor: '#a78bfa', height: 2 }} />
+                                padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, cursor: 'pointer',
+                                background: fullCourt ? 'rgba(139,92,246,0.25)' : 'transparent',
+                                border: `0.5px solid ${fullCourt ? 'rgba(139,92,246,0.6)' : 'var(--border-subtle)'}`,
+                                color: fullCourt ? '#c4b5fd' : 'var(--text-tertiary)',
+                            }}>FULL</button>
+                        </div>
+                        <div style={{ width: 1, height: 14, background: 'var(--border-subtle)', flexShrink: 0 }} />
+                        {/* Spec */}
+                        <div style={{ display: 'flex', gap: 3 }}>
+                            {(['fiba', 'nba'] as const).map(s => (
+                                <button key={s} onClick={() => setCourtSpec(s)} className="ac-press" style={{
+                                    padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, cursor: 'pointer',
+                                    background: courtSpec === s ? 'rgba(139,92,246,0.25)' : 'transparent',
+                                    border: `0.5px solid ${courtSpec === s ? 'rgba(139,92,246,0.6)' : 'var(--border-subtle)'}`,
+                                    color: courtSpec === s ? '#c4b5fd' : 'var(--text-tertiary)',
+                                }}>{s.toUpperCase()}</button>
+                            ))}
+                        </div>
+                        <div style={{ width: 1, height: 14, background: 'var(--border-subtle)', flexShrink: 0 }} />
+                        {/* Hex grid mode */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ fontSize: 8, color: 'var(--text-tertiary)', fontWeight: 800, letterSpacing: 0.8 }}>GRID</span>
+                            <div style={{ display: 'flex', gap: 3 }}>
+                                {(['off', 'hover', 'always'] as const).map(g => (
+                                    <button key={g} onClick={() => setGridMode(g)} className="ac-press" style={{
+                                        padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, letterSpacing: 0.6, cursor: 'pointer',
+                                        background: gridMode === g ? 'rgba(139,92,246,0.25)' : 'transparent',
+                                        border: `0.5px solid ${gridMode === g ? 'rgba(139,92,246,0.6)' : 'var(--border-subtle)'}`,
+                                        color: gridMode === g ? '#c4b5fd' : 'var(--text-tertiary)',
+                                    }}>{g === 'hover' ? 'HOVER' : g.toUpperCase()}</button>
+                                ))}
                             </div>
                         </div>
-                    )}
+                        {/* Heat */}
+                        <button onClick={() => setHeatMap(v => !v)} className="ac-press" style={{
+                            padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, cursor: 'pointer',
+                            background: heatMap ? 'rgba(232,17,45,0.15)' : 'transparent',
+                            border: `0.5px solid ${heatMap ? 'rgba(232,17,45,0.5)' : 'var(--border-subtle)'}`,
+                            color: heatMap ? '#f87171' : 'var(--text-tertiary)',
+                        }}>HEAT</button>
+                        {/* Line to rim */}
+                        <button onClick={() => setShowLineToRim(v => !v)} className="ac-press" style={{
+                            padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, cursor: 'pointer',
+                            background: showLineToRim ? 'rgba(139,92,246,0.25)' : 'transparent',
+                            border: `0.5px solid ${showLineToRim ? 'rgba(139,92,246,0.6)' : 'var(--border-subtle)'}`,
+                            color: showLineToRim ? '#c4b5fd' : 'var(--text-tertiary)',
+                        }}>LINE</button>
+                        <div style={{ width: 1, height: 14, background: 'var(--border-subtle)', flexShrink: 0 }} />
+                        {/* Hex size */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ fontSize: 8, color: 'var(--text-tertiary)', fontWeight: 800, letterSpacing: 0.8 }}>HEX</span>
+                            <input type="range" min="0.8" max="3.0" step="0.1" value={hexRadius}
+                                onChange={e => setHexRadius(Number(e.target.value))}
+                                style={{ width: 50, cursor: 'pointer', accentColor: '#a78bfa', height: 2 }} />
+                            <span style={{ fontSize: 8, fontFamily: '"JetBrains Mono", monospace', color: 'var(--text-tertiary)', minWidth: 20 }}>{hexRadius.toFixed(1)}</span>
+                        </div>
+                        <div style={{ width: 1, height: 14, background: 'var(--border-subtle)', flexShrink: 0 }} />
+                        {/* Verbose analytics */}
+                        <button onClick={() => setVerbose(v => !v)} className="ac-press"
+                            title="Show xPPA / advanced analytics" style={{
+                            padding: '3px 8px', borderRadius: 7, fontSize: 8, fontWeight: 800, letterSpacing: 0.8, cursor: 'pointer',
+                            background: verbose ? 'rgba(34,197,94,0.18)' : 'transparent',
+                            border: `0.5px solid ${verbose ? 'rgba(34,197,94,0.6)' : 'var(--border-subtle)'}`,
+                            color: verbose ? '#4ADE80' : 'var(--text-tertiary)',
+                        }}>VERBOSE</button>
+                    </div>
 
                     {/* Pending indicator */}
                     {pending && (
@@ -491,17 +619,32 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                         </div>
                     )}
 
-                    {/* Court */}
+                    {/* Court with corner frame decorations */}
                     <div style={{
                         flex: 1, position: 'relative', borderRadius: 12, overflow: 'hidden', minHeight: 0,
                         boxShadow: pending ? `0 0 30px ${ac}18` : 'none',
                         border: `0.5px solid ${pending ? `${ac}50` : 'var(--border-subtle)'}`,
                         transition: 'box-shadow 0.3s, border-color 0.3s',
                     }}>
+                        {/* Corner L-brackets */}
+                        {(['tl', 'tr', 'bl', 'br'] as const).map(c => (
+                            <span key={c} style={{
+                                position: 'absolute', zIndex: 10, width: 14, height: 14, pointerEvents: 'none',
+                                top: c.startsWith('t') ? 6 : undefined,
+                                bottom: c.startsWith('b') ? 6 : undefined,
+                                left: c.endsWith('l') ? 6 : undefined,
+                                right: c.endsWith('r') ? 6 : undefined,
+                                borderTop: c.startsWith('t') ? '1.5px solid rgba(34,197,94,0.5)' : undefined,
+                                borderBottom: c.startsWith('b') ? '1.5px solid rgba(34,197,94,0.5)' : undefined,
+                                borderLeft: c.endsWith('l') ? '1.5px solid rgba(34,197,94,0.5)' : undefined,
+                                borderRight: c.endsWith('r') ? '1.5px solid rgba(34,197,94,0.5)' : undefined,
+                            }} />
+                        ))}
                         <AdvancedCourtHex
                             shots={courtDots}
                             zoneOverlays={heatMap ? zoneOverlays : undefined}
                             onCourtTap={handleCourtTap}
+                            onHoverChange={setHoverInfo}
                             interactive={!!pending}
                             activeColor={ac}
                             activeEdge={pending ? pending.teamSide : null}
@@ -511,7 +654,34 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                             showZoneHL={showZoneHL}
                             fullCourt={fullCourt}
                             hexRadius={hexRadius}
+                            courtSpec={courtSpec}
+                            showLineToRim={showLineToRim}
                         />
+                        {analytics.qEndBanner && (
+                            <QEndBanner
+                                periodLabel={qLabel(period)}
+                                nextLabel={qLabel(period + 1)}
+                                onAdvance={() => { analytics.dismissQEnd(); onNextPeriod(); }}
+                                onDismiss={analytics.dismissQEnd}
+                            />
+                        )}
+                        {analytics.andOneOffer?.foulLogged && (
+                            <AndOnePopup
+                                offer={analytics.andOneOffer}
+                                onMade={() => {
+                                    const o = analytics.andOneOffer!;
+                                    onShotRecorded({ teamSide: o.team, playerId: o.playerId, points: 1, made: true, shotType: 'free_throw', x: 50, y: COURT.paintTop, zone: 'mid_top', attributes: [] });
+                                    onScoreChange(o.team, 1);
+                                    analytics.clearAndOne();
+                                }}
+                                onMiss={() => {
+                                    const o = analytics.andOneOffer!;
+                                    onShotRecorded({ teamSide: o.team, playerId: o.playerId, points: 1, made: false, shotType: 'free_throw', x: 50, y: COURT.paintTop, zone: 'mid_top', attributes: [] });
+                                    analytics.clearAndOne();
+                                }}
+                                onDismiss={analytics.clearAndOne}
+                            />
+                        )}
                     </div>
 
                     {/* Attribute ribbon */}
@@ -677,7 +847,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                             ['REB', 'rebound'], ['AST', 'assist'], ['STL', 'steal'],
                             ['BLK', 'block'], ['TO', 'turnover', '#F59E0B'], ['FOUL', 'foul', '#EF4444'],
                         ] as [string, GameActionType, string?][]).map(([label, action, clr]) => (
-                            <button key={action} onClick={() => onSecondaryAction(activeSide, action)} className="ac-press" style={{
+                            <button key={action} onClick={() => { onSecondaryAction(activeSide, action); if (action === 'foul') analytics.registerFoul(activeSide); }} className="ac-press" style={{
                                 height: 34, borderRadius: 9, cursor: 'pointer',
                                 background: 'var(--surface-elevated)', border: '0.5px solid var(--border-subtle)',
                                 fontSize: 9, fontWeight: 800, letterSpacing: 1, color: clr || 'var(--text-primary)',
@@ -846,6 +1016,17 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                     onCancel={() => setShowSubPanel(null)}
                 />
             )}
+
+            <PredictiveFollowup
+                followup={analytics.followup}
+                onResolve={(p) => {
+                    if (analytics.followup) {
+                        onSecondaryAction(p.teamSide, analytics.followup.kind === 'assist' ? 'assist' : 'rebound');
+                    }
+                    analytics.resolveFollowup();
+                }}
+                onSkip={analytics.skipFollowup}
+            />
         </div>
     );
 };

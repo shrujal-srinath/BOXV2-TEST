@@ -30,6 +30,8 @@ export interface ArenaSession {
     label: string;
     created_by: string | null;
     layout: 'auto' | '1x2' | '2x2' | '2x3' | '3x2';
+    display_mode: 'grid' | 'row' | 'carousel' | 'spotlight';
+    carousel_interval_sec: number;
     game_codes: string[];
     max_slots: number;
     join_mode: 'open' | 'approval';
@@ -41,7 +43,7 @@ export interface ArenaSession {
 
 // ─── Code Generation ──────────────────────────────────────────────────────────
 
-const generateArenaCode = async (): Promise<string> => {
+export const generateArenaCode = async (): Promise<string> => {
     while (true) {
         let code = '';
         for (let i = 0; i < 4; i++) {
@@ -64,8 +66,11 @@ export const createArenaSession = async (params: {
     maxSlots: number;
     joinMode: 'open' | 'approval';
     userId: string;
+    displayMode?: 'grid' | 'row' | 'carousel' | 'spotlight';
+    carouselIntervalSec?: number;
+    preGeneratedCode?: string;
 }): Promise<{ session: ArenaSession; arenaCode: string }> => {
-    const arenaCode = await generateArenaCode();
+    const arenaCode = params.preGeneratedCode ?? await generateArenaCode();
 
     const { data, error } = await supabase
         .from('arena_sessions')
@@ -74,6 +79,8 @@ export const createArenaSession = async (params: {
             label: params.label,
             created_by: params.userId,
             layout: params.layout,
+            display_mode: params.displayMode ?? 'grid',
+            carousel_interval_sec: params.carouselIntervalSec ?? 10,
             max_slots: params.maxSlots,
             join_mode: params.joinMode,
             game_codes: [],

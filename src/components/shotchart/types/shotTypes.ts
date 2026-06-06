@@ -6,6 +6,7 @@
 // ── Zone definitions ─────────────────────────────────────────────────────────
 
 export type ShotZoneId =
+    | 'at_rim'
     | 'restricted'
     | 'paint_left'
     | 'paint_right'

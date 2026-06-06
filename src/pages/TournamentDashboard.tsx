@@ -251,7 +251,7 @@ export const TournamentDashboard: React.FC = () => {
     const firstName = user?.user_metadata?.full_name?.split(' ')[0] || null;
 
     return (
-        <div className="min-h-screen bg-[#F0EEE9] dark:bg-black text-slate-900 dark:text-white relative overflow-x-hidden">
+        <div className="min-h-screen bg-white dark:bg-black text-slate-900 dark:text-white relative overflow-x-hidden">
             {/* ambient background */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute inset-0 dark:bg-black" />

@@ -2,543 +2,158 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const BG            = '#080808';
-const SURFACE       = '#121212';
-const RED           = '#dc2626';
-const WHITE         = '#ffffff';
-const MUTED         = '#888888';
-const BORDER        = 'rgba(255,255,255,0.15)';
-const BORDER_BRIGHT = '#ffffff';
+const BG      = '#080808';
+const SURFACE = '#111111';
+const SURF2   = '#181818';
+const BDR     = '#2A2A2A';
+const BDR_HI  = '#444444';
+const RED     = '#DC2626';
+const RED_DIM = 'rgba(220,38,38,0.10)';
+const TXT     = '#F0F0F0';
+const TXT_DIM = '#888888';
+const TXT_MUT = '#444444';
+const GREEN   = '#22C55E';
+const BLUE    = '#3B82F6';
+const RM      = "'JetBrains Mono', monospace";
+const OSW     = "'Oswald', sans-serif";
+const SG      = "'Space Grotesk', sans-serif";
 
-const SG  = "'Space Grotesk', sans-serif";
-const JBM = "'JetBrains Mono', monospace";
-
-const PULSE_CSS = `
-@keyframes livePulse {
-  0%, 100% { opacity: 0.5 }
-  50%       { opacity: 1   }
-}
+const STYLE_CSS = `
+@keyframes livePulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+@keyframes pulsePip  { 0%,100%{opacity:1}   50%{opacity:0.3} }
 `;
 
 const PiLauncher: React.FC = () => {
   const navigate = useNavigate();
   const [hoveredCard, setHoveredCard] = useState<'start' | 'watch' | null>(null);
   const [hoveredBtn,  setHoveredBtn]  = useState<'start' | 'watch' | null>(null);
+  const [hovNav,      setHovNav]      = useState<string | null>(null);
 
-  // ── ROOT ──────────────────────────────────────────────────────────────
   const rootStyle: React.CSSProperties = {
-    width: '100vw',
-    height: '100vh',
-    background: BG,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    userSelect: 'none',
-    fontFamily: SG,
+    width: '100vw', height: '100vh', background: BG,
+    display: 'flex', flexDirection: 'column',
+    overflow: 'hidden', userSelect: 'none', fontFamily: SG,
   };
 
-  // ── HEADER ────────────────────────────────────────────────────────────
   const headerStyle: React.CSSProperties = {
-    flexShrink: 0,
-    height: 80,
-    background: BG,
-    borderBottom: `2px solid ${BORDER_BRIGHT}`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '0 32px',
+    flexShrink: 0, height: 32, background: BG,
+    borderBottom: `1px solid ${BDR}`,
+    display: 'flex', alignItems: 'center',
+    justifyContent: 'space-between', padding: '0 24px',
   };
 
-  const wordmarkStyle: React.CSSProperties = {
-    fontFamily: SG,
-    fontWeight: 900,
-    fontStyle: 'italic',
-    fontSize: 28,
-    letterSpacing: '-0.05em',
-    color: WHITE,
-    textTransform: 'uppercase',
-  };
-
-  const navLinksStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    height: 80,
-  };
-
-  const makeNavLinkStyle = (hov: boolean): React.CSSProperties => ({
-    fontFamily: SG,
-    fontWeight: 700,
-    fontSize: 12,
-    letterSpacing: '0.2em',
-    textTransform: 'uppercase',
-    color: hov ? WHITE : MUTED,
-    height: 80,
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0 16px',
-    borderBottom: `4px solid ${hov ? WHITE : 'transparent'}`,
-    cursor: 'default',
-  });
-
-  const headerRightStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  };
-
-  const chipsRowStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 8,
-    marginRight: 16,
-  };
-
-  const chipStyle: React.CSSProperties = {
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    padding: '4px 8px',
-    fontFamily: JBM,
-    fontSize: 11,
-    color: WHITE,
-  };
-
-  const makeStartBtnStyle = (): React.CSSProperties => ({
-    background: hoveredBtn === 'start' ? WHITE : RED,
-    color: hoveredBtn === 'start' ? '#000' : WHITE,
-    border: `2px solid ${hoveredBtn === 'start' ? WHITE : RED}`,
-    padding: '8px 24px',
-    fontFamily: SG,
-    fontWeight: 700,
-    fontSize: 13,
-    letterSpacing: '0.2em',
-    textTransform: 'uppercase',
-    cursor: 'pointer',
-  });
-
-  const makeWatchBtnStyle = (): React.CSSProperties => ({
-    background: hoveredBtn === 'watch' ? WHITE : 'transparent',
-    color: hoveredBtn === 'watch' ? '#000' : WHITE,
-    border: `2px solid ${BORDER_BRIGHT}`,
-    padding: '8px 24px',
-    fontFamily: SG,
-    fontWeight: 700,
-    fontSize: 13,
-    letterSpacing: '0.2em',
-    textTransform: 'uppercase',
-    cursor: 'pointer',
-  });
-
-  // ── MAIN ──────────────────────────────────────────────────────────────
   const mainStyle: React.CSSProperties = {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1, overflow: 'hidden',
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
     padding: 32,
-    gap: 0,
-  };
-
-  const topTextStyle: React.CSSProperties = {
-    textAlign: 'center',
-    marginBottom: 64,
-  };
-
-  const opLabelStyle: React.CSSProperties = {
-    display: 'inline-block',
-    padding: '4px 12px',
-    fontFamily: JBM,
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: '0.25em',
-    color: WHITE,
-    textTransform: 'uppercase',
-    marginBottom: 24,
-  };
-
-  const headingStyle: React.CSSProperties = {
-    fontFamily: SG,
-    fontWeight: 700,
-    fontSize: 'clamp(40px, 6vw, 60px)',
-    letterSpacing: '-0.02em',
-    textTransform: 'uppercase',
-    color: WHITE,
-    marginBottom: 24,
-    margin: '0 0 24px 0',
-  };
-
-  const subParaStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 12,
-    color: MUTED,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    lineHeight: 1.6,
-    maxWidth: 640,
-    textAlign: 'center',
-    margin: 0,
   };
 
   const cardsGridStyle: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 32,
-    width: '100%',
-    maxWidth: 900,
+    display: 'grid', gridTemplateColumns: '1fr 1fr',
+    gap: 24, width: '100%', maxWidth: 900,
   };
 
-  // ── START CARD ────────────────────────────────────────────────────────
   const startCardStyle: React.CSSProperties = {
-    background: hoveredCard === 'start' ? RED : SURFACE,
-    border: `2px solid ${RED}`,
-    padding: 40,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    minHeight: 280,
-    cursor: 'pointer',
-    position: 'relative',
+    background: hoveredCard === 'start' ? RED_DIM : SURF2,
+    border: hoveredCard === 'start' ? `2px solid ${RED}` : `1px solid ${BDR}`,
+    padding: 36, display: 'flex', flexDirection: 'column',
+    alignItems: 'flex-start', minHeight: 260,
+    cursor: 'pointer', position: 'relative', overflow: 'hidden',
+    transition: 'border-color 0.12s, background 0.12s',
   };
 
-  const startIconBoxStyle: React.CSSProperties = {
-    width: 64,
-    height: 64,
-    border: `2px solid ${hoveredCard === 'start' ? WHITE : RED}`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-  };
-
-  const startTriangleStyle: React.CSSProperties = {
-    width: 0,
-    height: 0,
-    borderTop: '12px solid transparent',
-    borderBottom: '12px solid transparent',
-    borderLeft: `20px solid ${hoveredCard === 'start' ? WHITE : RED}`,
-    marginLeft: 4,
-  };
-
-  const startHeadingStyle: React.CSSProperties = {
-    fontFamily: SG,
-    fontWeight: 700,
-    fontSize: 28,
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-    color: WHITE,
-    marginBottom: 16,
-    margin: '0 0 16px 0',
-  };
-
-  const startBodyStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 12,
-    color: hoveredCard === 'start' ? 'rgba(255,255,255,0.9)' : MUTED,
-    lineHeight: 1.6,
-    margin: 0,
-  };
-
-  const startBottomStyle: React.CSSProperties = {
-    marginTop: 'auto',
-    paddingTop: 24,
-    borderTop: '1px solid rgba(255,255,255,0.2)',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  };
-
-  const startCtaTextStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 11,
-    fontWeight: 700,
-    color: WHITE,
-    textTransform: 'uppercase',
-    letterSpacing: '0.15em',
-  };
-
-  const startArrowStyle: React.CSSProperties = {
-    color: hoveredCard === 'start' ? WHITE : RED,
-    fontSize: 16,
-  };
-
-  // ── WATCH CARD ────────────────────────────────────────────────────────
   const watchCardStyle: React.CSSProperties = {
-    background: hoveredCard === 'watch' ? WHITE : SURFACE,
-    border: `2px solid ${RED}`,
-    padding: 40,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    minHeight: 280,
-    cursor: 'pointer',
-    position: 'relative',
+    background: hoveredCard === 'watch' ? RED_DIM : SURF2,
+    border: hoveredCard === 'watch' ? `2px solid ${RED}` : `1px solid ${BDR}`,
+    padding: 36, display: 'flex', flexDirection: 'column',
+    alignItems: 'flex-start', minHeight: 260,
+    cursor: 'pointer', position: 'relative', overflow: 'hidden',
+    transition: 'border-color 0.12s, background 0.12s',
   };
 
-  const watchIconBoxStyle: React.CSSProperties = {
-    width: 64,
-    height: 64,
-    border: `2px solid ${hoveredCard === 'watch' ? '#000' : RED}`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-    color: hoveredCard === 'watch' ? '#000' : WHITE,
-  };
-
-  const watchBadgeStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 24,
-    right: 24,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    border: `1px solid ${hoveredCard === 'watch' ? 'rgba(0,0,0,0.3)' : BORDER}`,
-    padding: '4px 12px',
-  };
-
-  const livePipStyle: React.CSSProperties = {
-    width: 8,
-    height: 8,
-    background: RED,
-    animation: 'livePulse 2s ease-in-out infinite',
-  };
-
-  const liveFeedTextStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 11,
-    fontWeight: 700,
-    color: hoveredCard === 'watch' ? '#000' : WHITE,
-    textTransform: 'uppercase',
-  };
-
-  const watchHeadingStyle: React.CSSProperties = {
-    fontFamily: SG,
-    fontWeight: 700,
-    fontSize: 28,
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-    color: hoveredCard === 'watch' ? '#000' : WHITE,
-    margin: '0 0 16px 0',
-  };
-
-  const watchBodyStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 12,
-    color: hoveredCard === 'watch' ? 'rgba(0,0,0,0.7)' : MUTED,
-    lineHeight: 1.6,
-    margin: 0,
-  };
-
-  const watchBottomStyle: React.CSSProperties = {
-    marginTop: 'auto',
-    paddingTop: 24,
-    borderTop: `1px solid ${hoveredCard === 'watch' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)'}`,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  };
-
-  const watchCtaTextStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 11,
-    fontWeight: 700,
-    color: hoveredCard === 'watch' ? '#000' : WHITE,
-    textTransform: 'uppercase',
-    letterSpacing: '0.15em',
-  };
-
-  const watchArrowStyle: React.CSSProperties = {
-    color: hoveredCard === 'watch' ? '#000' : RED,
-    fontSize: 16,
-  };
-
-  // ── FOOTER ────────────────────────────────────────────────────────────
   const footerStyle: React.CSSProperties = {
-    flexShrink: 0,
-    height: 48,
-    background: SURFACE,
-    borderTop: `2px solid ${BORDER_BRIGHT}`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '0 32px',
+    flexShrink: 0, height: 40, background: BG,
+    borderTop: `1px solid ${BDR}`,
+    display: 'flex', alignItems: 'center',
+    justifyContent: 'space-between', padding: '0 24px',
   };
-
-  const footerLeftStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 16,
-  };
-
-  const sysReadyStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  };
-
-  const greenSquareStyle: React.CSSProperties = {
-    width: 12,
-    height: 12,
-    background: '#00ff00',
-  };
-
-  const sysReadyTextStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 11,
-    fontWeight: 700,
-    color: WHITE,
-    letterSpacing: '0.25em',
-    textTransform: 'uppercase',
-  };
-
-  const sepStyle: React.CSSProperties = {
-    width: 1,
-    height: 16,
-    background: BORDER,
-    margin: '0 4px',
-  };
-
-  const uplinkStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 11,
-    color: MUTED,
-    letterSpacing: '0.15em',
-    textTransform: 'uppercase',
-  };
-
-  const versionStyle: React.CSSProperties = {
-    fontFamily: JBM,
-    fontSize: 11,
-    color: MUTED,
-    letterSpacing: '0.15em',
-    textTransform: 'uppercase',
-  };
-
-  // ── NAV LINK STATE ────────────────────────────────────────────────────
-  const [hovNav, setHovNav] = useState<string | null>(null);
 
   return (
     <>
-      <style>{PULSE_CSS}</style>
+      <style>{STYLE_CSS}</style>
       <div style={rootStyle}>
 
         {/* ── HEADER ── */}
         <header style={headerStyle}>
-          <span style={wordmarkStyle}>THE BOX</span>
-
-          <nav style={navLinksStyle}>
-            {(['DASHBOARD', 'ANALYTICS', 'TEAM MANAGEMENT'] as const).map(label => (
-              <span
-                key={label}
-                style={makeNavLinkStyle(hovNav === label)}
-                onMouseEnter={() => setHovNav(label)}
-                onMouseLeave={() => setHovNav(null)}
-              >
-                {label}
-              </span>
+          <span style={{ fontFamily: OSW, fontWeight: 700, fontStyle: 'italic', fontSize: 20, letterSpacing: '0.03em', color: TXT, textTransform: 'uppercase' }}>
+            THE BOX
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {[
+              { label: 'RPI4', color: BLUE, status: 'OK'   },
+              { label: 'PICO', color: BLUE, status: 'RDY'  },
+              { label: 'ESP32', color: BDR, status: 'WAIT' },
+            ].map(({ label, color, status }) => (
+              <div key={label} style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                border: `1px solid ${BDR}`, background: BG, padding: '2px 8px',
+              }}>
+                <div style={{ width: 7, height: 7, background: color, flexShrink: 0 }} />
+                <span style={{ fontFamily: SG, fontSize: 8, color: status === 'WAIT' ? TXT_MUT : TXT_DIM, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}: {status}</span>
+              </div>
             ))}
-          </nav>
-
-          <div style={headerRightStyle}>
-            <div style={chipsRowStyle}>
-              {(['RPI4_OK', 'PICO_OK', 'ESP32_OK'] as const).map(chip => (
-                <span key={chip} style={chipStyle}>{chip}</span>
-              ))}
-            </div>
-
-            <button
-              style={makeStartBtnStyle()}
-              onMouseEnter={() => setHoveredBtn('start')}
-              onMouseLeave={() => setHoveredBtn(null)}
-              onClick={() => navigate('/referee')}
-            >
-              START GAME
-            </button>
-
-            <button
-              style={makeWatchBtnStyle()}
-              onMouseEnter={() => setHoveredBtn('watch')}
-              onMouseLeave={() => setHoveredBtn(null)}
-              onClick={() => navigate('/pi-receiver')}
-            >
-              WATCH GAME
-            </button>
+            <span style={{ fontFamily: SG, fontSize: 9, color: TXT_MUT, letterSpacing: '0.1em', textTransform: 'uppercase', marginLeft: 4 }}>V. 3.0_FIELD</span>
           </div>
         </header>
 
         {/* ── MAIN ── */}
         <main style={mainStyle}>
-          <div style={topTextStyle}>
-            <div style={opLabelStyle}>OPERATION SELECT</div>
-            <h1 style={headingStyle}>DIGITAL ARENA</h1>
-            <p style={subParaStyle}>
-              SELECT OPERATIONAL MODE. CONFIGURE MATCH SETTINGS, CONTROL
-              HARDWARE PARAMETERS, OR INITIALIZE REAL-TIME SPECTATOR FEEDS.
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', color: TXT_DIM, textTransform: 'uppercase', marginBottom: 14 }}>OPERATION SELECT</div>
+            <h1 style={{ fontFamily: OSW, fontWeight: 700, fontStyle: 'italic', fontSize: 'clamp(40px, 6vw, 60px)' as unknown as number, letterSpacing: '0.02em', textTransform: 'uppercase', color: TXT, margin: '0 0 14px 0' }}>DIGITAL ARENA</h1>
+            <p style={{ fontFamily: RM, fontSize: 11, color: TXT_DIM, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.6, maxWidth: 640, textAlign: 'center', margin: 0 }}>
+              SELECT OPERATIONAL MODE. CONFIGURE MATCH SETTINGS, CONTROL HARDWARE PARAMETERS, OR INITIALIZE REAL-TIME SPECTATOR FEEDS.
             </p>
           </div>
 
           <div style={cardsGridStyle}>
 
-            {/* START GAME card */}
-            <div
-              style={startCardStyle}
-              onClick={() => navigate('/referee')}
-              onMouseEnter={() => setHoveredCard('start')}
-              onMouseLeave={() => setHoveredCard(null)}
-            >
-              <div style={startIconBoxStyle}>
-                <div style={startTriangleStyle} />
+            {/* START GAME */}
+            <div style={startCardStyle} onClick={() => navigate('/referee')} onMouseEnter={() => setHoveredCard('start')} onMouseLeave={() => setHoveredCard(null)}>
+              {hoveredCard === 'start' && <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 4, background: RED, pointerEvents: 'none' }} />}
+              <div style={{ width: 64, height: 64, border: `2px solid ${RED}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+                <div style={{ width: 0, height: 0, borderTop: '12px solid transparent', borderBottom: '12px solid transparent', borderLeft: `20px solid ${RED}`, marginLeft: 4 }} />
               </div>
-
-              <h2 style={startHeadingStyle}>START GAME</h2>
-
-              <p style={startBodyStyle}>
-                Primary operator console. Configure match parameters,
-                initialize hardware systems, and control live gameplay state.
+              <h2 style={{ fontFamily: OSW, fontStyle: 'italic', fontWeight: 700, fontSize: 28, letterSpacing: '0.05em', textTransform: 'uppercase', color: TXT, margin: '0 0 12px 0' }}>START GAME</h2>
+              <p style={{ fontFamily: RM, fontSize: 11, color: TXT_DIM, lineHeight: 1.6, margin: 0, flex: 1 }}>
+                Primary operator console. Configure match parameters, initialize hardware systems, and control live gameplay state.
               </p>
-
-              <div style={startBottomStyle}>
-                <span style={startCtaTextStyle}>INITIALIZE CONSOLE</span>
-                <span style={startArrowStyle}>→</span>
+              <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: `1px solid ${BDR}`, width: '100%' }}>
+                <span style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, color: TXT, textTransform: 'uppercase', letterSpacing: '0.15em' }}>INITIALIZE CONSOLE →</span>
               </div>
             </div>
 
-            {/* WATCH GAME card */}
-            <div
-              style={watchCardStyle}
-              onClick={() => navigate('/pi-receiver')}
-              onMouseEnter={() => setHoveredCard('watch')}
-              onMouseLeave={() => setHoveredCard(null)}
-            >
+            {/* WATCH GAME */}
+            <div style={watchCardStyle} onClick={() => navigate('/pi-receiver')} onMouseEnter={() => setHoveredCard('watch')} onMouseLeave={() => setHoveredCard(null)}>
+              {hoveredCard === 'watch' && <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 4, background: RED, pointerEvents: 'none' }} />}
               {/* Live badge */}
-              <div style={watchBadgeStyle}>
-                <div style={livePipStyle} />
-                <span style={liveFeedTextStyle}>LIVE FEED</span>
+              <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', alignItems: 'center', gap: 7, border: `1px solid ${BDR}`, padding: '3px 10px', background: BG }}>
+                <div style={{ width: 7, height: 7, background: RED, animation: 'livePulse 2s ease-in-out infinite' }} />
+                <span style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, color: TXT_DIM, textTransform: 'uppercase', letterSpacing: '0.1em' }}>LIVE FEED</span>
               </div>
-
-              <div style={watchIconBoxStyle}>
+              <div style={{ width: 64, height: 64, border: `2px solid ${RED}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: RED }}>
                 <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
-                  <ellipse cx="14" cy="10" rx="13" ry="9"
-                    stroke="currentColor" strokeWidth="2" />
-                  <circle cx="14" cy="10" r="4"
-                    stroke="currentColor" strokeWidth="2" />
+                  <ellipse cx="14" cy="10" rx="13" ry="9" stroke="currentColor" strokeWidth="2" />
+                  <circle cx="14" cy="10" r="4" stroke="currentColor" strokeWidth="2" />
                 </svg>
               </div>
-
-              <h2 style={watchHeadingStyle}>WATCH GAME</h2>
-
-              <p style={watchBodyStyle}>
-                Spectator dashboard. View real-time scoreboards, active
-                clock data, and live match analytics.
+              <h2 style={{ fontFamily: OSW, fontStyle: 'italic', fontWeight: 700, fontSize: 28, letterSpacing: '0.05em', textTransform: 'uppercase', color: TXT, margin: '0 0 12px 0' }}>WATCH GAME</h2>
+              <p style={{ fontFamily: RM, fontSize: 11, color: TXT_DIM, lineHeight: 1.6, margin: 0, flex: 1 }}>
+                Spectator dashboard. View real-time scoreboards, active clock data, and live match analytics.
               </p>
-
-              <div style={watchBottomStyle}>
-                <span style={watchCtaTextStyle}>ENTER SPECTATOR VIEW</span>
-                <span style={watchArrowStyle}>→</span>
+              <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: `1px solid ${BDR}`, width: '100%' }}>
+                <span style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, color: TXT, textTransform: 'uppercase', letterSpacing: '0.15em' }}>ENTER SPECTATOR VIEW →</span>
               </div>
             </div>
 
@@ -547,15 +162,15 @@ const PiLauncher: React.FC = () => {
 
         {/* ── FOOTER ── */}
         <footer style={footerStyle}>
-          <div style={footerLeftStyle}>
-            <div style={sysReadyStyle}>
-              <div style={greenSquareStyle} />
-              <span style={sysReadyTextStyle}>SYSTEM READY</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 10, height: 10, background: GREEN, animation: 'pulsePip 2s ease-in-out infinite' }} />
+              <span style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, color: TXT, letterSpacing: '0.2em', textTransform: 'uppercase' }}>SYSTEM READY</span>
             </div>
-            <div style={sepStyle} />
-            <span style={uplinkStyle}>UPLINK: SECURE</span>
+            <div style={{ width: 1, height: 14, background: BDR }} />
+            <span style={{ fontFamily: RM, fontSize: 10, color: TXT_DIM, letterSpacing: '0.15em', textTransform: 'uppercase' }}>UPLINK: SECURE</span>
           </div>
-          <span style={versionStyle}>V. 3.0_FIELD</span>
+          <span style={{ fontFamily: RM, fontSize: 10, color: TXT_DIM, letterSpacing: '0.15em', textTransform: 'uppercase' }}>V. 3.0_FIELD</span>
         </footer>
 
       </div>

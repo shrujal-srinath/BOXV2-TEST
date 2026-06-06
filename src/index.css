@@ -21,6 +21,31 @@
   --border-subtle:  rgba(0,0,0,0.05);
   --brand-red:      #DC2626;
   --accent-blue:    #1D4ED8;
+
+  /* ── Courtside light-mode token system ──
+     Used by all redesigned light-mode surfaces. Dark mode never references
+     these — see the .dark block below for the legacy dark palette. */
+  --cs-bg-primary:       #F0EEE9;
+  --cs-surface-primary:  #FFFFFF;
+  --cs-surface-elevated: #F5F3EF;
+  --cs-surface-overlay:  #EAE7E0;
+
+  --cs-accent-primary:   #E8112D;
+  --cs-accent-pressed:   #B50022;
+  --cs-accent-subtle:    rgba(232,17,45,0.08);
+
+  --cs-text-primary:     #111827;
+  --cs-text-secondary:   #6B7280;
+  --cs-text-tertiary:    #9CA3AF;
+  --cs-text-on-accent:   #FFFFFF;
+
+  --cs-border-subtle:    #E5E7EB;
+  --cs-border-medium:    #D1D5DB;
+
+  --cs-success:          #22C55E;
+  --cs-warning:          #F59E0B;
+  --cs-error:            #EF4444;
+  --cs-info:             #3B82F6;
 }
 
 .dark {
@@ -32,6 +57,32 @@
   --text-muted:     #52525B;
   --border:         #27272A;
   --border-subtle:  #18181B;
+
+  /* ── Courtside tokens — dark overrides ──
+     Values reproduce the existing legacy dark palette (zinc-950/900/800)
+     so dark mode is visually unchanged, while every page built on cs-*
+     now becomes fully theme-aware in light mode. */
+  --cs-bg-primary:       #09090B;
+  --cs-surface-primary:  #18181B;
+  --cs-surface-elevated: #27272A;
+  --cs-surface-overlay:  #27272A;
+
+  --cs-accent-primary:   #E8112D;
+  --cs-accent-pressed:   #B50022;
+  --cs-accent-subtle:    rgba(232,17,45,0.16);
+
+  --cs-text-primary:     #FAFAFA;
+  --cs-text-secondary:   #A1A1AA;
+  --cs-text-tertiary:    #52525B;
+  --cs-text-on-accent:   #FFFFFF;
+
+  --cs-border-subtle:    #27272A;
+  --cs-border-medium:    #3F3F46;
+
+  --cs-success:          #22C55E;
+  --cs-warning:          #F59E0B;
+  --cs-error:            #EF4444;
+  --cs-info:             #3B82F6;
 }
 
 /* === UTILITY: Sharp Corners & Scrollbars === */
@@ -53,6 +104,27 @@ button.rounded-xl {
 }
 button.rounded-lg {
   border-radius: 0.5rem !important;
+}
+
+/* === Courtside light-mode shape escapes ===
+   The global !important on inputs/buttons above forces 2px. Courtside
+   requires soft 12/16/pill radii on light. These classes opt in. */
+input.cs-input,
+button.cs-pill,
+.cs-pill {
+  border-radius: 9999px !important;
+}
+input.cs-radius-md,
+.cs-radius-md {
+  border-radius: 12px !important;
+}
+.cs-radius-card,
+button.cs-radius-card {
+  border-radius: 16px !important;
+}
+.cs-radius-sm,
+button.cs-radius-sm {
+  border-radius: 8px !important;
 }
 
 ::-webkit-scrollbar {

@@ -800,7 +800,7 @@ export const HostConsole: React.FC = () => {
     const activePlayers = pendingAction?.team === 'A' ? teamAPlayers : teamBPlayers;
 
     return (
-        <div className={`min-h-screen font-sans flex flex-col overflow-hidden ${L ? 'bg-slate-50 text-slate-900' : 'bg-black text-white'}`}>
+        <div className={`min-h-screen font-sans flex flex-col overflow-hidden ${L ? 'bg-[#F0EEE9] text-slate-900' : 'bg-black text-white'}`}>
             <style>{CONSOLE_CSS}</style>
 
             {/* ── HEADER ────────────────────────────────────────────────────── */}
@@ -963,7 +963,7 @@ export const HostConsole: React.FC = () => {
             </header>
 
             {/* ── JUMBOTRON SCOREBOARD ──────────────────────────────────────── */}
-            <div className={`flex-1 relative flex flex-col justify-center overflow-hidden ${L ? 'bg-slate-100' : 'bg-black'}`}>
+            <div className={`flex-1 relative flex flex-col justify-center overflow-hidden ${L ? 'bg-[#F0EEE9]' : 'bg-black'}`}>
                 <div className={`absolute inset-0 pointer-events-none ${L ? 'bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.6)_0%,_transparent_70%)]' : 'bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black'}`}></div>
 
                 <div className="relative z-10 w-full max-w-7xl mx-auto p-4 lg:p-6">

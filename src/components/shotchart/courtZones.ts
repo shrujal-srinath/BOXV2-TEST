@@ -48,6 +48,10 @@ export const COURT = {
 // ── Zone definitions with centroids ──────────────────────────────────────────
 
 export const ZONES: Record<ShotZoneId, ZoneDefinition> = {
+    at_rim: {
+        id: 'at_rim', label: 'At rim / Dunk', shortLabel: 'RIM',
+        pointValue: 2, cx: 50, cy: 10.5,
+    },
     restricted: {
         id: 'restricted', label: 'Restricted area', shortLabel: 'RA',
         pointValue: 2, cx: 50, cy: 12,
@@ -123,42 +127,37 @@ export function classifyZone(x: number, y: number): ShotZoneId {
         threePointRadius, threeCornerX, threeCornerMaxY } = COURT;
 
     const dx = x - basketX;
-    const dy = y - basketY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dist = Math.sqrt(dx * dx + (y - basketY) * (y - basketY));
 
-    // 1. Restricted area
-    if (dist <= restrictedRadius + 2 && y < paintTop * 0.6) {
-        return 'restricted';
-    }
+    // 1. At-rim (very close to basket — dunk/tip zone)
+    if (dist <= 1.6) return 'at_rim';
 
-    // 2. Paint (inside key, outside restricted)
+    // 2. Paint (includes restricted check)
     if (x >= paintLeft && x <= paintRight && y <= paintTop) {
-        if (dist <= restrictedRadius + 2) return 'restricted';
+        if (dist <= restrictedRadius) return 'restricted';
         return x < basketX ? 'paint_left' : 'paint_right';
     }
+    // Restricted arc that extends slightly beyond paint edges
+    if (dist <= restrictedRadius && y <= basketY + restrictedRadius) return 'restricted';
 
-    // 3. Three-point territory
-    const behindArc = dist >= threePointRadius;
-    const inCorner = y <= threeCornerMaxY && (x <= threeCornerX + 8 || x >= 100 - threeCornerX - 8);
-
-    // Corner 3s
-    if (inCorner) {
-        return x < basketX ? 'three_corner_left' : 'three_corner_right';
+    // 3. Corner 3 — only in the true corner column (no fudge factor)
+    if (y <= threeCornerMaxY) {
+        if (x <= threeCornerX) return 'three_corner_left';
+        if (x >= 100 - threeCornerX) return 'three_corner_right';
     }
 
-    if (behindArc) {
-        if (y <= threeCornerMaxY) {
-            return x < basketX ? 'three_corner_left' : 'three_corner_right';
-        }
-        if (x < 22) return 'three_wing_left';
-        if (x > 78) return 'three_wing_right';
-        if (x < 38) return 'three_top_left';
-        if (x > 62) return 'three_top_right';
-        return 'three_top_center';
+    // 4. Beyond arc — split by angle from basket for accurate zone boundaries
+    if (dist >= threePointRadius) {
+        const ang = Math.atan2(y - basketY, x - basketX) * 180 / Math.PI;
+        if (ang < 25)   return 'three_wing_right';
+        if (ang < 65)   return 'three_top_right';
+        if (ang <= 115) return 'three_top_center';
+        if (ang <= 155) return 'three_top_left';
+        return 'three_wing_left';
     }
 
-    // 4. Mid-range
-    if (y <= 24) {
+    // 5. Mid-range
+    if (y <= paintTop) {
         return x < basketX ? 'mid_baseline_left' : 'mid_baseline_right';
     }
     if (y <= paintTop + 10) {

@@ -1,390 +1,731 @@
 // src/components/refereebox/PiAdvancedShotFlow.tsx
 // ═══════════════════════════════════════════════════════════════
-// THE BOX — Pi Advanced Mode Shot Attribution Screen
+// Full-screen shot-attribution flow for stats/advanced mode.
+// Takes over the entire screen so the referee has maximum working
+// space — a prominent live-score header keeps the game state
+// visible at all times.
 //
-// Shown after a score button press in stats/advanced mode.
-// Layout:  [Compressed header]
-//          [Court map (55%)] | [Player grid (45%)]
-//          [Skip] ──────────────────── [Record Shot]
+// Steps:
+//   field goal (stats or advanced)  →  COURT → PLAYER → CONTEXT
+//   free throw                      →  PLAYER → CONTEXT
 //
-// For +1 FT or stats mode: court is hidden, players take full width.
-// Everything uses vw/vh — no hard pixel sizes — for display flexibility.
+// Header (96px) shows live scores, team names, period + clock so
+// the referee never loses track of the game state.
 // ═══════════════════════════════════════════════════════════════
 
-import React, { useState } from 'react';
-import { CompressedHeader } from './LockedScoreboard';
-import PiCourtMap from './PiCourtMap';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import PiHexCourt from './PiHexCourt';
+import { ZONES, SHOT_ATTRIBUTES } from '../shotchart/courtZones';
 import type { ScorePendingEvent, Player, TeamState, ClockState } from '../../hooks/useRefereeBox';
 import type { ShotZoneId } from '../shotchart/types/shotTypes';
+import { useShotChart } from '../../hooks/useShotChart';
+import { useReducedMotion } from '../../lib/colorPalettes';
 
 interface PiAdvancedShotFlowProps {
     event: ScorePendingEvent;
-    teamA: TeamState;
-    teamB: TeamState;
-    teamAColor: string;
-    teamBColor: string;
+    teamA: TeamState; teamB: TeamState;
+    teamAColor: string; teamBColor: string;
     clock: ClockState;
+    /** Active game code — used to fetch shot history for the in-court heatmap. */
+    gameCode?: string;
     onAttribute: (data: {
-        team: 'A' | 'B';
-        points: number;
-        playerId: string | null;
-        playerName: string | null;
-        zone?: string;
-        x?: number;
-        y?: number;
-        period?: number;
-        gameClockSec?: number;
+        team: 'A' | 'B'; points: number;
+        playerId: string | null; playerName: string | null;
+        zone?: string; x?: number; y?: number;
+        period?: number; gameClockSec?: number; attributes?: string[];
     }) => void;
     onSkip: () => void;
 }
 
+type Step = 'court' | 'player' | 'context';
+
+const PLAYER_SECONDS  = 12;  // 12s to pick player — enough to glance at roster
+const CONTEXT_SECONDS = 9;   // 9s to add context tags
+/** After a court tap, wait this long before auto-advancing if the ref doesn't act. */
+const COURT_IDLE_COMMIT_MS = 1500;
+
+const RM  = "'JetBrains Mono', monospace";
+const OSW = "'Oswald', sans-serif";
+
+// ── Helpers ───────────────────────────────────────────────────
+function msToDisplay(ms: number) {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+function pLabel(period: number, total: number) {
+    return period <= total ? `Q${period}` : `OT${period - total}`;
+}
+
+// ── Countdown ring ─────────────────────────────────────────────
+function CountdownRing({ secondsLeft, total, color }: { secondsLeft: number; total: number; color: string }) {
+    const R = 13, C = 2 * Math.PI * R;
+    const frac = Math.max(0, Math.min(1, secondsLeft / total));
+    return (
+        <div style={{ position: 'relative', width: 34, height: 34, flexShrink: 0 }}>
+            <svg width={34} height={34} style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx={17} cy={17} r={R} stroke="rgba(255,255,255,0.1)" strokeWidth={2.5} fill="none" />
+                <circle cx={17} cy={17} r={R} stroke={color} strokeWidth={2.5} fill="none"
+                    strokeLinecap="round"
+                    strokeDasharray={`${frac * C} ${C}`}
+                    style={{ transition: 'stroke-dasharray 1s linear', filter: `drop-shadow(0 0 4px ${color})` }}
+                />
+            </svg>
+            <span style={{
+                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: OSW, fontWeight: 700, fontSize: 13, color, fontStyle: 'italic',
+            }}>{secondsLeft}</span>
+        </div>
+    );
+}
+
+// ── Prominent game-state header ───────────────────────────────
+// Always visible so the referee knows the live score while attributing.
+function GameHeader({ teamA, teamB, teamAColor, teamBColor, clock, scoringTeam }: {
+    teamA: TeamState; teamB: TeamState;
+    teamAColor: string; teamBColor: string;
+    clock: ClockState; scoringTeam: 'A' | 'B';
+}) {
+    const period = pLabel(clock.period, clock.totalPeriods);
+    const cA = scoringTeam === 'A';
+    const cB = scoringTeam === 'B';
+
+    return (
+        <div style={{
+            height: 96, flexShrink: 0,
+            display: 'grid', gridTemplateColumns: '1fr 110px 1fr',
+            background: '#05070D',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            overflow: 'hidden',
+        }}>
+            {/* ── Team A ──────────────────────────────── */}
+            <div style={{
+                display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                padding: '0 18px', gap: 4, position: 'relative', overflow: 'hidden',
+                background: cA ? `linear-gradient(90deg, ${teamAColor}18 0%, transparent 100%)` : 'transparent',
+            }}>
+                {/* Left accent bar — only for scoring team */}
+                {cA && <div style={{
+                    position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
+                    background: `linear-gradient(180deg, ${teamAColor}, ${teamAColor}88)`,
+                    boxShadow: `2px 0 12px ${teamAColor}60`,
+                }} />}
+
+                {/* Team name */}
+                <div style={{
+                    fontFamily: OSW, fontWeight: 700, fontStyle: 'italic',
+                    fontSize: 13, letterSpacing: '0.18em', textTransform: 'uppercase',
+                    color: cA ? teamAColor : 'rgba(255,255,255,0.6)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    paddingLeft: cA ? 8 : 0,
+                }}>{teamA.name}</div>
+
+                {/* Score — the hero number */}
+                <div style={{
+                    fontFamily: OSW, fontWeight: 900, fontStyle: 'italic',
+                    fontSize: cA ? 58 : 48, lineHeight: 1,
+                    letterSpacing: '-0.03em',
+                    color: cA ? '#fff' : 'rgba(255,255,255,0.6)',
+                    textShadow: cA ? `0 0 32px ${teamAColor}70` : 'none',
+                    paddingLeft: cA ? 8 : 0,
+                    transition: 'font-size 0.15s, color 0.15s',
+                }}>{teamA.score}</div>
+
+                {/* Fouls / timeouts row */}
+                <div style={{
+                    display: 'flex', gap: 10, paddingLeft: cA ? 8 : 0,
+                }}>
+                    <span style={{ fontFamily: RM, fontSize: 9, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em' }}>
+                        {teamA.fouls}F
+                    </span>
+                    <span style={{ fontFamily: RM, fontSize: 9, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em' }}>
+                        {teamA.timeouts}TO
+                    </span>
+                </div>
+            </div>
+
+            {/* ── Center: period + clock ───────────────── */}
+            <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: 3,
+                borderLeft: '1px solid rgba(255,255,255,0.05)',
+                borderRight: '1px solid rgba(255,255,255,0.05)',
+            }}>
+                {/* Period chip */}
+                <div style={{
+                    padding: '2px 10px', borderRadius: 100,
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    fontFamily: RM, fontSize: 9, fontWeight: 700,
+                    letterSpacing: '0.2em', color: 'rgba(255,255,255,0.55)',
+                    textTransform: 'uppercase',
+                }}>{period}</div>
+
+                {/* Game clock */}
+                <div style={{
+                    fontFamily: OSW, fontWeight: 700, fontStyle: 'italic',
+                    fontSize: 26, lineHeight: 1, letterSpacing: '0.02em',
+                    color: 'rgba(255,255,255,0.9)',
+                    fontVariantNumeric: 'tabular-nums',
+                }}>{msToDisplay(clock.gameMs)}</div>
+
+                {/* Running indicator */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    fontFamily: RM, fontSize: 8, letterSpacing: '0.14em',
+                    color: clock.isRunning ? '#22c55e' : 'rgba(255,255,255,0.2)',
+                }}>
+                    <div style={{
+                        width: 5, height: 5, borderRadius: '50%',
+                        background: clock.isRunning ? '#22c55e' : 'rgba(255,255,255,0.15)',
+                        boxShadow: clock.isRunning ? '0 0 6px #22c55e' : 'none',
+                        animation: clock.isRunning ? 'piClockDot 1s ease-in-out infinite' : 'none',
+                    }} />
+                    {clock.isRunning ? 'LIVE' : 'STOPPED'}
+                </div>
+            </div>
+
+            {/* ── Team B ──────────────────────────────── */}
+            <div style={{
+                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-end',
+                padding: '0 18px', gap: 4, position: 'relative', overflow: 'hidden',
+                background: cB ? `linear-gradient(270deg, ${teamBColor}18 0%, transparent 100%)` : 'transparent',
+            }}>
+                {cB && <div style={{
+                    position: 'absolute', right: 0, top: 0, bottom: 0, width: 4,
+                    background: `linear-gradient(180deg, ${teamBColor}, ${teamBColor}88)`,
+                    boxShadow: `-2px 0 12px ${teamBColor}60`,
+                }} />}
+
+                <div style={{
+                    fontFamily: OSW, fontWeight: 700, fontStyle: 'italic',
+                    fontSize: 13, letterSpacing: '0.18em', textTransform: 'uppercase',
+                    color: cB ? teamBColor : 'rgba(255,255,255,0.6)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    paddingRight: cB ? 8 : 0,
+                }}>{teamB.name}</div>
+
+                <div style={{
+                    fontFamily: OSW, fontWeight: 900, fontStyle: 'italic',
+                    fontSize: cB ? 58 : 48, lineHeight: 1,
+                    letterSpacing: '-0.03em',
+                    color: cB ? '#fff' : 'rgba(255,255,255,0.6)',
+                    textShadow: cB ? `0 0 32px ${teamBColor}70` : 'none',
+                    paddingRight: cB ? 8 : 0,
+                    transition: 'font-size 0.15s, color 0.15s',
+                }}>{teamB.score}</div>
+
+                <div style={{ display: 'flex', gap: 10, paddingRight: cB ? 8 : 0 }}>
+                    <span style={{ fontFamily: RM, fontSize: 9, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em' }}>
+                        {teamB.fouls}F
+                    </span>
+                    <span style={{ fontFamily: RM, fontSize: 9, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em' }}>
+                        {teamB.timeouts}TO
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
 export default function PiAdvancedShotFlow({
-    event, teamA, teamB, teamAColor, teamBColor, clock, onAttribute, onSkip,
+    event, teamA, teamB, teamAColor, teamBColor, clock, gameCode, onAttribute, onSkip,
 }: PiAdvancedShotFlowProps) {
-    const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-    const [selectedZone, setSelectedZone] = useState<ShotZoneId | null>(null);
-    const [courtX, setCourtX] = useState<number | null>(null);
-    const [courtY, setCourtY] = useState<number | null>(null);
-
-    const { team, points, players, gameMode } = event;
+    const { team, points, players } = event;
     const teamColor = team === 'A' ? teamAColor : teamBColor;
-    const teamName = team === 'A' ? teamA.name : teamB.name;
+    const teamName  = team === 'A' ? teamA.name : teamB.name;
+    const reducedMotion = useReducedMotion();
+
+    // Pull live shot history for the in-court heatmap.
+    const { allShots } = useShotChart(gameCode ?? null);
+
+    // Free throws (+1) skip the court — there's no location to record.
+    // Free throw → player → context.    Field goal → court → player → context.
     const isFreeThrow = points === 1;
-    const showCourt = !isFreeThrow && gameMode === 'advanced';
+    const steps: Step[] = isFreeThrow ? ['player', 'context'] : ['court', 'player', 'context'];
 
-    // At least one attribution required to enable Record
-    const canRecord = selectedPlayer !== null || selectedZone !== null;
+    const [stepIndex, setStepIndex]       = useState(0);
+    const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+    const [selectedZone,   setSelectedZone]   = useState<ShotZoneId | null>(null);
+    const [courtX,         setCourtX]         = useState<number | null>(null);
+    const [courtY,         setCourtY]         = useState<number | null>(null);
+    const [selectedAttrs,  setSelectedAttrs]  = useState<Set<string>>(() => new Set());
+    const [secondsLeft,    setSecondsLeft]    = useState<number | null>(null);
+    /** Idle commit countdown after a court tap — null when no tap yet. */
+    const [courtIdleMsLeft, setCourtIdleMsLeft] = useState<number | null>(null);
 
-    function handleZoneSelect(zone: ShotZoneId, x: number, y: number) {
+    const step          = steps[stepIndex];
+    const doneRef       = useRef(false);
+    const courtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const courtIdleStartRef = useRef<number | null>(null);
+
+    const goNext = useCallback(() => setStepIndex(i => Math.min(i + 1, steps.length - 1)), []);
+    const goPrev = useCallback(() => setStepIndex(i => Math.max(i - 1, 0)), []);
+
+    const finalize = useCallback((opts: { unattributed?: boolean } = {}) => {
+        if (doneRef.current) return;
+        doneRef.current = true;
+        const player = opts.unattributed ? null : selectedPlayer;
+        onAttribute({
+            team, points,
+            playerId:     player?.id   ?? null,
+            playerName:   player?.name ?? null,
+            zone:         isFreeThrow ? 'free_throw' : (selectedZone ?? 'unlocated'),
+            x:            isFreeThrow ? undefined : (courtX ?? undefined),
+            y:            isFreeThrow ? undefined : (courtY ?? undefined),
+            period:       clock.period,
+            gameClockSec: Math.ceil(clock.gameMs / 1000),
+            attributes:   Array.from(selectedAttrs),
+        });
+    }, [selectedPlayer, selectedZone, courtX, courtY, selectedAttrs, team, points, clock, onAttribute, isFreeThrow]);
+
+    useEffect(() => {
+        if (step === 'player')       setSecondsLeft(PLAYER_SECONDS);
+        else if (step === 'context') setSecondsLeft(CONTEXT_SECONDS);
+        else                         setSecondsLeft(null);
+    }, [step]);
+
+    useEffect(() => {
+        if (secondsLeft === null) return;
+        if (secondsLeft <= 0) {
+            if (step === 'player')       finalize({ unattributed: true });
+            else if (step === 'context') finalize();
+            return;
+        }
+        const t = setTimeout(() => setSecondsLeft(v => v === null ? null : v - 1), 1000);
+        return () => clearTimeout(t);
+    }, [secondsLeft, step, finalize]);
+
+    useEffect(() => () => { if (courtTimerRef.current) clearTimeout(courtTimerRef.current); }, []);
+
+    // ── Idle commit countdown (drives the confirm strip progress) ────
+    useEffect(() => {
+        if (step !== 'court' || selectedZone === null) {
+            if (courtTimerRef.current) clearTimeout(courtTimerRef.current);
+            setCourtIdleMsLeft(null);
+            courtIdleStartRef.current = null;
+            return;
+        }
+        // Restart the idle window every time the selection changes.
+        courtIdleStartRef.current = Date.now();
+        setCourtIdleMsLeft(COURT_IDLE_COMMIT_MS);
+        const start = courtIdleStartRef.current;
+        const tickHandle: ReturnType<typeof setInterval> = setInterval(() => {
+            if (courtIdleStartRef.current !== start) return; // superseded
+            const remaining = COURT_IDLE_COMMIT_MS - (Date.now() - start);
+            if (remaining <= 0) {
+                clearInterval(tickHandle);
+                setCourtIdleMsLeft(0);
+                goNext();
+            } else {
+                setCourtIdleMsLeft(remaining);
+            }
+        }, 60);
+        return () => clearInterval(tickHandle);
+    }, [step, selectedZone, courtX, courtY, goNext]);
+
+    function handleCourtTap(zone: ShotZoneId, x: number, y: number) {
         setSelectedZone(zone);
         setCourtX(x);
         setCourtY(y);
+        // The idle-commit useEffect above watches selectedZone/courtX/courtY
+        // and restarts the COURT_IDLE_COMMIT_MS countdown.
     }
 
-    function handleRecord() {
-        const gameClockSec = Math.ceil(clock.gameMs / 1000);
-        onAttribute({
-            team,
-            points,
-            playerId: selectedPlayer?.id ?? null,
-            playerName: selectedPlayer?.name ?? null,
-            zone: selectedZone ?? 'unlocated',
-            x: courtX ?? undefined,
-            y: courtY ?? undefined,
-            period: clock.period,
-            gameClockSec,
+    function handleConfirmLocation() {
+        if (courtTimerRef.current) clearTimeout(courtTimerRef.current);
+        goNext();
+    }
+
+    function handleSkipLocation() {
+        if (courtTimerRef.current) clearTimeout(courtTimerRef.current);
+        setSelectedZone('unlocated');
+        setCourtX(null);
+        setCourtY(null);
+        goNext();
+    }
+
+    function handlePlayerSelect(p: Player) { setSelectedPlayer(p); goNext(); }
+    function handleMarkUnattributed()       { setSelectedPlayer(null); goNext(); }
+    function toggleAttr(id: string) {
+        setSelectedAttrs(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
         });
     }
 
-    const numCols = players.length <= 4 ? 2 : 3;
+    const numCols   = players.length <= 4 ? 2 : 3;
+    const zoneShort = selectedZone ? (ZONES[selectedZone]?.shortLabel ?? selectedZone) : null;
+    const zoneLabel = selectedZone ? (ZONES[selectedZone]?.label      ?? selectedZone) : null;
+
+    const promptText =
+        step === 'court'   ? 'TAP SHOT LOCATION'
+        : step === 'player'  ? 'WHO SCORED?'
+        : 'SHOT CONTEXT';
 
     return (
         <div style={{
             width: '100vw', height: '100dvh',
-            background: '#050505',
-            display: 'flex', flexDirection: 'column',
-            overflow: 'hidden',
-            fontFamily: "'Oswald', sans-serif",
+            background: '#060810',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            fontFamily: OSW,
         }}>
-            {/* ── Compressed header ── */}
-            <CompressedHeader
-                teamA={teamA}
-                teamB={teamB}
-                clock={clock}
-                teamAColor={teamAColor}
-                teamBColor={teamBColor}
+
+            {/* ══ 1. PROMINENT GAME HEADER ══════════════════════ */}
+            <GameHeader
+                teamA={teamA} teamB={teamB}
+                teamAColor={teamAColor} teamBColor={teamBColor}
+                clock={clock} scoringTeam={team}
             />
 
-            {/* ── Pending shot banner ── */}
-            <div style={{
-                height: '2.8vh',
-                minHeight: 22,
-                background: `linear-gradient(90deg, ${teamColor}18, ${teamColor}08, ${teamColor}18)`,
-                borderBottom: `1px solid ${teamColor}30`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1vw',
-                flexShrink: 0,
-            }}>
-                <div style={{
-                    width: '0.5vw', height: '0.5vw', minWidth: 5, minHeight: 5,
-                    borderRadius: '50%', background: teamColor,
-                    boxShadow: `0 0 8px ${teamColor}`,
-                    animation: 'piShotPulse 1s ease-in-out infinite',
-                }} />
-                <span style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 'clamp(9px, 1.4vh, 13px)',
-                    fontWeight: 700, letterSpacing: '0.25em',
-                    color: teamColor, textTransform: 'uppercase',
-                }}>
-                    {teamName}
-                    {' '}·{' '}
-                    {isFreeThrow ? 'FREE THROW' : `+${points}PT`}
-                    {' '}·{' '}
-                    ATTRIBUTE SHOT
-                </span>
-                <div style={{
-                    width: '0.5vw', height: '0.5vw', minWidth: 5, minHeight: 5,
-                    borderRadius: '50%', background: teamColor,
-                    boxShadow: `0 0 8px ${teamColor}`,
-                    animation: 'piShotPulse 1s ease-in-out infinite 0.5s',
-                }} />
+            {/* ══ 2. STEP PROGRESS STRIP ═══════════════════════ */}
+            <div style={{ display: 'flex', gap: 3, padding: '0 4px', height: 4, flexShrink: 0 }}>
+                {steps.map((s, i) => (
+                    <div key={s} style={{
+                        flex: 1, height: '100%', borderRadius: 2,
+                        background: i <= stepIndex ? teamColor : 'rgba(255,255,255,0.07)',
+                        boxShadow: i === stepIndex ? `0 0 10px ${teamColor}` : 'none',
+                        transition: 'background 0.25s, box-shadow 0.25s',
+                    }} />
+                ))}
             </div>
 
-            {/* ── Body: court + players ── */}
+            {/* ══ 3. PROMPT BANNER ═════════════════════════════ */}
             <div style={{
-                flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0,
+                height: 44, flexShrink: 0,
+                background: `linear-gradient(90deg, ${teamColor}14 0%, ${teamColor}06 50%, ${teamColor}14 100%)`,
+                borderBottom: `1px solid ${teamColor}22`,
+                display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px',
             }}>
-                {/* Court panel */}
-                {showCourt && (
-                    <div style={{
-                        width: '55%', borderRight: `1px solid rgba(255,255,255,0.05)`,
-                        display: 'flex', flexDirection: 'column',
-                        background: '#0a0a0a',
-                    }}>
-                        <PiCourtMap
-                            teamColor={teamColor}
-                            selectedZone={selectedZone}
-                            selectedX={courtX}
-                            selectedY={courtY}
-                            onZoneSelect={handleZoneSelect}
-                        />
-                    </div>
-                )}
-
-                {/* Player panel */}
+                {/* Pulsing dot */}
                 <div style={{
-                    flex: 1, display: 'flex', flexDirection: 'column',
-                    padding: 'clamp(8px,1.5vh,16px) clamp(8px,1.5vw,16px)',
-                    gap: 'clamp(8px,1.2vh,12px)',
-                    overflowY: 'auto',
+                    width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                    background: teamColor, boxShadow: `0 0 8px ${teamColor}`,
+                    animation: 'piShotPulse 1s ease-in-out infinite',
+                }} />
+
+                {/* Team + points badge */}
+                <span style={{
+                    fontFamily: RM, fontSize: 11, fontWeight: 700, color: teamColor,
+                    letterSpacing: '0.16em', textTransform: 'uppercase', whiteSpace: 'nowrap',
                 }}>
-                    {/* Panel header */}
-                    <div style={{
-                        display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0,
-                    }}>
-                        <div style={{
-                            width: 4, height: 'clamp(16px,2.5vh,22px)',
-                            borderRadius: 2, background: teamColor,
-                            boxShadow: `0 0 8px ${teamColor}55`,
-                        }} />
+                    {teamName.slice(0, 14)}
+                </span>
+                <span style={{
+                    padding: '2px 8px', borderRadius: 100,
+                    background: teamColor, color: '#000',
+                    fontFamily: RM, fontSize: 10, fontWeight: 800, letterSpacing: '0.06em',
+                    flexShrink: 0,
+                }}>
+                    +{points}PT
+                </span>
+
+                {/* Step label */}
+                <span style={{
+                    fontFamily: OSW, fontStyle: 'italic', fontWeight: 700,
+                    fontSize: 14, color: 'rgba(255,255,255,0.65)',
+                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                }}>
+                    {promptText}
+                </span>
+
+                {/* Right: retained chips + countdown */}
+                <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignItems: 'center', flexShrink: 0 }}>
+                    {zoneShort && step !== 'court' && (
                         <span style={{
-                            fontFamily: "'Barlow Condensed', sans-serif",
-                            fontWeight: 800, fontSize: 'clamp(13px,2vh,17px)',
-                            color: 'rgba(255,255,255,0.85)',
-                            letterSpacing: '0.15em', textTransform: 'uppercase',
-                        }}>
-                            {teamName} ROSTER
-                        </span>
-                        {selectedPlayer && (
+                            padding: '2px 8px', borderRadius: 100, background: `${teamColor}1c`,
+                            border: `1px solid ${teamColor}3e`, fontFamily: RM, fontSize: 9,
+                            fontWeight: 700, color: teamColor, letterSpacing: '0.1em',
+                        }}>◎ {zoneShort}</span>
+                    )}
+                    {selectedPlayer && (
+                        <span style={{
+                            padding: '2px 8px', borderRadius: 100, background: `${teamColor}1c`,
+                            border: `1px solid ${teamColor}3e`, fontFamily: RM, fontSize: 9,
+                            fontWeight: 700, color: teamColor, letterSpacing: '0.1em',
+                        }}>#{selectedPlayer.number}</span>
+                    )}
+                    {secondsLeft !== null && (
+                        <CountdownRing
+                            secondsLeft={secondsLeft}
+                            total={step === 'player' ? PLAYER_SECONDS : CONTEXT_SECONDS}
+                            color={teamColor}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* ══ 4. STEP BODY ═════════════════════════════════ */}
+            <div key={step} style={{
+                flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden',
+                animation: reducedMotion ? 'none' : 'piStepFade 0.18s ease-out',
+            }}>
+
+                {/* COURT — hex court, absolute-positioned so height resolves correctly */}
+                {step === 'court' && (
+                    <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#07090E', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                            <PiHexCourt
+                                teamColor={teamColor}
+                                onZoneSelect={handleCourtTap}
+                                selectedZone={selectedZone}
+                                selectedX={courtX}
+                                selectedY={courtY}
+                                existingShots={allShots}
+                            />
+                        </div>
+
+                        {/* Confirm strip — appears once a hex is tapped */}
+                        {selectedZone && (
                             <div style={{
-                                marginLeft: 'auto',
-                                padding: '2px 8px', borderRadius: '100px',
-                                background: `${teamColor}20`, border: `1px solid ${teamColor}40`,
+                                flexShrink: 0,
+                                display: 'flex', alignItems: 'stretch',
+                                background: 'rgba(7,9,14,0.96)',
+                                borderTop: `1px solid ${teamColor}44`,
+                                animation: reducedMotion ? 'none' : 'piStepFade 0.18s ease-out',
                             }}>
-                                <span style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: 'clamp(8px,1.2vh,10px)', fontWeight: 700,
-                                    color: teamColor, letterSpacing: '0.1em',
+                                {/* RE-TAP hint */}
+                                <div style={{
+                                    flex: 1, display: 'flex', flexDirection: 'column',
+                                    justifyContent: 'center', padding: '8px 14px',
+                                    borderRight: '1px solid rgba(255,255,255,0.06)',
                                 }}>
-                                    #{selectedPlayer.number}
-                                </span>
+                                    <span style={{
+                                        fontFamily: RM, fontSize: 8, fontWeight: 700,
+                                        letterSpacing: '0.22em', color: 'rgba(255,255,255,0.6)',
+                                        textTransform: 'uppercase',
+                                    }}>SELECTED — TAP AGAIN TO MOVE</span>
+                                    <span style={{
+                                        fontFamily: OSW, fontStyle: 'italic', fontWeight: 700,
+                                        fontSize: 18, color: teamColor, marginTop: 2,
+                                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                    }}>
+                                        {zoneLabel ?? selectedZone}
+                                    </span>
+                                </div>
+
+                                {/* CONFIRM button (with idle commit progress bar) */}
+                                <button
+                                    onClick={handleConfirmLocation}
+                                    style={{
+                                        position: 'relative',
+                                        minWidth: 200,
+                                        padding: '0 24px',
+                                        background: teamColor, color: '#000',
+                                        border: 'none',
+                                        fontFamily: RM, fontSize: 13, fontWeight: 800,
+                                        letterSpacing: '0.18em', textTransform: 'uppercase',
+                                        cursor: 'pointer', userSelect: 'none',
+                                        WebkitTapHighlightColor: 'transparent', overflow: 'hidden',
+                                        boxShadow: `inset 0 0 24px ${teamColor}88`,
+                                    }}
+                                >
+                                    {/* Idle progress bar */}
+                                    {courtIdleMsLeft !== null && (
+                                        <div style={{
+                                            position: 'absolute', left: 0, top: 0, bottom: 0,
+                                            width: `${(courtIdleMsLeft / COURT_IDLE_COMMIT_MS) * 100}%`,
+                                            background: 'rgba(255,255,255,0.18)',
+                                            pointerEvents: 'none',
+                                            transition: 'width 60ms linear',
+                                        }} />
+                                    )}
+                                    <span style={{ position: 'relative' }}>✓ CONFIRM →</span>
+                                </button>
                             </div>
                         )}
                     </div>
+                )}
 
-                    {/* Player grid */}
-                    {players.length > 0 ? (
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: `repeat(${numCols}, 1fr)`,
-                            gap: 'clamp(6px,1vh,10px)',
-                        }}>
-                            {players.map(player => {
-                                const isSelected = selectedPlayer?.id === player.id;
-                                return (
-                                    <button
-                                        key={player.id}
-                                        onClick={() => setSelectedPlayer(isSelected ? null : player)}
+                {/* PLAYER */}
+                {step === 'player' && (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '12px 16px', overflowY: 'auto' }}>
+                        {players.length > 0 ? (
+                            <div style={{
+                                flex: 1, display: 'grid', gridTemplateColumns: `repeat(${numCols},1fr)`,
+                                gap: 12, alignContent: 'start',
+                            }}>
+                                {players.map(p => (
+                                    <button key={p.id} onClick={() => handlePlayerSelect(p)}
                                         style={{
-                                            display: 'flex', flexDirection: 'column',
-                                            alignItems: 'center', justifyContent: 'center',
-                                            gap: 'clamp(2px,0.6vh,5px)',
-                                            padding: 'clamp(8px,1.5vh,14px) clamp(4px,0.8vw,10px)',
-                                            borderRadius: '10px',
-                                            border: `2px solid ${isSelected ? teamColor : 'rgba(255,255,255,0.07)'}`,
-                                            background: isSelected
-                                                ? `${teamColor}20`
-                                                : 'rgba(255,255,255,0.02)',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.15s ease',
-                                            boxShadow: isSelected ? `0 0 16px ${teamColor}30` : 'none',
-                                            WebkitTapHighlightColor: 'transparent',
-                                            userSelect: 'none',
-                                            touchAction: 'manipulation',
+                                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                            gap: 4, minHeight: 80, padding: '12px 8px', borderRadius: 12,
+                                            border: '2px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.025)',
+                                            cursor: 'pointer', transition: 'transform 0.1s, box-shadow 0.1s, border-color 0.1s, background 0.1s',
+                                            WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation', userSelect: 'none',
                                         }}
+                                        onPointerDown={e => { const t = e.currentTarget; t.style.transform = 'scale(0.95)'; t.style.borderColor = teamColor; t.style.background = `${teamColor}1e`; t.style.boxShadow = `0 0 22px ${teamColor}33`; }}
+                                        onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                                        onPointerLeave={e => { const t = e.currentTarget; t.style.transform = 'scale(1)'; t.style.borderColor = 'rgba(255,255,255,0.07)'; t.style.background = 'rgba(255,255,255,0.025)'; t.style.boxShadow = 'none'; }}
                                     >
-                                        {/* Jersey number */}
-                                        <div style={{
-                                            fontFamily: "'Oswald', sans-serif",
-                                            fontWeight: 700,
-                                            fontSize: 'clamp(20px,4vh,36px)',
-                                            color: isSelected ? teamColor : 'rgba(255,255,255,0.85)',
-                                            lineHeight: 1,
-                                            letterSpacing: '-0.02em',
-                                            textShadow: isSelected ? `0 0 20px ${teamColor}` : 'none',
-                                            transition: 'all 0.15s',
-                                        }}>
-                                            {player.number}
+                                        <div style={{ fontFamily: OSW, fontStyle: 'italic', fontWeight: 700, fontSize: 38, color: '#fff', lineHeight: 1, letterSpacing: '-0.02em' }}>
+                                            {p.number}
                                         </div>
-                                        {/* Name */}
-                                        <div style={{
-                                            fontFamily: "'JetBrains Mono', monospace",
-                                            fontWeight: 700,
-                                            fontSize: 'clamp(7px,1.1vh,10px)',
-                                            color: isSelected ? teamColor : 'rgba(255,255,255,0.35)',
-                                            letterSpacing: '0.05em',
-                                            textTransform: 'uppercase',
-                                            textAlign: 'center',
-                                            lineHeight: 1.2,
-                                            maxWidth: '100%',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
-                                        }}>
-                                            {player.name}
+                                        <div style={{ fontFamily: RM, fontWeight: 700, fontSize: 9, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                                            {p.name}
                                         </div>
                                     </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: RM, fontSize: 11, color: 'rgba(255,255,255,0.16)', letterSpacing: '0.18em' }}>
+                                NO ROSTER — MARK UNATTRIBUTED
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* CONTEXT */}
+                {step === 'context' && (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '12px 16px', overflowY: 'auto' }}>
+                        <div style={{
+                            flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(120px,1fr))',
+                            gap: 10, alignContent: 'start',
+                        }}>
+                            {SHOT_ATTRIBUTES.map(attr => {
+                                const on = selectedAttrs.has(attr.id);
+                                return (
+                                    <button key={attr.id} onClick={() => toggleAttr(attr.id)}
+                                        style={{
+                                            minHeight: 56, borderRadius: 11,
+                                            border: `2px solid ${on ? teamColor : 'rgba(255,255,255,0.07)'}`,
+                                            background: on ? `${teamColor}1e` : 'rgba(255,255,255,0.025)',
+                                            color: on ? teamColor : 'rgba(255,255,255,0.55)',
+                                            fontFamily: OSW, fontStyle: 'italic', fontWeight: 700,
+                                            fontSize: 15, letterSpacing: '0.02em', textTransform: 'uppercase',
+                                            cursor: 'pointer', transition: 'all 0.12s',
+                                            boxShadow: on ? `0 0 14px ${teamColor}2e` : 'none',
+                                            WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+                                        }}
+                                    >{attr.label}</button>
                                 );
                             })}
                         </div>
-                    ) : (
-                        <div style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: 'clamp(9px,1.3vh,11px)', color: 'rgba(255,255,255,0.2)',
-                            letterSpacing: '0.15em', textAlign: 'center',
-                        }}>
-                            NO ROSTER LOADED
-                        </div>
-                    )}
-
-                    {/* Skip player */}
-                    {players.length > 0 && (
-                        <button
-                            onClick={() => setSelectedPlayer(null)}
-                            style={{
-                                marginTop: 'auto',
-                                padding: 'clamp(6px,1vh,10px)',
-                                borderRadius: '8px',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                                background: 'transparent',
-                                color: 'rgba(255,255,255,0.2)',
-                                fontFamily: "'JetBrains Mono', monospace",
-                                fontSize: 'clamp(8px,1.1vh,10px)', fontWeight: 700,
-                                letterSpacing: '0.12em', textTransform: 'uppercase',
-                                cursor: 'pointer',
-                                WebkitTapHighlightColor: 'transparent',
-                                touchAction: 'manipulation',
-                                flexShrink: 0,
-                            }}
-                        >
-                            {selectedPlayer ? '✕  CLEAR PLAYER' : 'SKIP PLAYER SELECTION'}
-                        </button>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
-            {/* ── Bottom action bar ── */}
+            {/* ══ 5. ACTION FOOTER ═════════════════════════════ */}
             <div style={{
-                height: 'clamp(52px,8vh,72px)',
-                background: 'linear-gradient(180deg, #0a0a0a, #060606)',
+                height: 58, flexShrink: 0,
+                background: '#05070D',
                 borderTop: '1px solid rgba(255,255,255,0.05)',
                 display: 'flex', alignItems: 'center',
-                padding: '0 clamp(12px,2vw,24px)',
-                gap: 'clamp(8px,1.5vw,16px)',
-                flexShrink: 0,
+                padding: '0 14px', gap: 9,
             }}>
-                {/* Skip attribution */}
-                <button
-                    onClick={onSkip}
-                    style={{
-                        padding: 'clamp(8px,1.3vh,12px) clamp(14px,2.5vw,28px)',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: '#0a0a0a',
-                        color: 'rgba(255,255,255,0.3)',
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: 'clamp(9px,1.3vh,12px)', fontWeight: 700,
-                        letterSpacing: '0.1em', textTransform: 'uppercase',
-                        cursor: 'pointer', flexShrink: 0,
-                        WebkitTapHighlightColor: 'transparent',
-                        touchAction: 'manipulation',
-                    }}
-                >
-                    SKIP
-                </button>
+                {step === 'court' && (
+                    <>
+                        <FooterButton label="SKIP LOCATION" onClick={handleSkipLocation} />
+                        <div style={{ flex: 1 }} />
+                        <span style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: zoneLabel ? teamColor : 'rgba(255,255,255,0.22)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                            {zoneLabel ?? '— TAP COURT TO MARK —'}
+                        </span>
+                    </>
+                )}
 
-                {/* Status indicator */}
-                <div style={{
-                    flex: 1, display: 'flex', alignItems: 'center', gap: '6px',
-                    overflow: 'hidden',
-                }}>
-                    {canRecord && (
-                        <>
-                            {selectedPlayer && (
-                                <span style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: 'clamp(8px,1.1vh,10px)', color: teamColor,
-                                    fontWeight: 600, letterSpacing: '0.08em',
-                                    whiteSpace: 'nowrap',
-                                }}>
-                                    #{selectedPlayer.number}
+                {step === 'player' && (
+                    <>
+                        <FooterButton label="← BACK" onClick={goPrev} />
+                        <FooterButton label="UNATTRIBUTED" onClick={handleMarkUnattributed} />
+                        <div style={{ flex: 1 }} />
+                        <span style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.22)', textTransform: 'uppercase' }}>
+                            TAP THE SCORER
+                        </span>
+                    </>
+                )}
+
+                {step === 'context' && (
+                    <>
+                        <FooterButton label="← BACK" onClick={goPrev} />
+                        <FooterButton label="SKIP" onClick={() => finalize()} />
+                        <div style={{ flex: 1 }}>
+                            {selectedAttrs.size > 0 && (
+                                <span style={{ fontFamily: RM, fontSize: 9, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.06em' }}>
+                                    {selectedAttrs.size} TAG{selectedAttrs.size > 1 ? 'S' : ''}
                                 </span>
                             )}
-                            {selectedPlayer && selectedZone && (
-                                <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '10px' }}>·</span>
-                            )}
-                            {selectedZone && (
-                                <span style={{
-                                    fontFamily: "'JetBrains Mono', monospace",
-                                    fontSize: 'clamp(8px,1.1vh,10px)', color: 'rgba(255,255,255,0.4)',
-                                    fontWeight: 600, letterSpacing: '0.05em',
-                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                }}>
-                                    {selectedZone.replace(/_/g, ' ').toUpperCase()}
-                                </span>
-                            )}
-                        </>
-                    )}
-                </div>
+                        </div>
+                        <RecordButton onClick={() => finalize()} color={teamColor} />
+                    </>
+                )}
 
-                {/* Record Shot */}
-                <button
-                    onClick={canRecord ? handleRecord : undefined}
-                    style={{
-                        padding: 'clamp(8px,1.3vh,12px) clamp(16px,3vw,36px)',
-                        borderRadius: '10px',
-                        border: `2px solid ${canRecord ? teamColor : 'rgba(255,255,255,0.08)'}`,
-                        background: canRecord ? teamColor : 'rgba(255,255,255,0.03)',
-                        color: canRecord ? '#000' : 'rgba(255,255,255,0.15)',
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: 'clamp(10px,1.4vh,13px)', fontWeight: 700,
-                        letterSpacing: '0.12em', textTransform: 'uppercase',
-                        cursor: canRecord ? 'pointer' : 'default', flexShrink: 0,
-                        transition: 'all 0.2s ease',
-                        boxShadow: canRecord ? `0 0 20px ${teamColor}40` : 'none',
-                        WebkitTapHighlightColor: 'transparent',
-                        touchAction: 'manipulation',
-                    }}
-                >
-                    ✓ RECORD SHOT
-                </button>
+                {/* Dismiss without recording shot details */}
+                {step !== 'context' && (
+                    <button onClick={onSkip}
+                        title="Dismiss — shot already counted"
+                        aria-label="Dismiss without recording shot details"
+                        style={{
+                            marginLeft: 4, width: 44, height: 44, borderRadius: 10,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.03)',
+                            color: 'rgba(255,255,255,0.65)', fontFamily: RM, fontWeight: 700, fontSize: 18,
+                            cursor: 'pointer', flexShrink: 0,
+                            WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+                            transition: 'background 0.12s, color 0.12s',
+                        }}
+                        onPointerDown={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; e.currentTarget.style.color = '#fff'; }}
+                        onPointerUp={e =>   { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; }}
+                        onPointerLeave={e =>{ e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; }}
+                    >✕</button>
+                )}
             </div>
 
             <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Barlow+Condensed:wght@700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
-                @keyframes piShotPulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+                @keyframes piShotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+                @keyframes piStepFade  { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes piClockDot  { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
             `}</style>
         </div>
+    );
+}
+
+function FooterButton({ label, onClick }: { label: string; onClick: () => void }) {
+    return (
+        <button onClick={onClick}
+            style={{
+                height: 44, padding: '0 18px', borderRadius: 10,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.04)',
+                color: 'rgba(255,255,255,0.7)', fontFamily: RM, fontWeight: 700,
+                fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase',
+                cursor: 'pointer', flexShrink: 0, transition: 'transform 0.1s, color 0.1s, background 0.12s',
+                WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+            }}
+            onPointerDown={e => {
+                e.currentTarget.style.transform = 'scale(0.96)';
+                e.currentTarget.style.color = '#fff';
+                e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+            }}
+            onPointerUp={e => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+            }}
+            onPointerLeave={e => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+            }}
+        >{label}</button>
+    );
+}
+
+function RecordButton({ onClick, color }: { onClick: () => void; color: string }) {
+    return (
+        <button onClick={onClick}
+            style={{
+                padding: '10px 26px', borderRadius: 11,
+                border: `2px solid ${color}`, background: color, color: '#000',
+                fontFamily: RM, fontWeight: 800, fontSize: 11,
+                letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer', flexShrink: 0,
+                boxShadow: `0 0 20px ${color}40`, transition: 'transform 0.1s',
+                WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
+            }}
+            onPointerDown={e => { e.currentTarget.style.transform = 'scale(0.95)'; }}
+            onPointerUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+            onPointerLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+        >✓ RECORD SHOT</button>
     );
 }

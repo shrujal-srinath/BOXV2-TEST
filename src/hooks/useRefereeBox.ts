@@ -51,6 +51,8 @@ export interface GameConfig {
     periods: number;
     periodType: 'quarter' | 'half';
     timeoutsPerTeam?: number;
+    /** 'fiba' = bucket-based (2 H1 / 3 H2 / 1 OT); 'custom' = flat number. Daemon ignores this — react manages resets. */
+    timeoutMode?: 'fiba' | 'custom';
     gameMode?: 'quick' | 'stats' | 'advanced';
     playersA?: Player[];
     playersB?: Player[];
@@ -171,7 +173,8 @@ export function useRefereeBox() {
             setTimeout(() => setUndoFlash(false), 600);
         });
 
-        // Raw pico messages — forwarded to window for HardwareCheck
+        // Raw pico messages — forwarded to window for hardware-button navigation
+        // (RefereeScreen listens for `pico_message` to drive the dashboard menu)
         socket.on('pico_message_raw', (msg: string) => {
             window.dispatchEvent(new CustomEvent('pico_message', { detail: msg }));
         });
@@ -238,6 +241,9 @@ export function useRefereeBox() {
         zone?: string;
         x?: number;
         y?: number;
+        period?: number;
+        gameClockSec?: number;
+        attributes?: string[];
     }) => {
         socketRef.current?.emit('shot_attributed', data);
         setScorePending(null);
@@ -246,6 +252,12 @@ export function useRefereeBox() {
     // Dismiss popup without attribution
     const dismissScorePending = useCallback(() => {
         setScorePending(null);
+    }, []);
+
+    // DEV / TESTING — simulate a physical Pico button press over the socket.
+    // Lets keyboard 1–9 drive the full hardware pipeline on a laptop.
+    const devPico = useCallback((msg: string) => {
+        socketRef.current?.emit('dev_pico_message', msg);
     }, []);
 
     const formatGameClock = useCallback((ms: number): string => {
@@ -273,6 +285,7 @@ export function useRefereeBox() {
         endGame,
         attributeShot,
         dismissScorePending,
+        devPico,
         formatGameClock,
         formatShotClock,
     };

@@ -10,6 +10,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import type { Player } from '../types';
 import type { User } from '@supabase/supabase-js';
 import { SPORT_REGISTRY } from '../sports/registry';
+import { useDisableTouchDeck } from '../services/gameControlPrefs';
 
 const TEAM_COLORS = [
   '#DC2626', '#2563EB', '#16A34A', '#F59E0B', '#FFFFFF', '#9333EA', '#EA580C', '#000000',
@@ -93,6 +94,10 @@ export const GameSetup: React.FC = () => {
   // Control whether we are using the controller for this game
   // Defaults to true if connected, but user can toggle it off
   const [isHardwareEnabled, setIsHardwareEnabled] = useState(isConnected);
+
+  // Whether the on-screen touch deck is enabled — persisted across sessions
+  // via Game Control prefs (also surfaced in the in-game Settings panel).
+  const [touchDeckDisabled, setTouchDeckDisabled] = useDisableTouchDeck();
 
   // Auto-enable if connection comes online while on this page
   useEffect(() => {
@@ -330,6 +335,34 @@ export const GameSetup: React.FC = () => {
                 <h2 className={`text-xs font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> Match Details</h2>
                 <div className="space-y-6">
                   {/* AUTHORITY & STATUS BANNER */}
+                  {/* On-screen touch deck toggle — always available, regardless of hardware */}
+                  <div className={`p-5 rounded-xl border flex items-center justify-between gap-4 ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base ${touchDeckDisabled ? 'bg-zinc-800 text-zinc-500' : 'bg-green-900/30 text-green-400'}`}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <path d="M7 12h10M12 7v10" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className={`text-xs font-black uppercase tracking-widest ${touchDeckDisabled ? 'text-zinc-500' : (theme === 'light' ? 'text-slate-900' : 'text-green-400')}`}>
+                          On-Screen Touch Deck
+                        </h3>
+                        <p className={`text-[10px] font-bold ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>
+                          {touchDeckDisabled
+                            ? 'OFF — refs use only Pico hardware or Settings'
+                            : 'ON — refs can pull up the touch deck on the scoreboard'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setTouchDeckDisabled(!touchDeckDisabled)}
+                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${!touchDeckDisabled ? 'bg-green-600 text-black border-green-600' : (theme === 'light' ? 'text-slate-500 border-slate-300' : 'text-zinc-500 border-zinc-700')}`}
+                    >
+                      {!touchDeckDisabled ? 'ENABLED' : 'DISABLED'}
+                    </button>
+                  </div>
+
                   {isConnected && (
                     <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-xl space-y-6 mb-4">
                       <div className="flex items-center justify-between">
@@ -366,7 +399,7 @@ export const GameSetup: React.FC = () => {
                     </div>
                   )}
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Match Title</label>
+                    <label className={`text-[10px] font-bold tracking-widest block mb-2 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Match Title</label>
                     <input
                       value={gameName}
                       onChange={(e) => setGameName(e.target.value)}
@@ -375,34 +408,31 @@ export const GameSetup: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Operation Mode</label>
+                    <label className={`text-[10px] font-bold tracking-widest block mb-2 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Operation Mode</label>
                     <div className="grid grid-cols-3 gap-3">
                       <button
                         onClick={() => { setTrackStats(false); setAdvancedStats(false); }}
-                        className={`p-4 rounded-xl text-left border transition-all ${!trackStats ? 'border-white bg-white/5' : 'border-zinc-800'
-                          }`}
+                        className={`p-4 rounded-xl text-left border transition-all ${!trackStats ? (theme === 'light' ? 'border-slate-900 bg-slate-900/5' : 'border-white bg-white/5') : (theme === 'light' ? 'border-slate-200' : 'border-zinc-800')}`}
                       >
-                        <div className="text-2xl mb-2 {`!trackStats ? '' : 'grayscale opacity-50'`}">⏱️</div>
-                        <div className="text-sm font-black uppercase tracking-wider text-white">Quick</div>
-                        <div className="text-[10px] text-zinc-500 mt-1">Score only</div>
+                        <div className="text-2xl mb-2">⏱️</div>
+                        <div className={`text-sm font-black uppercase tracking-wider ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>Quick</div>
+                        <div className={`text-[10px] mt-1 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Score only</div>
                       </button>
                       <button
                         onClick={() => { setTrackStats(true); setAdvancedStats(false); }}
-                        className={`p-4 rounded-xl text-left border transition-all ${trackStats && !advancedStats ? 'border-red-500 bg-red-500/5' : 'border-zinc-800'
-                          }`}
+                        className={`p-4 rounded-xl text-left border transition-all ${trackStats && !advancedStats ? 'border-red-500 bg-red-500/5' : (theme === 'light' ? 'border-slate-200' : 'border-zinc-800')}`}
                       >
-                        <div className="text-2xl mb-2 {`trackStats && !advancedStats ? '' : 'grayscale opacity-50'`}">📊</div>
-                        <div className="text-sm font-black uppercase tracking-wider text-white">Stats</div>
-                        <div className="text-[10px] text-zinc-500 mt-1">+ Players</div>
+                        <div className="text-2xl mb-2">📊</div>
+                        <div className={`text-sm font-black uppercase tracking-wider ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>Stats</div>
+                        <div className={`text-[10px] mt-1 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>+ Players</div>
                       </button>
                       <button
                         onClick={() => { setTrackStats(true); setAdvancedStats(true); }}
-                        className={`p-4 rounded-xl text-left border transition-all ${advancedStats ? 'border-yellow-500 bg-yellow-500/5' : 'border-zinc-800'
-                          }`}
+                        className={`p-4 rounded-xl text-left border transition-all ${advancedStats ? 'border-yellow-500 bg-yellow-500/5' : (theme === 'light' ? 'border-slate-200' : 'border-zinc-800')}`}
                       >
-                        <div className="text-2xl mb-2 {`advancedStats ? '' : 'grayscale opacity-50'`}">🎯</div>
-                        <div className="text-sm font-black uppercase tracking-wider text-yellow-500">Advanced</div>
-                        <div className="text-[10px] text-zinc-500 mt-1">+ Shot chart</div>
+                        <div className="text-2xl mb-2">🎯</div>
+                        <div className={`text-sm font-black uppercase tracking-wider ${theme === 'light' ? 'text-yellow-600' : 'text-yellow-500'}`}>Advanced</div>
+                        <div className={`text-[10px] mt-1 ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>+ Shot chart</div>
                       </button>
                     </div>
                   </div>
@@ -415,32 +445,32 @@ export const GameSetup: React.FC = () => {
                 <div className="grid grid-cols-2 gap-8 items-stretch">
                   <div className="flex flex-col gap-6">
                     <div>
-                      <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Format</label>
-                      <div className="flex bg-black p-1 rounded-lg border border-zinc-800 h-12">
-                        <button onClick={() => setPeriodType('quarter')} className={`flex-1 text-[10px] font-bold uppercase rounded-md transition-all active:scale-95 ${periodType === 'quarter' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>Quarters</button>
-                        <button onClick={() => setPeriodType('half')} className={`flex-1 text-[10px] font-bold uppercase rounded-md transition-all active:scale-95 ${periodType === 'half' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>Halves</button>
+                      <label className={`text-[10px] font-bold tracking-widest block mb-2 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Format</label>
+                      <div className={`flex p-1 rounded-lg border h-12 ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-black border-zinc-800'}`}>
+                        <button onClick={() => setPeriodType('quarter')} className={`flex-1 text-[10px] font-bold uppercase rounded-md transition-all active:scale-95 ${periodType === 'quarter' ? (theme === 'light' ? 'bg-slate-900 text-white shadow-sm' : 'bg-zinc-800 text-white shadow-sm') : (theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-zinc-500 hover:text-zinc-300')}`}>Quarters</button>
+                        <button onClick={() => setPeriodType('half')} className={`flex-1 text-[10px] font-bold uppercase rounded-md transition-all active:scale-95 ${periodType === 'half' ? (theme === 'light' ? 'bg-slate-900 text-white shadow-sm' : 'bg-zinc-800 text-white shadow-sm') : (theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-zinc-500 hover:text-zinc-300')}`}>Halves</button>
                       </div>
                     </div>
                     <div className="flex flex-col flex-1 justify-end">
-                      <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Period Duration (Min)</label>
-                      <div className="bg-black border border-zinc-800 rounded-lg p-2 flex justify-between items-center h-16">
-                        <button onClick={() => setPeriodDuration(Math.max(1, periodDuration - 1))} className="w-12 h-full bg-zinc-900 hover:bg-zinc-800 text-white rounded font-bold transition-colors text-xl active:bg-zinc-700">−</button>
+                      <label className={`text-[10px] font-bold tracking-widest block mb-2 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Period Duration (Min)</label>
+                      <div className={`rounded-lg p-2 flex justify-between items-center h-16 border ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-black border-zinc-800'}`}>
+                        <button onClick={() => setPeriodDuration(Math.max(1, periodDuration - 1))} className={`w-12 h-full rounded font-bold transition-colors text-xl ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-slate-900' : 'bg-zinc-900 hover:bg-zinc-800 text-white active:bg-zinc-700'}`}>−</button>
                         <div className="text-2xl font-bold font-mono">{periodDuration}</div>
-                        <button onClick={() => setPeriodDuration(Math.min(99, periodDuration + 1))} className="w-12 h-full bg-zinc-900 hover:bg-zinc-800 text-white rounded font-bold transition-colors text-xl active:bg-zinc-700">+</button>
+                        <button onClick={() => setPeriodDuration(Math.min(99, periodDuration + 1))} className={`w-12 h-full rounded font-bold transition-colors text-xl ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-slate-900' : 'bg-zinc-900 hover:bg-zinc-800 text-white active:bg-zinc-700'}`}>+</button>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-6 pl-8 border-l border-zinc-800">
+                  <div className={`flex flex-col gap-6 pl-8 border-l ${theme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
                     <div className="flex justify-between items-center h-12">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Shot Clock</span>
-                      <button onClick={() => setShotClockEnabled(!shotClockEnabled)} className={`w-14 h-8 rounded-full relative transition-colors active:scale-95 ${shotClockEnabled ? 'bg-green-600' : 'bg-zinc-700'}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-600' : 'text-zinc-400'}`}>Shot Clock</span>
+                      <button onClick={() => setShotClockEnabled(!shotClockEnabled)} className={`w-14 h-8 rounded-full relative transition-colors active:scale-95 ${shotClockEnabled ? 'bg-green-600' : (theme === 'light' ? 'bg-slate-300' : 'bg-zinc-700')}`}>
                         <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all shadow-md ${shotClockEnabled ? 'left-7' : 'left-1'}`}></div>
                       </button>
                     </div>
                     <div className={`flex flex-col flex-1 justify-end transition-opacity duration-300 ${shotClockEnabled ? 'opacity-100' : 'opacity-20 pointer-events-none'}`}>
-                      <label className="text-[10px] font-bold text-zinc-500 tracking-widest block mb-2 uppercase">Shot Time (Sec)</label>
-                      <div className="bg-black border border-zinc-800 rounded-lg p-2 text-center text-3xl font-bold font-mono h-16 flex items-center justify-center">{shotClockDuration}</div>
+                      <label className={`text-[10px] font-bold tracking-widest block mb-2 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Shot Time (Sec)</label>
+                      <div className={`rounded-lg p-2 text-center text-3xl font-bold font-mono h-16 flex items-center justify-center border ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-black border-zinc-800'}`}>{shotClockDuration}</div>
                     </div>
                   </div>
                 </div>
@@ -485,39 +515,39 @@ export const GameSetup: React.FC = () => {
 
         {/* Step 2 Content - Rosters */}
         {step === 2 && (
-          <div className="flex flex-col h-full animate-in slide-in-from-right-8 duration-500 bg-zinc-950">
+          <div className={`flex flex-col h-full animate-in slide-in-from-right-8 duration-500 ${theme === 'light' ? 'bg-[#F0EEE9]' : 'bg-zinc-950'}`}>
             {/* Roster Tabs */}
-            <div className="flex border-b border-zinc-800 bg-black/40 h-20 shrink-0">
-              <button onClick={() => setActiveTab('A')} className={`flex-1 flex items-center justify-center gap-3 transition-colors ${activeTab === 'A' ? 'bg-zinc-900 text-white' : 'opacity-50 text-zinc-500 hover:opacity-80'}`}>
+            <div className={`flex border-b h-20 shrink-0 ${theme === 'light' ? 'border-slate-200 bg-white' : 'border-zinc-800 bg-black/40'}`}>
+              <button onClick={() => setActiveTab('A')} className={`flex-1 flex items-center justify-center gap-3 transition-colors ${activeTab === 'A' ? (theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-zinc-900 text-white') : (theme === 'light' ? 'opacity-50 text-slate-500 hover:opacity-80' : 'opacity-50 text-zinc-500 hover:opacity-80')}`}>
                 <div className="w-3 h-3 rounded-full shadow-sm" style={{ background: teamAColor }}></div>
                 <span className="text-xl font-black italic uppercase">{teamAName || "TEAM A"}</span>
-                <span className="text-[10px] font-bold text-black bg-white px-2 py-0.5 rounded ml-2">{rosterA.length}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ml-2 ${theme === 'light' ? 'text-white bg-slate-900' : 'text-black bg-white'}`}>{rosterA.length}</span>
               </button>
-              <div className="w-[1px] bg-zinc-800"></div>
-              <button onClick={() => setActiveTab('B')} className={`flex-1 flex items-center justify-center gap-3 transition-colors ${activeTab === 'B' ? 'bg-zinc-900 text-white' : 'opacity-50 text-zinc-500 hover:opacity-80'}`}>
+              <div className={`w-[1px] ${theme === 'light' ? 'bg-slate-200' : 'bg-zinc-800'}`}></div>
+              <button onClick={() => setActiveTab('B')} className={`flex-1 flex items-center justify-center gap-3 transition-colors ${activeTab === 'B' ? (theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-zinc-900 text-white') : (theme === 'light' ? 'opacity-50 text-slate-500 hover:opacity-80' : 'opacity-50 text-zinc-500 hover:opacity-80')}`}>
                 <div className="w-3 h-3 rounded-full shadow-sm" style={{ background: teamBColor }}></div>
                 <span className="text-xl font-black italic uppercase">{teamBName || "TEAM B"}</span>
-                <span className="text-[10px] font-bold text-black bg-white px-2 py-0.5 rounded ml-2">{rosterB.length}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ml-2 ${theme === 'light' ? 'text-white bg-slate-900' : 'text-black bg-white'}`}>{rosterB.length}</span>
               </button>
             </div>
 
             {/* Roster Grid */}
-            <div className="flex-1 overflow-y-auto bg-zinc-900/30 p-8 custom-scrollbar">
+            <div className={`flex-1 overflow-y-auto p-8 custom-scrollbar ${theme === 'light' ? 'bg-[#F0EEE9]' : 'bg-zinc-900/30'}`}>
               {(activeTab === 'A' ? rosterA : rosterB).length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-zinc-700 opacity-60">
+                <div className={`h-full flex flex-col items-center justify-center opacity-60 ${theme === 'light' ? 'text-slate-400' : 'text-zinc-700'}`}>
                   <span className="text-6xl mb-4 grayscale opacity-30">👟</span>
-                  <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-500">No Players Added</h3>
+                  <h3 className={`text-sm font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>No Players Added</h3>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {(activeTab === 'A' ? rosterA : rosterB).map((p) => (
-                    <div key={p.id} className="bg-black border border-zinc-800 p-4 rounded-lg flex items-center gap-4 group hover:border-zinc-600 transition-colors">
-                      <div className="text-3xl font-black italic text-zinc-600 group-hover:text-white transition-colors">{p.number}</div>
+                    <div key={p.id} className={`p-4 rounded-lg flex items-center gap-4 group transition-colors ${theme === 'light' ? 'bg-white border border-slate-200 hover:border-slate-300 shadow-[0_1px_3px_rgba(0,0,0,0.06)]' : 'bg-black border border-zinc-800 hover:border-zinc-600'}`}>
+                      <div className={`text-3xl font-black italic transition-colors ${theme === 'light' ? 'text-slate-300 group-hover:text-slate-900' : 'text-zinc-600 group-hover:text-white'}`}>{p.number}</div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[10px] font-bold text-zinc-500 uppercase">{p.position}</div>
-                        <div className="font-bold text-white uppercase text-lg truncate">{p.name}</div>
+                        <div className={`text-[10px] font-bold uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>{p.position}</div>
+                        <div className={`font-bold uppercase text-lg truncate ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>{p.name}</div>
                       </div>
-                      <button onClick={() => removePlayer(activeTab, p.id)} className="w-10 h-10 flex items-center justify-center text-zinc-600 hover:text-red-500 hover:bg-zinc-900 rounded-full transition-all active:scale-90 text-lg">✕</button>
+                      <button onClick={() => removePlayer(activeTab, p.id)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-90 text-lg ${theme === 'light' ? 'text-slate-400 hover:text-red-500 hover:bg-slate-100' : 'text-zinc-600 hover:text-red-500 hover:bg-zinc-900'}`}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -525,42 +555,42 @@ export const GameSetup: React.FC = () => {
             </div>
 
             {/* Add Player Form */}
-            <div className="bg-black/90 backdrop-blur border-t border-zinc-800 p-6 z-20 shrink-0">
+            <div className={`backdrop-blur border-t p-6 z-20 shrink-0 ${theme === 'light' ? 'bg-white/90 border-slate-200' : 'bg-black/90 border-zinc-800'}`}>
               <div className="max-w-5xl mx-auto flex flex-col gap-6">
-                <div className="flex items-end gap-4 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 shadow-xl">
+                <div className={`flex items-end gap-4 p-4 rounded-xl border shadow-xl ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-zinc-900/50 border-zinc-800'}`}>
                   <div className="w-28">
-                    <label className="text-[10px] font-black text-zinc-500 mb-1.5 block tracking-widest px-1 uppercase">Jersey #</label>
+                    <label className={`text-[10px] font-black mb-1.5 block tracking-widest px-1 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Jersey #</label>
                     <input
                       ref={numberInputRef}
                       value={pNumber}
                       onChange={handleNumberChange}
-                      className={`w-full bg-black border border-zinc-700 p-3 text-center font-mono text-white font-bold rounded-lg outline-none text-xl focus:border-blue-500 transition-colors ${errorMsg && !pNumber ? 'border-red-500' : ''}`}
+                      className={`w-full p-3 text-center font-mono font-bold rounded-lg outline-none text-xl transition-colors ${theme === 'light' ? 'bg-white border border-slate-300 text-slate-900 focus:border-red-600' : 'bg-black border border-zinc-700 text-white focus:border-blue-500'} ${errorMsg && !pNumber ? '!border-red-500' : ''}`}
                       placeholder="00"
                     />
                   </div>
                   <div className="w-36">
-                    <label className="text-[10px] font-black text-zinc-500 mb-1.5 block tracking-widest px-1 uppercase">Position</label>
-                    <select value={pPos} onChange={(e) => setPPos(e.target.value)} className="w-full bg-black border border-zinc-700 p-3 text-center text-white text-sm font-bold rounded-lg outline-none h-[54px] focus:border-blue-500 transition-colors">
+                    <label className={`text-[10px] font-black mb-1.5 block tracking-widest px-1 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Position</label>
+                    <select value={pPos} onChange={(e) => setPPos(e.target.value)} className={`w-full p-3 text-center text-sm font-bold rounded-lg outline-none h-[54px] transition-colors ${theme === 'light' ? 'bg-white border border-slate-300 text-slate-900 focus:border-red-600' : 'bg-black border border-zinc-700 text-white focus:border-blue-500'}`}>
                       {['PG', 'SG', 'SF', 'PF', 'C'].map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="text-[10px] font-black text-zinc-500 mb-1.5 block tracking-widest px-1 uppercase">Player Name</label>
+                    <label className={`text-[10px] font-black mb-1.5 block tracking-widest px-1 uppercase ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Player Name</label>
                     <input
                       value={pName}
                       onChange={handleNameChange}
                       onKeyDown={(e) => e.key === 'Enter' && addPlayer()}
-                      className={`w-full bg-black border border-zinc-700 p-3 text-white text-xl font-bold rounded-lg outline-none uppercase focus:border-blue-500 transition-colors ${errorMsg && !pName ? 'border-red-500' : ''}`}
+                      className={`w-full p-3 text-xl font-bold rounded-lg outline-none uppercase transition-colors ${theme === 'light' ? 'bg-white border border-slate-300 text-slate-900 focus:border-red-600' : 'bg-black border border-zinc-700 text-white focus:border-blue-500'} ${errorMsg && !pName ? '!border-red-500' : ''}`}
                       placeholder="TYPE NAME..."
                     />
                   </div>
-                  <button onClick={addPlayer} className="h-[54px] px-10 bg-white hover:scale-105 active:scale-95 text-black text-xs font-black uppercase tracking-widest rounded-lg transition-all shadow-lg">
+                  <button onClick={addPlayer} className={`h-[54px] px-10 hover:scale-105 active:scale-95 text-xs font-black uppercase tracking-widest rounded-lg transition-all shadow-lg ${theme === 'light' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-white text-black'}`}>
                     + Add Player
                   </button>
                 </div>
                 {errorMsg && <div className="text-center text-red-500 text-xs font-bold animate-pulse">{errorMsg}</div>}
                 <div className="flex justify-start pt-2">
-                  <button onClick={() => setStep(1)} className="text-zinc-500 hover:text-white text-xs font-bold uppercase tracking-widest flex items-center gap-2 transition-colors active:scale-95">← Return to Configuration</button>
+                  <button onClick={() => setStep(1)} className={`text-xs font-bold uppercase tracking-widest flex items-center gap-2 transition-colors active:scale-95 ${theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-zinc-500 hover:text-white'}`}>← Return to Configuration</button>
                 </div>
               </div>
             </div>

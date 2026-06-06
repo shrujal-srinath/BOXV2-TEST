@@ -84,7 +84,7 @@ const getSportMeta = (sport: string) => SPORT_META[sport] ?? SPORT_META.general;
 // ─── Animated background ─────────────────────────────────────────────────────
 const ArenaBackground: React.FC = () => (
     <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[#F0EEE9] dark:bg-black" />
+        <div className="absolute inset-0 bg-white dark:bg-black" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] rounded-full dark:opacity-[0.04] opacity-0"
             style={{ background: 'radial-gradient(circle, #facc15 0%, transparent 70%)' }} />
         <div className="absolute inset-0 dark:opacity-[0.02] opacity-0"
@@ -419,7 +419,7 @@ export const TournamentViewer: React.FC = () => {
     const activeSports = Object.keys(tournament.sportConfig || {});
 
     return (
-        <div className="min-h-screen text-slate-900 dark:text-white relative overflow-x-hidden">
+        <div className="min-h-screen bg-[#F0EEE9] dark:bg-transparent text-slate-900 dark:text-white relative overflow-x-hidden">
             <ArenaBackground />
 
             {/* ── HEADER ─────────────────────────────────────────────────────── */}

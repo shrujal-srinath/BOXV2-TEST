@@ -232,6 +232,13 @@ function handlePicoMessage(msg) {
         saveHistory();
         state[teamKey].score += points;
 
+        // Made field goal (+2 or +3) → other team gets new 24s possession.
+        // Free throws (+1) are NOT auto-reset because they come in sequences;
+        // the ref manually resets the shot clock after the last FT.
+        if (points >= 2 && state.clock.shotClockSeconds > 0) {
+            state.clock.shotMs = state.clock.shotClockSeconds * 1000;
+        }
+
         // Always emit score_pending so UI can show popup (in stats/advanced mode)
         // UI decides whether to show popup based on gameMode
         io.emit('score_pending', {
@@ -261,6 +268,16 @@ function handlePicoMessage(msg) {
             if (state.clock.isRunning) {
                 state.clock.isRunning = false;
                 console.log('> CLOCK STOP');
+            }
+            break;
+        case 'CLOCK_TOGGLE':
+            if (state.clock.isRunning) {
+                state.clock.isRunning = false;
+                console.log('> CLOCK STOP (toggle)');
+            } else if (state.clock.gameMs > 0) {
+                state.clock.isRunning = true;
+                lastTick = Date.now();
+                console.log('> CLOCK START (toggle)');
             }
             break;
         case 'SHOT_CLOCK_24':
@@ -371,22 +388,87 @@ io.on('connection', (socket) => {
                 y: data.y ?? null,
                 period: data.period ?? state.clock.period,
                 gameClockSec: data.gameClockSec ?? Math.ceil(state.clock.gameMs / 1000),
+                attributes: Array.isArray(data.attributes) ? data.attributes : [],
             });
         }
     });
 
     socket.on('ui_action', (action) => {
-        if (!state.ui.isTouchUnlocked) { console.log('> UI action rejected — locked'); return; }
         if (!state.meta.gameActive) return;
-        saveHistory();
+
+        // UNLOCK_TOUCH must be honoured even while locked — it's how the on-screen
+        // touch deck enables itself (there's no physical SETTINGS press on a tablet).
+        if (action.type === 'UNLOCK_TOUCH') {
+            state.ui.isTouchUnlocked = true;
+            io.emit('settings_toggled', { unlocked: true });
+            io.emit('state_update', state);
+            console.log('> TOUCHSCREEN UNLOCKED 🔓 (touch deck)');
+            return;
+        }
+
+        if (!state.ui.isTouchUnlocked) { console.log('> UI action rejected — locked'); return; }
+        // UNDO and LOCK_TOUCH are not undo-able themselves; everything else snapshots.
+        const NO_HISTORY = new Set(['UNDO', 'LOCK_TOUCH', 'TRIGGER_BUZZER']);
+        if (!NO_HISTORY.has(action.type)) saveHistory();
 
         switch (action.type) {
-            case 'EDIT_SCORE': state[action.payload.team].score = Math.max(0, state[action.payload.team].score + action.payload.amount); break;
+            case 'EDIT_SCORE': {
+                const tk = action.payload.team;
+                const amount = action.payload.amount;
+                state[tk].score = Math.max(0, state[tk].score + amount);
+                // Positive scoring in stats/advanced mode → fire the shot-attribution
+                // popup (court + roster), exactly like a physical score button.
+                if (amount > 0 && state.meta.gameMode !== 'quick') {
+                    const team = tk === 'teamA' ? 'A' : 'B';
+                    io.emit('score_pending', {
+                        team,
+                        points: amount,
+                        players: tk === 'teamA' ? state.meta.players.teamA : state.meta.players.teamB,
+                        gameMode: state.meta.gameMode,
+                    });
+                }
+                break;
+            }
             case 'EDIT_FOULS': state[action.payload.team].fouls = Math.max(0, state[action.payload.team].fouls + action.payload.amount); break;
             case 'EDIT_TIMEOUTS': state[action.payload.team].timeouts = Math.max(0, state[action.payload.team].timeouts + action.payload.amount); break;
             case 'EDIT_PERIOD': state.clock.period = Math.max(1, Math.min(state.clock.totalPeriods + 1, state.clock.period + action.payload.amount)); break;
-            case 'EDIT_GAME_CLOCK': state.clock.gameMs = Math.max(0, state.clock.gameMs + (action.payload.amount * 1000)); break;
-            case 'EDIT_SHOT_CLOCK': state.clock.shotMs = Math.max(0, state.clock.shotMs + (action.payload.amount * 1000)); break;
+            case 'CLOCK_TOGGLE':
+                if (state.clock.isRunning) {
+                    state.clock.isRunning = false;
+                    console.log('> CLOCK STOP (touch)');
+                } else if (state.clock.gameMs > 0) {
+                    state.clock.isRunning = true;
+                    lastTick = Date.now();
+                    console.log('> CLOCK START (touch)');
+                }
+                break;
+            case 'CLOCK_START':
+                if (!state.clock.isRunning && state.clock.gameMs > 0) {
+                    state.clock.isRunning = true;
+                    lastTick = Date.now();
+                    console.log('> CLOCK START (touch)');
+                }
+                break;
+            case 'CLOCK_STOP':
+                if (state.clock.isRunning) {
+                    state.clock.isRunning = false;
+                    console.log('> CLOCK STOP (touch)');
+                }
+                break;
+            case 'EDIT_GAME_CLOCK': state.clock.gameMs = Math.max(0, Math.round(state.clock.gameMs + (action.payload.amount * 1000))); break;
+            case 'EDIT_SHOT_CLOCK': state.clock.shotMs = Math.max(0, Math.round(state.clock.shotMs + (action.payload.amount * 1000))); break;
+            case 'SET_GAME_CLOCK':  state.clock.gameMs = Math.max(0, Math.round(action.payload.ms ?? 0)); break;
+            case 'SET_SHOT_CLOCK':  state.clock.shotMs = Math.max(0, Math.round(action.payload.ms ?? 0)); break;
+            case 'LOCK_TOUCH':
+                state.ui.isTouchUnlocked = false;
+                io.emit('settings_toggled', { unlocked: false });
+                break;
+            case 'UNDO':
+                if (history.length > 0) {
+                    state = history.pop();
+                    io.emit('undo_triggered');
+                }
+                break;
             case 'NEXT_PERIOD':
                 state.clock.isRunning = false;
                 state.clock.period += 1;
@@ -428,6 +510,16 @@ io.on('connection', (socket) => {
         socket.emit('game_ended', { finalCode: endedCode });
         io.emit('state_update', state);
         console.log(`🏁 Game ${endedCode} ended`);
+    });
+
+    // DEV / TESTING — inject a simulated Pico button press from the browser
+    // (keyboard 1–9 on a laptop with no GPIO). Runs the exact same pipeline as
+    // a real UART message, so score_pending popups, clock, undo etc. all fire.
+    socket.on('dev_pico_message', (msg) => {
+        if (typeof msg === 'string' && msg.length) {
+            console.log(`⌨️  dev_pico: ${msg}`);
+            handlePicoMessage(msg);
+        }
     });
 
     socket.on('disconnect', () => console.log(`🔌 UI disconnected: ${socket.id}`));

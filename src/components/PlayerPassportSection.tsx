@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 import type { User } from '@supabase/supabase-js';
 import type { PlayerProfile, PlayerTeam, PlayerSportStats, PlayerGameLog, PlayerLeaderboardRow } from '../types';
 import {
@@ -41,6 +42,8 @@ const SLIDES = [
     gradient: 'from-violet-600 via-violet-700 to-indigo-800',
     accent: '#7C3AED',
     dot: 'bg-violet-400',
+    lightBorder: 'border-l-violet-500',
+    lightTag: 'text-violet-700 bg-violet-50 border-violet-200',
   },
   {
     id: 'passport',
@@ -49,6 +52,8 @@ const SLIDES = [
     gradient: 'from-slate-800 via-zinc-800 to-zinc-900',
     accent: '#6D28D9',
     dot: 'bg-zinc-400',
+    lightBorder: 'border-l-slate-400',
+    lightTag: 'text-slate-600 bg-slate-100 border-slate-200',
   },
   {
     id: 'stats',
@@ -57,6 +62,8 @@ const SLIDES = [
     gradient: 'from-blue-700 via-blue-800 to-indigo-900',
     accent: '#1D4ED8',
     dot: 'bg-blue-400',
+    lightBorder: 'border-l-blue-500',
+    lightTag: 'text-blue-700 bg-blue-50 border-blue-200',
   },
   {
     id: 'heatmap',
@@ -65,6 +72,8 @@ const SLIDES = [
     gradient: 'from-orange-600 via-rose-700 to-red-800',
     accent: '#EA580C',
     dot: 'bg-orange-400',
+    lightBorder: 'border-l-red-500',
+    lightTag: 'text-red-700 bg-red-50 border-red-200',
   },
 ] as const;
 
@@ -76,6 +85,8 @@ interface Props { user: User | null }
 
 export const PlayerPassportSection: React.FC<Props> = ({ user }) => {
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   const [myProfile, setMyProfile]   = useState<PlayerProfile | null>(null);
   const [leaderboard, setLeaderboard] = useState<PlayerLeaderboardRow[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -171,12 +182,14 @@ export const PlayerPassportSection: React.FC<Props> = ({ user }) => {
   leaderboard.forEach(r => scoreMap.set(r.player_id, (scoreMap.get(r.player_id) ?? 0) + r.total_score));
 
   return (
-    <section className="mb-8">
+    <section className="mb-10">
       {/* Section header */}
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-zinc-800/60">
-        <span className="w-2 h-2 bg-violet-600 rounded-full flex-shrink-0" />
-        <span className="text-slate-500 dark:text-zinc-500 text-xs font-bold uppercase tracking-[0.2em]">Player Passport</span>
-        <span className="ml-auto bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest">
+      <div className="flex items-end gap-3 mb-5 pb-3 border-b-[0.5px] border-cs-border dark:border-b dark:border-zinc-800/60">
+        <div>
+          <h2 className="font-display text-[12px] font-bold text-cs-text-2 dark:text-zinc-500 uppercase tracking-[0.3em] dark:font-sans dark:text-xs dark:tracking-[0.2em]">Player Passport</h2>
+          <div className="w-7 h-[2px] bg-cs-accent mt-2 dark:hidden" />
+        </div>
+        <span className="ml-auto bg-cs-elevated dark:bg-zinc-800 text-cs-text-2 dark:text-zinc-500 px-2.5 py-1 cs-pill dark:rounded-full text-[10px] font-semibold uppercase tracking-[0.12em] dark:text-[9px] dark:font-bold dark:tracking-widest">
           {profiles.length} Athletes
         </span>
       </div>
@@ -187,23 +200,39 @@ export const PlayerPassportSection: React.FC<Props> = ({ user }) => {
         {/* LEFT — carousel (2/3) */}
         <div className="lg:flex-[2] min-w-0">
           <div
-            className={`relative rounded-2xl bg-gradient-to-br ${slide.gradient} overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.5)] transition-all duration-500 h-full`}
+            className={`relative rounded-2xl overflow-hidden transition-all duration-500 h-full ${
+              isLight
+                ? `bg-white border border-slate-200 border-l-4 ${slide.lightBorder} [box-shadow:0_1px_3px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)]`
+                : `bg-gradient-to-br ${slide.gradient} shadow-[0_8px_32px_rgba(0,0,0,0.18)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.5)]`
+            }`}
             style={{ minHeight: 260 }}
           >
-            <div className="absolute inset-0 opacity-20 pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse at 80% 20%, white, transparent 60%)' }} />
-            <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")` }} />
+            {!isLight && (
+              <>
+                <div className="absolute inset-0 opacity-20 pointer-events-none"
+                  style={{ background: 'radial-gradient(ellipse at 80% 20%, white, transparent 60%)' }} />
+                <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")` }} />
+              </>
+            )}
 
             {/* Top bar */}
             <div className="relative flex items-center justify-between px-5 pt-5 pb-0 z-10">
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/60 border border-white/20 px-2.5 py-1 rounded-full backdrop-blur-sm">
+              <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-full border ${
+                isLight
+                  ? `${slide.lightTag}`
+                  : 'text-white/60 border-white/20 backdrop-blur-sm'
+              }`}>
                 {slide.tag}
               </span>
               <div className="flex items-center gap-1.5">
                 {SLIDES.map((_, i) => (
                   <button key={i} onClick={() => handleDot(i)}
-                    className={`rounded-full transition-all duration-300 ${i === current ? 'w-5 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30 hover:bg-white/50'}`}
+                    className={`rounded-full transition-all duration-300 ${
+                      isLight
+                        ? i === current ? 'w-5 h-1.5 bg-slate-700' : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
+                        : i === current ? 'w-5 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30 hover:bg-white/50'
+                    }`}
                   />
                 ))}
               </div>
@@ -216,7 +245,7 @@ export const PlayerPassportSection: React.FC<Props> = ({ user }) => {
               {current === 3 && <HeatmapSlide />}
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+            {!isLight && <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />}
           </div>
         </div>
 
@@ -226,18 +255,18 @@ export const PlayerPassportSection: React.FC<Props> = ({ user }) => {
             /* No profile yet — show CTA */
             <div
               onClick={() => navigate('/player/register?type=self')}
-              className="h-full cursor-pointer bg-white dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800 shadow-md dark:border-dashed dark:border-violet-800/60 hover:shadow-lg dark:hover:border-violet-600 rounded-2xl p-5 flex flex-col items-center justify-center text-center transition-all group"
-              style={{ minHeight: 200 }}
+              className="h-full cursor-pointer bg-cs-surface dark:bg-zinc-900/60 border-[0.5px] border-cs-border dark:border dark:border-zinc-800 shadow-cs-card dark:shadow-md dark:border-dashed dark:border-violet-800/60 hover:shadow-cs-elevated dark:hover:border-violet-600 cs-radius-card dark:rounded-2xl flex flex-col items-center justify-center text-center transition-all group"
+              style={{ minHeight: 200, paddingTop: 14, paddingLeft: 16, paddingRight: 16, paddingBottom: 12 }}
             >
-              <div className="w-12 h-12 rounded-xl bg-red-600 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform">🪪</div>
-              <div className="text-xs text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Player Passport</div>
-              <div className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight italic leading-tight mb-2">
+              <div className="w-12 h-12 cs-radius-md dark:rounded-xl bg-cs-accent dark:bg-red-600 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform shadow-cs-fab dark:shadow-none">🪪</div>
+              <div className="font-display text-[11px] text-cs-text-2 dark:text-zinc-500 uppercase tracking-[0.3em] mb-1.5 font-bold dark:font-sans dark:text-xs dark:tracking-wider dark:font-normal">Player Passport</div>
+              <div className="text-[16px] font-bold text-cs-text dark:text-white tracking-tight leading-tight mb-2 dark:text-sm dark:font-black dark:uppercase dark:italic">
                 Add Your Profile
               </div>
-              <p className="text-[11px] text-slate-400 dark:text-zinc-600 leading-relaxed mb-4">
+              <p className="text-[12px] text-cs-text-2 dark:text-zinc-600 leading-relaxed mb-4 dark:text-[11px]">
                 Get your stats tracked across every game you play.
               </p>
-              <div className="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-3 rounded-xl transition-colors">
+              <div className="w-full h-12 inline-flex items-center justify-center bg-cs-accent hover:bg-cs-accent-pressed text-white text-[12px] font-semibold uppercase tracking-[0.073em] cs-pill dark:rounded-xl dark:font-bold dark:text-xs dark:tracking-normal dark:normal-case transition-colors">
                 Register
               </div>
             </div>
@@ -308,7 +337,7 @@ const MiniLeaderboard: React.FC<{
   const profileMap = new Map(profiles.map(p => [p.id, p]));
 
   return (
-    <div className="bg-white dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 rounded-2xl overflow-hidden h-full flex flex-col">
+    <div className="bg-cs-surface dark:bg-zinc-900/60 border-[0.5px] border-cs-border dark:border dark:border-zinc-800 cs-radius-card dark:rounded-2xl shadow-cs-card dark:shadow-none overflow-hidden h-full flex flex-col">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -654,7 +683,7 @@ const PlayerProfileModal: React.FC<{
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full max-w-lg relative z-10 animate-in zoom-in-95 duration-200 shadow-2xl rounded-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="bg-cs-overlay dark:bg-zinc-950 border-[0.5px] border-cs-border dark:border dark:border-zinc-800 w-full max-w-lg relative z-10 animate-in zoom-in-95 duration-200 shadow-cs-elevated dark:shadow-2xl cs-radius-card dark:rounded-2xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Hero */}
         <div className="bg-gradient-to-br from-violet-600 to-violet-900 p-6 relative overflow-hidden flex-shrink-0">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 75% 50%, white, transparent 60%)' }} />

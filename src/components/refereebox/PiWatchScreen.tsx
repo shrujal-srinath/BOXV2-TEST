@@ -23,8 +23,6 @@ const JBM        = "'JetBrains Mono', monospace";
 
 // ── Font + animations ────────────────────────────────────────────────────────
 const FONT_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
-
 @keyframes hud-grid {
   0%   { opacity: 0.5; }
   100% { opacity: 0.5; }

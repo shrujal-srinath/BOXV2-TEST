@@ -16,15 +16,18 @@ const JB = "'JetBrains Mono', monospace";
 interface PiDashboardProps {
     onSelectWatch: () => void;
     onSelectStart: () => void;
+    onSelectArena?: (arenaCode: string) => void;
     selectedIndex?: number; // 0 = watch, 1 = start (default)
 }
 
 const PiDashboard: React.FC<PiDashboardProps> = ({
     onSelectWatch,
     onSelectStart,
+    onSelectArena,
     selectedIndex = 1,
 }) => {
     const [pressed, setPressed] = useState<0 | 1 | null>(null);
+    const [showArenaPrompt, setShowArenaPrompt] = useState(false);
 
     const handleSelect = (idx: 0 | 1) => {
         setPressed(idx);
@@ -158,61 +161,35 @@ const PiDashboard: React.FC<PiDashboardProps> = ({
                             transition: 'background 100ms, color 100ms',
                         }}>WATCH GAME</button>
 
-                    {/* ARENA VIEW — coming soon */}
-                    <div style={{ position: 'relative', display: 'inline-flex' }}>
-                        <button
-                            style={{
-                                background: 'transparent',
-                                color: '#1d6bff',
-                                border: '2px solid #1d6bff',
-                                padding: '8px 20px',
-                                fontFamily: "'Space Grotesk', sans-serif",
-                                fontWeight: 700,
-                                fontSize: 13,
-                                letterSpacing: '0.2em',
-                                textTransform: 'uppercase',
-                                cursor: 'default',
-                                opacity: 0.5,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                borderRadius: 0,
-                            }}
-                            disabled
-                        >
-                            {/* 2×2 grid icon */}
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
-                                style={{ flexShrink: 0 }}>
-                                <rect x="0" y="0" width="6" height="6"
-                                    stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
-                                <rect x="8" y="0" width="6" height="6"
-                                    stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
-                                <rect x="0" y="8" width="6" height="6"
-                                    stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
-                                <rect x="8" y="8" width="6" height="6"
-                                    stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
-                            </svg>
-                            ARENA VIEW
-                        </button>
-                        {/* SOON chip */}
-                        <span style={{
-                            position: 'absolute',
-                            top: -8,
-                            right: -8,
-                            background: '#1d6bff',
-                            color: '#fff',
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: 7,
-                            fontWeight: 700,
-                            letterSpacing: '0.15em',
-                            padding: '2px 5px',
+                    {/* ARENA VIEW — opens the same multi-court kiosk used on the web */}
+                    <button
+                        onClick={() => onSelectArena && setShowArenaPrompt(true)}
+                        disabled={!onSelectArena}
+                        style={{
+                            background: 'transparent',
+                            color: '#1d6bff',
+                            border: '2px solid #1d6bff',
+                            padding: '8px 20px',
+                            fontFamily: SG, fontWeight: 700,
+                            fontSize: 13, letterSpacing: '0.2em',
                             textTransform: 'uppercase',
-                            lineHeight: 1,
-                            pointerEvents: 'none',
-                        }}>
-                            SOON
-                        </span>
-                    </div>
+                            cursor: onSelectArena ? 'pointer' : 'default',
+                            opacity: onSelectArena ? 1 : 0.4,
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            borderRadius: 0,
+                            transition: 'background 100ms, color 100ms',
+                        }}
+                        onMouseEnter={e => { if (onSelectArena) (e.currentTarget as HTMLElement).style.background = 'rgba(29,107,255,0.12)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                            <rect x="0" y="0" width="6" height="6" stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
+                            <rect x="8" y="0" width="6" height="6" stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
+                            <rect x="0" y="8" width="6" height="6" stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
+                            <rect x="8" y="8" width="6" height="6" stroke="#1d6bff" strokeWidth="1.2" fill="none"/>
+                        </svg>
+                        ARENA VIEW
+                    </button>
                 </div>
             </div>
 
@@ -484,8 +461,145 @@ const PiDashboard: React.FC<PiDashboardProps> = ({
 
                 </div>
             </div>
+
+            {/* ── ARENA CODE PROMPT ─────────────────────────────────────
+               Asks for a 4-char arena code, then hands it back to the parent
+               which navigates to the existing /arena/:arenaCode route. */}
+            {showArenaPrompt && onSelectArena && (
+                <ArenaCodePrompt
+                    onCancel={() => setShowArenaPrompt(false)}
+                    onConfirm={(code) => { setShowArenaPrompt(false); onSelectArena(code); }}
+                />
+            )}
         </div>
     );
 };
+
+// ── Arena code prompt modal ──────────────────────────────────
+const ArenaCodePrompt: React.FC<{
+    onConfirm: (code: string) => void;
+    onCancel: () => void;
+}> = ({ onConfirm, onCancel }) => {
+    const [code, setCode] = useState('');
+    const valid = /^[A-Z0-9]{4}$/.test(code);
+    const press = (k: string) => {
+        if (k === '⌫') { setCode(c => c.slice(0, -1)); return; }
+        if (k === '✕') { setCode(''); return; }
+        if (code.length >= 4) return;
+        setCode(c => (c + k).toUpperCase());
+    };
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+        }}>
+            <div style={{
+                width: 420, background: '#0a0a0a',
+                border: '1px solid #1d6bff66',
+                boxShadow: '0 0 60px rgba(29,107,255,0.3)',
+                padding: 24, fontFamily: JB,
+            }}>
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: 18,
+                }}>
+                    <span style={{ fontSize: 11, color: '#1d6bff', fontWeight: 700, letterSpacing: '0.28em' }}>
+                        ENTER ARENA CODE
+                    </span>
+                    <div onClick={onCancel} style={{ cursor: 'pointer', color: MUTED, fontSize: 14, fontWeight: 700, padding: '0 6px' }}>✕</div>
+                </div>
+
+                {/* 4-char display */}
+                <div style={{
+                    display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 18,
+                }}>
+                    {[0,1,2,3].map(i => (
+                        <div key={i} style={{
+                            width: 56, height: 64,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            border: `1.5px solid ${code[i] ? '#1d6bff' : 'rgba(255,255,255,0.15)'}`,
+                            background: code[i] ? 'rgba(29,107,255,0.1)' : 'rgba(255,255,255,0.02)',
+                            fontFamily: SG, fontStyle: 'italic', fontWeight: 900,
+                            fontSize: 36, color: WHITE,
+                            boxShadow: code[i] ? '0 0 14px rgba(29,107,255,0.4)' : 'none',
+                            transition: 'all 0.12s',
+                        }}>{code[i] || ''}</div>
+                    ))}
+                </div>
+
+                {/* Numpad — letters + digits */}
+                <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6,
+                    marginBottom: 16,
+                }}>
+                    {['1','2','3','4','5','6','7','8','9','0',
+                      'A','B','C','D','E','F','G','H','J','K',
+                      'L','M','N','P','Q','R','S','T','U','V',
+                      'W','X','Y','Z','⌫'].map(k => (
+                        <ArenaKey key={k} label={k} onClick={() => press(k)} />
+                    ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <ArenaActionBtn label="CANCEL" color={MUTED} onClick={onCancel} />
+                    <ArenaActionBtn
+                        label="ENTER ARENA →"
+                        color="#1d6bff"
+                        onClick={() => valid && onConfirm(code)}
+                        primary
+                        disabled={!valid}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ArenaKey: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
+    <div
+        onClick={onClick}
+        style={{
+            height: 38,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: WHITE, fontFamily: SG, fontWeight: 700, fontSize: 14,
+            cursor: 'pointer', userSelect: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            transition: 'background 0.12s, transform 0.06s',
+        }}
+        onTouchStart={e => {
+            (e.currentTarget as HTMLElement).style.background = 'rgba(29,107,255,0.25)';
+            (e.currentTarget as HTMLElement).style.transform = 'scale(0.95)';
+        }}
+        onTouchEnd={e => {
+            (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)';
+            (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+        }}
+    >{label}</div>
+);
+
+const ArenaActionBtn: React.FC<{
+    label: string; color: string; onClick: () => void; primary?: boolean; disabled?: boolean;
+}> = ({ label, color, onClick, primary = false, disabled = false }) => (
+    <div
+        onClick={disabled ? undefined : onClick}
+        style={{
+            flex: 1, height: 44,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: primary ? `${color}1f` : 'rgba(255,255,255,0.025)',
+            border: `1px solid ${primary ? color : 'rgba(255,255,255,0.15)'}`,
+            color: primary ? color : MUTED,
+            fontFamily: JB, fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            opacity: disabled ? 0.4 : 1,
+            userSelect: 'none', WebkitTapHighlightColor: 'transparent',
+            boxShadow: primary && !disabled ? `0 0 14px ${color}33, inset 0 1px 0 ${color}33` : 'none',
+        }}
+    >{label}</div>
+);
 
 export default PiDashboard;

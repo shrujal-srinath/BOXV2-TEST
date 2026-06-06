@@ -299,6 +299,26 @@ const PiReceiverSetup: React.FC = () => {
                                         CONFIRM
                                     </button>
                                 </div>
+
+                                {/* LOCAL DISPLAY — connects to Pi daemon directly (LAN, no internet) */}
+                                <button
+                                    onClick={() => navigate('/pi-local-display')}
+                                    style={{
+                                        width: '100%', height: 44, marginTop: 8,
+                                        background: '#0d0d0d',
+                                        border: '1px solid #22c55e44',
+                                        borderRadius: 5,
+                                        fontFamily: "'Barlow Condensed', sans-serif",
+                                        fontWeight: 700, fontSize: 12,
+                                        letterSpacing: '0.22em',
+                                        color: '#22c55e',
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                        textTransform: 'uppercase' as const,
+                                    }}
+                                >
+                                    ⚡ LOCAL DISPLAY (LAN)
+                                </button>
                             </div>
                         </div>
                     </div>

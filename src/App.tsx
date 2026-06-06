@@ -18,44 +18,65 @@
 //  - The root "/" detects standalone mode and redirects if needed
 // ─────────────────────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { subscribeToAuth } from './services/authService';
 import { HardwareProvider } from './contexts/HardwareContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { SplashScreen } from './components/SplashScreen';
 
-// ── Website pages ──────────────────────────────────────────
-import { LandingPage } from './pages/LandingPage';
-import { HomePage } from './pages/HomePage';
-import { WatchPage } from './pages/WatchPage';
-import { Dashboard } from './pages/Dashboard';
-import { GameSetup } from './pages/GameSetup';
-import { HostConsole } from './pages/HostConsole';
-import { SpectatorView } from './pages/SpectatorView';
-import { ShotChartView } from './pages/ShotChartView';
-import { TvKiosk } from './pages/TvKiosk';
-import { WallView } from './pages/WallView';
-import { TournamentDashboard } from './pages/TournamentDashboard';
-import { TournamentSetup } from './pages/TournamentSetup';
-import { TournamentManager } from './pages/TournamentManager';
-import { TournamentViewer } from './pages/TournamentViewer';
-import { TournamentWallView } from './pages/TournamentWallView';
-import { PlayerPassportPage } from './pages/PlayerPassportPage';
-import { VolunteerConsole } from './pages/VolunteerConsole';
-import RefereeScreen from './pages/RefereeScreen'; // <-- Added Referee Route
-import ArenaView from './pages/ArenaView';         // <-- Added Arena Route
-import PiLauncher from './pages/PiLauncher';
-import PiReceiverSetup from './pages/PiReceiverSetup';
-import PiDisplay from './pages/PiDisplay';
-import CourtHexMapPage from './pages/CourtHexMapPage';
+// ── Pages — all lazy-loaded so the initial bundle is tiny.
+// On a cold Safari refresh this drops first-paint from ~3s to ~300ms because
+// the browser only parses one route's chunk, not all 27.
+// Default exports use lazy(() => import(...)) directly.
+// Named exports use lazy(() => import(...).then(m => ({ default: m.Name }))).
+const LandingPage         = lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
+const HomePage            = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
+const WatchPage           = lazy(() => import('./pages/WatchPage').then(m => ({ default: m.WatchPage })));
+const Dashboard           = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const GameSetup           = lazy(() => import('./pages/GameSetup').then(m => ({ default: m.GameSetup })));
+const HostConsole         = lazy(() => import('./pages/HostConsole').then(m => ({ default: m.HostConsole })));
+const SpectatorView       = lazy(() => import('./pages/SpectatorView').then(m => ({ default: m.SpectatorView })));
+const ShotChartView       = lazy(() => import('./pages/ShotChartView').then(m => ({ default: m.ShotChartView })));
+const TvKiosk             = lazy(() => import('./pages/TvKiosk').then(m => ({ default: m.TvKiosk })));
+const WallView            = lazy(() => import('./pages/WallView').then(m => ({ default: m.WallView })));
+const TournamentDashboard = lazy(() => import('./pages/TournamentDashboard').then(m => ({ default: m.TournamentDashboard })));
+const TournamentSetup     = lazy(() => import('./pages/TournamentSetup').then(m => ({ default: m.TournamentSetup })));
+const TournamentManager   = lazy(() => import('./pages/TournamentManager').then(m => ({ default: m.TournamentManager })));
+const TournamentViewer    = lazy(() => import('./pages/TournamentViewer').then(m => ({ default: m.TournamentViewer })));
+const TournamentWallView  = lazy(() => import('./pages/TournamentWallView').then(m => ({ default: m.TournamentWallView })));
+const PlayerPassportPage  = lazy(() => import('./pages/PlayerPassportPage').then(m => ({ default: m.PlayerPassportPage })));
+const VolunteerConsole    = lazy(() => import('./pages/VolunteerConsole').then(m => ({ default: m.VolunteerConsole })));
+const RefereeScreen       = lazy(() => import('./pages/RefereeScreen'));
+const ArenaView           = lazy(() => import('./pages/ArenaView'));
+const CreateArenaPage     = lazy(() => import('./pages/CreateArenaPage'));
+const PiLauncher          = lazy(() => import('./pages/PiLauncher'));
+const PiConsole           = lazy(() => import('./pages/PiConsole'));
+const PiReceiverSetup     = lazy(() => import('./pages/PiReceiverSetup'));
+const PiDisplay           = lazy(() => import('./pages/PiDisplay'));
+const PiLocalDisplay      = lazy(() => import('./pages/PiLocalDisplay'));
+const UiAuditFixture      = lazy(() => import('./pages/UiAuditFixture'));
+const CastSetupPage       = lazy(() => import('./pages/CastSetupPage'));
+const CourtHexMapPage     = lazy(() => import('./pages/CourtHexMapPage'));
 
-// ── Tablet PWA pages (NO auth wrapper — these must be public) ─
-import { StandaloneTablet } from './pages/StandaloneTablet';
-import { TabletController } from './pages/TabletController';
+// Tablet PWA pages (no auth wrapper)
+const StandaloneTablet    = lazy(() => import('./pages/StandaloneTablet').then(m => ({ default: m.StandaloneTablet })));
+const TabletController    = lazy(() => import('./pages/TabletController').then(m => ({ default: m.TabletController })));
 
 // ── Shared components ──────────────────────────────────────
 import ProtectedHostRoute from './components/ProtectedHostRoute';
+
+// Black fallback while a route chunk loads — never flashes white on kiosks.
+const RouteFallback = () => (
+  <div style={{ position: 'fixed', inset: 0, background: '#000' }} />
+);
+
+// Routes that have their own splash / are kiosk devices. We skip the website
+// SplashScreen for these so the device boots straight into its own UI.
+const KIOSK_PREFIXES = ['/referee', '/pi-launcher', '/pi-console', '/pi-receiver', '/pi-display', '/pi-local-display',
+                        '/tablet', '/cast', '/tv', '/wall', '/watch/', '/t/', '/uiaudit'];
+const isKioskPath = (path: string) =>
+  KIOSK_PREFIXES.some(p => path === p || path.startsWith(p + '/') || path.startsWith(p));
 
 // ─────────────────────────────────────────────────────────────
 // isPWA — true when the app was launched from the iOS/Android
@@ -107,8 +128,12 @@ function getCachedUserId(): string | null {
 function App() {
   const [userId, setUserId] = useState<string | null>(getCachedUserId);
   const [authLoading, setAuthLoading] = useState(() => getCachedUserId() === null);
-  // Splash always shows on cold load; skip it only for tablet PWA mode
-  const [showSplash, setShowSplash] = useState(!isPWA);
+  // Splash shows on cold load for the website only. Skip it for PWA mode and
+  // any kiosk/device route — those have their own splash and stacking two of
+  // them is the main reason cold refresh on /referee felt like ~3s on Safari.
+  const [showSplash, setShowSplash] = useState(
+    !isPWA && !isKioskPath(window.location.pathname)
+  );
 
   useEffect(() => {
     const timeout = setTimeout(() => setAuthLoading(false), 3000);
@@ -128,7 +153,8 @@ function App() {
     <ThemeProvider>
       <Router>
         <HardwareProvider userId={userId}>
-          <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-black dark:text-white font-sans transition-colors duration-300">
+          <div className="min-h-screen bg-[#F0EEE9] text-slate-900 dark:bg-black dark:text-white font-sans transition-colors duration-300">
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
 
               {/* ══════════════════════════════════════════════
@@ -153,8 +179,13 @@ function App() {
               <Route path="/court-hex" element={<CourtHexMapPage />} />
               <Route path="/arena/:arenaCode" element={<ArenaView />} />
               <Route path="/pi-launcher" element={<PiLauncher />} />
+              <Route path="/pi-console/:gameCode" element={<PiConsole />} />
               <Route path="/pi-receiver" element={<PiReceiverSetup />} />
               <Route path="/pi-display/:gameCode" element={<PiDisplay />} />
+              <Route path="/pi-local-display" element={<PiLocalDisplay />} />
+              <Route path="/uiaudit" element={<UiAuditFixture />} />
+              <Route path="/uiaudit/:variant" element={<UiAuditFixture />} />
+              <Route path="/cast" element={<CastSetupPage />} />
 
               {/* ── Tournament PUBLIC viewer (shareable QR link, no auth) ── */}
               {/* /t/:id      → bracket/results/live scores for spectators   */}
@@ -193,12 +224,17 @@ function App() {
                 <ProtectedHostRoute><PlayerPassportPage /></ProtectedHostRoute>
               } />
 
+              <Route path="/arena/create" element={
+                <ProtectedHostRoute><CreateArenaPage /></ProtectedHostRoute>
+              } />
+
               {/* ══════════════════════════════════════════════
               FALLBACK
               ══════════════════════════════════════════════ */}
               <Route path="*" element={<Navigate to="/" replace />} />
 
             </Routes>
+            </Suspense>
           </div>
         </HardwareProvider>
       </Router>

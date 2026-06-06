@@ -280,7 +280,7 @@ export const broadcastToCloud = (gameCode, state) => {
             foulsB: state.teamB.fouls,
             timeoutsA: state.teamA.timeouts,
             timeoutsB: state.teamB.timeouts,
-            possession: state.clock.period % 2 !== 0 ? 'A' : 'B',
+            possession: state.possession ?? 'A',
         }
     });
 };
@@ -323,7 +323,7 @@ export const writeShotEvent = async (gameCode, event) => {
             shot_type: event.points === 1 ? 'free_throw' : 'field_goal',
             period: event.period ?? 1,
             game_clock_sec: event.gameClockSec ?? null,
-            attributes: [],
+            attributes: Array.isArray(event.attributes) ? event.attributes : [],
             input_method: 'live',
             created_at: event.createdAt ?? new Date().toISOString(),
         });
