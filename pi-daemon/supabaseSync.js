@@ -6,11 +6,19 @@
 // without needing an authenticated user session.
 //
 // Responsibilities:
-//   1. createGame()        — insert a new game row, return game code
-//   2. persistGameState()  — update the games.data JSONB on every action
-//   3. broadcastToCloud()  — realtime broadcast for arena screen
-//   4. broadcastClockToCloud() — throttled clock broadcast (1/sec)
-//   5. finishGame()        — mark game as completed on end
+//   1. createGame()             — insert a new game row, return game code
+//   2. fetchGameByCode()        — read persisted state for crash recovery
+//   3. persistGameState()       — update games.data JSONB on every action
+//   4. flushPendingPersist()    — force any throttled write to flush now
+//   5. ensureChannel()          — pre-create the realtime channel on setup
+//   6. broadcastToCloud()       — score_update broadcast
+//   7. broadcastClockTick()     — per-second clock_tick broadcast
+//   8. broadcastClockStart/Stop — fired on clock transitions
+//   9. writeShotEvent()         — insert one shot_events row (returns id)
+//  10. writeGameAction()        — insert one game_actions row (returns id)
+//  11. deleteShotEvent()        — remove a shot_events row (for undo)
+//  12. deleteGameAction()       — remove a game_actions row (for undo)
+//  13. finishGame()             — mark game completed (flushes pending state)
 // ═══════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js';
@@ -34,6 +42,7 @@ const supabase = supabaseUrl && supabaseServiceKey
     : null;
 
 let activeChannel = null;
+let activeChannelCode = null;
 
 // ─── Game Code Generator ───────────────────────────────────────
 // Matches the website's algorithm exactly.
@@ -92,7 +101,7 @@ export const createGame = async (config) => {
             shotClockDuration: config.shotClockSeconds,
             periodType: config.periodType || 'quarter',
             periods: config.periods || 4,
-            gameMode: 'quick',
+            gameMode: config.gameMode || 'quick',
         },
         gameState: {
             period: 1,
@@ -115,7 +124,7 @@ export const createGame = async (config) => {
             timeouts: config.timeoutsPerTeam || 2,
             timeoutsFirstHalf: 2,
             timeoutsSecondHalf: 3,
-            players: [],
+            players: config.playersA || [],
         },
         teamB: {
             name: config.teamBName,
@@ -126,7 +135,7 @@ export const createGame = async (config) => {
             timeouts: config.timeoutsPerTeam || 2,
             timeoutsFirstHalf: 2,
             timeoutsSecondHalf: 3,
-            players: [],
+            players: config.playersB || [],
         },
     };
 
@@ -157,6 +166,27 @@ export const createGame = async (config) => {
     return gameCode;
 };
 
+// ─── Resume / Crash Recovery ───────────────────────────────────
+/**
+ * Fetches the persisted game row by code. Used by setup_game when an
+ * existingGameCode is supplied (daemon crashed / restarted mid-game).
+ *
+ * Returns the full row including `data` JSONB, or null if not found or offline.
+ */
+export const fetchGameByCode = async (gameCode) => {
+    if (!supabase || !gameCode) return null;
+    const { data, error } = await supabase
+        .from('games')
+        .select('code, status, data')
+        .eq('code', gameCode)
+        .maybeSingle();
+    if (error) {
+        console.error('[Supabase] fetchGameByCode failed:', error.message);
+        return null;
+    }
+    return data || null;
+};
+
 // ─── State Persistence ─────────────────────────────────────────
 /**
  * Persists the full game state to the games.data JSONB column.
@@ -165,6 +195,45 @@ export const createGame = async (config) => {
  */
 let lastPersistTime = 0;
 let pendingPersist = null;
+let pendingPersistArgs = null;
+
+const doPersist = async (gameCode, state) => {
+    lastPersistTime = Date.now();
+
+    const { data: existing, error: fetchError } = await supabase
+        .from('games')
+        .select('data')
+        .eq('code', gameCode)
+        .maybeSingle();
+
+    if (fetchError || !existing) return;
+
+    const merged = {
+        ...existing.data,
+        lastUpdate: Date.now(),
+        teamA: { ...existing.data.teamA, score: state.teamA.score, fouls: state.teamA.fouls, timeouts: state.teamA.timeouts },
+        teamB: { ...existing.data.teamB, score: state.teamB.score, fouls: state.teamB.fouls, timeouts: state.teamB.timeouts },
+        gameState: {
+            ...existing.data.gameState,
+            period: state.clock.period,
+            gameRunning: state.clock.isRunning,
+            gameTime: {
+                minutes: Math.floor(state.clock.gameMs / 60000),
+                seconds: Math.floor((state.clock.gameMs % 60000) / 1000),
+                tenths: 0,
+            },
+            shotClock: Math.ceil(state.clock.shotMs / 1000),
+            possession: state.possession ?? existing.data.gameState?.possession ?? 'A',
+        },
+    };
+
+    const { error } = await supabase
+        .from('games')
+        .update({ data: merged, lastUpdate: Date.now() })
+        .eq('code', gameCode);
+
+    if (error) console.error('[Supabase] persistGameState failed:', error.message);
+};
 
 export const persistGameState = (gameCode, state) => {
     if (!supabase || !gameCode) return;
@@ -172,75 +241,47 @@ export const persistGameState = (gameCode, state) => {
     const now = Date.now();
     const timeSinceLast = now - lastPersistTime;
 
-    // Clear any pending persist
+    // Always keep the latest args — if a write is pending, it'll use them.
+    pendingPersistArgs = { gameCode, state };
+
+    if (pendingPersist) return; // a write is already queued; it will use latest args
+
+    if (timeSinceLast >= 500) {
+        const args = pendingPersistArgs;
+        pendingPersistArgs = null;
+        doPersist(args.gameCode, args.state);
+    } else {
+        pendingPersist = setTimeout(() => {
+            pendingPersist = null;
+            const args = pendingPersistArgs;
+            pendingPersistArgs = null;
+            if (args) doPersist(args.gameCode, args.state);
+        }, 500 - timeSinceLast);
+    }
+};
+
+/**
+ * Forces any pending throttled persistGameState write to flush immediately.
+ * Awaitable — resolves when the underlying Supabase write completes.
+ * Called from end_game / finishGame so the final state always lands before
+ * status is flipped to 'completed'.
+ */
+export const flushPendingPersist = async () => {
     if (pendingPersist) {
         clearTimeout(pendingPersist);
         pendingPersist = null;
     }
-
-    const doWrite = async () => {
-        lastPersistTime = Date.now();
-
-        const patch = {
-            'teamA.score': state.teamA.score,
-            'teamA.fouls': state.teamA.fouls,
-            'teamA.timeouts': state.teamA.timeouts,
-            'teamB.score': state.teamB.score,
-            'teamB.fouls': state.teamB.fouls,
-            'teamB.timeouts': state.teamB.timeouts,
-            'gameState.period': state.clock.period,
-            'gameState.gameRunning': state.clock.isRunning,
-        };
-
-        // Supabase doesn't support dot-path JSONB updates via .update() directly,
-        // so we use RPC or a full data fetch+merge. Simplest approach: full overwrite
-        // of just the fields we care about using jsonb_set via the JS client workaround.
-        // For demo V1, we do a select-then-update pattern.
-        const { data: existing, error: fetchError } = await supabase
-            .from('games')
-            .select('data')
-            .eq('code', gameCode)
-            .maybeSingle();
-
-        if (fetchError || !existing) return;
-
-        const merged = {
-            ...existing.data,
-            lastUpdate: Date.now(),
-            teamA: { ...existing.data.teamA, score: state.teamA.score, fouls: state.teamA.fouls, timeouts: state.teamA.timeouts },
-            teamB: { ...existing.data.teamB, score: state.teamB.score, fouls: state.teamB.fouls, timeouts: state.teamB.timeouts },
-            gameState: {
-                ...existing.data.gameState,
-                period: state.clock.period,
-                gameRunning: state.clock.isRunning,
-                gameTime: {
-                    minutes: Math.floor(state.clock.gameMs / 60000),
-                    seconds: Math.floor((state.clock.gameMs % 60000) / 1000),
-                    tenths: 0,
-                },
-                shotClock: Math.ceil(state.clock.shotMs / 1000),
-            },
-        };
-
-        const { error } = await supabase
-            .from('games')
-            .update({ data: merged, lastUpdate: Date.now() })
-            .eq('code', gameCode);
-
-        if (error) console.error('[Supabase] persistGameState failed:', error.message);
-    };
-
-    if (timeSinceLast >= 500) {
-        doWrite();
-    } else {
-        // Defer to avoid hammering Supabase on rapid button presses
-        pendingPersist = setTimeout(doWrite, 500 - timeSinceLast);
-    }
+    const args = pendingPersistArgs;
+    pendingPersistArgs = null;
+    if (args) await doPersist(args.gameCode, args.state);
 };
 
 // ─── Game Finish ───────────────────────────────────────────────
 export const finishGame = async (gameCode) => {
     if (!supabase || !gameCode) return;
+
+    // Make sure the throttled persist has landed before we flip status.
+    await flushPendingPersist();
 
     const { error } = await supabase
         .from('games')
@@ -259,16 +300,34 @@ const broadcastClient = supabaseUrl && anonKey
     ? createClient(supabaseUrl, anonKey, { auth: { persistSession: false } })
     : supabase; // fallback to service client if no anon key
 
+/**
+ * Ensures the realtime channel for this game exists and is subscribed.
+ * Called from setup_game so cloud viewers receive clock_tick from the
+ * very first tick, not just after the first score-changing action.
+ *
+ * Web consumers (supabaseBroadcastService, useSupabaseBroadcast, SpectatorView)
+ * subscribe to `game:${code}` and listen for: clock_tick / clock_start /
+ * clock_stop / score_update. Keep both ends aligned.
+ */
+export const ensureChannel = (gameCode) => {
+    if (!broadcastClient || !gameCode) return;
+    if (activeChannelCode === gameCode && activeChannel) return;
+
+    if (activeChannel) {
+        broadcastClient.removeChannel(activeChannel);
+        activeChannel = null;
+    }
+
+    activeChannelCode = gameCode;
+    activeChannel = broadcastClient.channel(`game:${gameCode}`);
+    activeChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') console.log(`☁️  Broadcasting on channel [game:${gameCode}]`);
+    });
+};
+
 export const broadcastToCloud = (gameCode, state) => {
     if (!broadcastClient || !gameCode) return;
-
-    if (!activeChannel || activeChannel._topic !== `realtime:box-${gameCode}`) {
-        if (activeChannel) broadcastClient.removeChannel(activeChannel);
-        activeChannel = broadcastClient.channel(`box-${gameCode}`);
-        activeChannel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') console.log(`☁️  Broadcasting on channel [box-${gameCode}]`);
-        });
-    }
+    ensureChannel(gameCode);
 
     activeChannel.send({
         type: 'broadcast',
@@ -281,22 +340,65 @@ export const broadcastToCloud = (gameCode, state) => {
             timeoutsA: state.teamA.timeouts,
             timeoutsB: state.teamB.timeouts,
             possession: state.possession ?? 'A',
+            period: state.clock.period,
+            ts: Date.now(),
         }
     });
 };
 
-export const broadcastClockToCloud = (gameCode, clockState) => {
-    if (!activeChannel) return;
-
+/**
+ * Per-tick clock broadcast for cloud spectators. Event name matches
+ * supabaseBroadcastService.broadcastClockTick exactly.
+ */
+export const broadcastClockTick = (gameCode, clockState) => {
+    if (!activeChannel || activeChannelCode !== gameCode) return;
     activeChannel.send({
         type: 'broadcast',
-        event: 'clock_sync',
+        event: 'clock_tick',
         payload: {
             minutes: Math.floor(clockState.gameMs / 60000),
             seconds: Math.floor((clockState.gameMs % 60000) / 1000),
+            tenths: 0,
+            shotClock: Math.ceil(clockState.shotMs / 1000),
             period: clockState.period,
             gameRunning: clockState.isRunning,
+            ts: Date.now(),
+        }
+    });
+};
+
+/** Fired once when the clock transitions to running. */
+export const broadcastClockStart = (gameCode, clockState) => {
+    if (!activeChannel || activeChannelCode !== gameCode) return;
+    activeChannel.send({
+        type: 'broadcast',
+        event: 'clock_start',
+        payload: {
+            minutes: Math.floor(clockState.gameMs / 60000),
+            seconds: Math.floor((clockState.gameMs % 60000) / 1000),
+            tenths: 0,
             shotClock: Math.ceil(clockState.shotMs / 1000),
+            period: clockState.period,
+            gameRunning: true,
+            ts: Date.now(),
+        }
+    });
+};
+
+/** Fired once when the clock transitions to stopped. */
+export const broadcastClockStop = (gameCode, clockState) => {
+    if (!activeChannel || activeChannelCode !== gameCode) return;
+    activeChannel.send({
+        type: 'broadcast',
+        event: 'clock_stop',
+        payload: {
+            minutes: Math.floor(clockState.gameMs / 60000),
+            seconds: Math.floor((clockState.gameMs % 60000) / 1000),
+            tenths: 0,
+            shotClock: Math.ceil(clockState.shotMs / 1000),
+            period: clockState.period,
+            gameRunning: false,
+            ts: Date.now(),
         }
     });
 };
@@ -305,11 +407,12 @@ export const broadcastClockToCloud = (gameCode, clockState) => {
 /**
  * Writes a single shot attribution event to shot_events table.
  * Throws if Supabase is unavailable — caller should catch and queue.
+ * Returns the inserted row's id so the caller can delete it on UNDO.
  */
 export const writeShotEvent = async (gameCode, event) => {
     if (!supabase) throw new Error('Supabase unavailable');
 
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from('shot_events')
         .insert({
             game_code: gameCode,
@@ -326,9 +429,57 @@ export const writeShotEvent = async (gameCode, event) => {
             attributes: Array.isArray(event.attributes) ? event.attributes : [],
             input_method: 'live',
             created_at: event.createdAt ?? new Date().toISOString(),
-        });
+        })
+        .select('id')
+        .single();
 
     if (error) throw new Error(error.message);
+    return data?.id ?? null;
+};
+
+/**
+ * Deletes a single shot_events row. Used by UNDO to keep the shot chart
+ * consistent with the visible score. Silent no-op if id is null/missing.
+ */
+export const deleteShotEvent = async (shotId) => {
+    if (!supabase || !shotId) return;
+    const { error } = await supabase.from('shot_events').delete().eq('id', shotId);
+    if (error) console.error('[Supabase] deleteShotEvent failed:', error.message);
+};
+
+// ─── Game Action Writer ────────────────────────────────────────
+/**
+ * Writes a single game_actions row (foul, timeout, etc).
+ * Mirrors src/services/shotService.ts createGameAction so the play-by-play
+ * timeline picks up Pi-scored games. Returns inserted id (for undo).
+ */
+export const writeGameAction = async (gameCode, action) => {
+    if (!supabase) throw new Error('Supabase unavailable');
+
+    const { data, error } = await supabase
+        .from('game_actions')
+        .insert({
+            game_code: gameCode,
+            player_id: action.playerId ?? null,
+            team_side: action.team,
+            action_type: action.actionType,
+            subtype: action.subtype ?? null,
+            period: action.period ?? 1,
+            game_clock_sec: action.gameClockSec ?? null,
+            related_shot_id: action.relatedShotId ?? null,
+        })
+        .select('id')
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data?.id ?? null;
+};
+
+/** Deletes a single game_actions row (used by undo). */
+export const deleteGameAction = async (actionId) => {
+    if (!supabase || !actionId) return;
+    const { error } = await supabase.from('game_actions').delete().eq('id', actionId);
+    if (error) console.error('[Supabase] deleteGameAction failed:', error.message);
 };
 
 // ─── Channel Teardown ──────────────────────────────────────────
@@ -336,5 +487,6 @@ export const teardownChannel = () => {
     if (activeChannel && broadcastClient) {
         broadcastClient.removeChannel(activeChannel);
         activeChannel = null;
+        activeChannelCode = null;
     }
 };

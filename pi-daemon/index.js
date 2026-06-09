@@ -1,5 +1,14 @@
 // pi-daemon/index.js — THE BOX Hardware Daemon v3
-// Pico UART for buttons, pigpio for buzzer, score_pending for UI popups
+// Pico UART for buttons, pigpio for buzzer, score_pending for UI popups.
+//
+// Transports:
+//   • Socket.io @ :3001 → LAN UI (RefereeScreen, PiLocalDisplay, OBSOverlay)
+//     events: state_update, clock_sync, score_pending, undo_triggered,
+//             settings_toggled, pico_status, pico_message_raw, game_ready,
+//             game_ended, setup_error, score_pending_clear
+//   • Supabase realtime → cloud spectators (web SpectatorView, watch pages)
+//     channel: game:${code}
+//     events:  clock_tick, clock_start, clock_stop, score_update
 
 import express from 'express';
 import { createServer } from 'http';
@@ -10,18 +19,52 @@ import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { OUTPUT_CONFIG } from './buttonMap.js';
 import {
-    createGame, persistGameState, finishGame,
-    broadcastToCloud, broadcastClockToCloud, teardownChannel, writeShotEvent,
+    createGame, fetchGameByCode, persistGameState, finishGame, flushPendingPersist,
+    ensureChannel, broadcastToCloud, broadcastClockTick, broadcastClockStart, broadcastClockStop,
+    teardownChannel,
+    writeShotEvent, deleteShotEvent, writeGameAction, deleteGameAction,
 } from './supabaseSync.js';
 
 let currentGameCode = null;
 
+// ── FIBA timeout buckets (ported from src/services/fibaTimeouts.ts) ──
+// Allotment per period, refilled when the bucket key changes.
+//   4+ periods: H1 (P1-2) = 2,  H2 (P3..total) = 3,  OT = 1
+//   2 periods:  H1 = 2, H2 = 2, OT = 1
+//   1 period:   1 per game
+function fibaTimeoutsForPeriod(period, totalPeriods) {
+    if (totalPeriods >= 4) {
+        if (period <= 2) return 2;
+        if (period <= totalPeriods) return 3;
+        return 1;
+    }
+    if (totalPeriods === 2) {
+        if (period <= 2) return 2;
+        return 1;
+    }
+    return 1;
+}
+function timeoutBucketKey(period, totalPeriods) {
+    if (totalPeriods >= 4) {
+        if (period <= 2) return 'H1';
+        if (period <= totalPeriods) return 'H2';
+        return `OT${period - totalPeriods}`;
+    }
+    if (totalPeriods === 2) {
+        if (period === 1) return 'H1';
+        if (period === 2) return 'H2';
+        return `OT${period - 2}`;
+    }
+    return period === 1 ? 'REG' : `OT${period - 1}`;
+}
+
 // ── 1. BUZZER GPIO ────────────────────────────────────────────
 let Gpio;
+let pigpioModule = null;
 if (process.platform === 'linux') {
-    const pigpio = await import('pigpio');
-    try { pigpio.configureClock(5, 0); } catch (e) { }
-    Gpio = pigpio.Gpio;
+    pigpioModule = await import('pigpio');
+    try { pigpioModule.configureClock(5, 0); } catch (e) { }
+    Gpio = pigpioModule.Gpio;
 } else {
     Gpio = class MockGpio {
         constructor(gpio) { this.gpio = gpio; this.value = 0; }
@@ -47,6 +90,7 @@ const getInitialState = (config = null) => ({
         gameCode: null, gameActive: false,
         periodType: config?.periodType || 'quarter',
         gameMode: config?.gameMode || 'quick', // 'quick' | 'stats' | 'advanced'
+        timeoutMode: config?.timeoutMode || 'fiba',
         players: {
             teamA: config?.playersA || [],
             teamB: config?.playersB || [],
@@ -55,24 +99,58 @@ const getInitialState = (config = null) => ({
 });
 
 let state = getInitialState();
+
+// History entries are { state, shotIds[], actionIds[] }. The IDs are the
+// shot_events / game_actions rows written *after* this snapshot was taken
+// (i.e. the rows the user will lose if they undo to it).
 let history = [];
 const cloneState = (s) => JSON.parse(JSON.stringify(s));
-const saveHistory = () => { history.push(cloneState(state)); if (history.length > 50) history.shift(); };
+const saveHistory = () => {
+    history.push({ state: cloneState(state), shotIds: [], actionIds: [] });
+    if (history.length > 50) history.shift();
+};
+const recordShotOnLastSnapshot = (id) => {
+    if (!id || history.length === 0) return;
+    history[history.length - 1].shotIds.push(id);
+};
+const recordActionOnLastSnapshot = (id) => {
+    if (!id || history.length === 0) return;
+    history[history.length - 1].actionIds.push(id);
+};
 
-// ── Shot queue (offline buffer) ───────────────────────────────
-// Shot events are queued here when Supabase is unreachable and
-// flushed automatically the next time a write succeeds.
+// ── Offline queues ───────────────────────────────────────────
+// shot_events and game_actions both fall through to here when the Supabase
+// write fails (offline / transient error). Flushed on next success, or every
+// 30s by the retry timer below.
 const shotQueue = [];
+const actionQueue = [];
+let retryTimer = null;
+
+function ensureRetryTimer() {
+    if (retryTimer) return;
+    if (shotQueue.length === 0 && actionQueue.length === 0) return;
+    retryTimer = setInterval(async () => {
+        await flushShotQueue();
+        await flushActionQueue();
+        if (shotQueue.length === 0 && actionQueue.length === 0) {
+            clearInterval(retryTimer);
+            retryTimer = null;
+            console.log('[Queue] All queues drained — retry timer stopped');
+        }
+    }, 30000);
+}
 
 async function persistShotEvent(eventData) {
     const payload = { ...eventData, createdAt: new Date().toISOString() };
     try {
-        await writeShotEvent(currentGameCode, payload);
-        // Success — try to flush any previously queued shots
+        const id = await writeShotEvent(currentGameCode, payload);
+        recordShotOnLastSnapshot(id);
         flushShotQueue();
+        flushActionQueue();
     } catch {
         shotQueue.push({ gameCode: currentGameCode, ...payload });
         console.warn(`[ShotQueue] Queued offline — queue length: ${shotQueue.length}`);
+        ensureRetryTimer();
     }
 }
 
@@ -84,7 +162,33 @@ async function flushShotQueue() {
             shotQueue.shift();
             console.log(`[ShotQueue] Flushed 1 shot — ${shotQueue.length} remaining`);
         } catch {
-            break; // Still offline, stop trying
+            break;
+        }
+    }
+}
+
+async function persistGameAction(actionData) {
+    try {
+        const id = await writeGameAction(currentGameCode, actionData);
+        recordActionOnLastSnapshot(id);
+        flushShotQueue();
+        flushActionQueue();
+    } catch {
+        actionQueue.push({ gameCode: currentGameCode, ...actionData });
+        console.warn(`[ActionQueue] Queued offline — queue length: ${actionQueue.length}`);
+        ensureRetryTimer();
+    }
+}
+
+async function flushActionQueue() {
+    while (actionQueue.length > 0) {
+        const item = actionQueue[0];
+        try {
+            await writeGameAction(item.gameCode, item);
+            actionQueue.shift();
+            console.log(`[ActionQueue] Flushed 1 action — ${actionQueue.length} remaining`);
+        } catch {
+            break;
         }
     }
 }
@@ -110,45 +214,77 @@ function triggerBuzzer(type = 'SHORT') {
     buzzerTimeout = setTimeout(() => buzzerPin.digitalWrite(0), type === 'LONG' ? 2000 : 800);
 }
 
-// ── 4. CLOCK ──────────────────────────────────────────────────
-let lastTick = Date.now(), lastCloudTick = 0;
+// ── 4. CLOCK (epoch-anchored) ─────────────────────────────────
+// While running, we don't decrement on each tick — instead we store a
+// "deadline" timestamp and recompute remaining = max(0, deadline - now).
+// Event-loop stalls no longer steal real seconds from the official clock.
+let gameDeadlineMs = null;
+let shotDeadlineMs = null;
+let lastCloudTick = 0;
+
+function startClock() {
+    if (state.clock.gameMs <= 0) return;
+    if (state.clock.isRunning) return;
+    state.clock.isRunning = true;
+    gameDeadlineMs = Date.now() + state.clock.gameMs;
+    shotDeadlineMs = Date.now() + state.clock.shotMs;
+    broadcastClockStart(currentGameCode, state.clock);
+}
+
+function stopClock() {
+    if (!state.clock.isRunning) return;
+    // Freeze remaining time before clearing deadlines.
+    if (gameDeadlineMs !== null) state.clock.gameMs = Math.max(0, gameDeadlineMs - Date.now());
+    if (shotDeadlineMs !== null) state.clock.shotMs = Math.max(0, shotDeadlineMs - Date.now());
+    state.clock.isRunning = false;
+    gameDeadlineMs = null;
+    shotDeadlineMs = null;
+    broadcastClockStop(currentGameCode, state.clock);
+}
+
+/** Re-anchor the deadlines after gameMs/shotMs were edited mid-run. */
+function reanchorClock() {
+    if (!state.clock.isRunning) return;
+    gameDeadlineMs = Date.now() + state.clock.gameMs;
+    shotDeadlineMs = Date.now() + state.clock.shotMs;
+}
 
 setInterval(() => {
-    if (!state.meta.gameActive) return;
+    if (!state.meta.gameActive || !state.clock.isRunning) return;
     const now = Date.now();
-    const delta = now - lastTick;
-    const safeDelta = Math.min(delta, 200);
-    lastTick = now;
+    const prevGame = state.clock.gameMs;
+    const prevShot = state.clock.shotMs;
+    state.clock.gameMs = Math.max(0, gameDeadlineMs - now);
+    state.clock.shotMs = Math.max(0, shotDeadlineMs - now);
+    let fullSync = false;
 
-    if (state.clock.isRunning) {
-        const prevGame = state.clock.gameMs;
-        const prevShot = state.clock.shotMs;
-        state.clock.gameMs = Math.max(0, state.clock.gameMs - safeDelta);
-        state.clock.shotMs = Math.max(0, state.clock.shotMs - safeDelta);
-        let fullSync = false;
+    if (state.clock.gameMs === 0 && prevGame > 0) {
+        state.clock.isRunning = false;
+        gameDeadlineMs = null;
+        shotDeadlineMs = null;
+        triggerBuzzer('LONG');
+        fullSync = true;
+        console.log('🚨 End of Period!');
+        broadcastClockStop(currentGameCode, state.clock);
+    } else if (state.clock.shotMs === 0 && prevShot > 0 && state.clock.gameMs > 0) {
+        state.clock.isRunning = false;
+        gameDeadlineMs = null;
+        shotDeadlineMs = null;
+        triggerBuzzer('SHORT');
+        fullSync = true;
+        console.log('🚨 Shot Clock Violation!');
+        broadcastClockStop(currentGameCode, state.clock);
+    }
 
-        if (state.clock.gameMs === 0 && prevGame > 0) {
-            state.clock.isRunning = false;
-            triggerBuzzer('LONG');
-            fullSync = true;
-            console.log('🚨 End of Period!');
-        } else if (state.clock.shotMs === 0 && prevShot > 0 && state.clock.gameMs > 0) {
-            state.clock.isRunning = false;
-            triggerBuzzer('SHORT');
-            fullSync = true;
-            console.log('🚨 Shot Clock Violation!');
-        }
-
-        if (fullSync) {
-            io.emit('state_update', state);
-            broadcastToCloud(currentGameCode, state);
-            persistGameState(currentGameCode, state);
-        } else {
-            io.emit('clock_sync', state.clock);
-            if (now - lastCloudTick >= 1000) {
-                broadcastClockToCloud(currentGameCode, state.clock);
-                lastCloudTick = now;
-            }
+    if (fullSync) {
+        io.emit('state_update', state);
+        broadcastToCloud(currentGameCode, state);
+        persistGameState(currentGameCode, state);
+    } else {
+        io.emit('clock_sync', state.clock);
+        if (now - lastCloudTick >= 1000) {
+            broadcastClockTick(currentGameCode, state.clock);
+            lastCloudTick = now;
         }
     }
 }, 100);
@@ -232,11 +368,13 @@ function handlePicoMessage(msg) {
         saveHistory();
         state[teamKey].score += points;
 
-        // Made field goal (+2 or +3) → other team gets new 24s possession.
-        // Free throws (+1) are NOT auto-reset because they come in sequences;
-        // the ref manually resets the shot clock after the last FT.
+        // Made field goal (+2 or +3): other team gets the ball with a
+        // fresh 24s shot clock. Free throws (+1) don't auto-reset because
+        // they come in sequences; the ref resets after the last FT.
         if (points >= 2 && state.clock.shotClockSeconds > 0) {
             state.clock.shotMs = state.clock.shotClockSeconds * 1000;
+            state.possession = team === 'A' ? 'B' : 'A';
+            reanchorClock();
         }
 
         // Always emit score_pending so UI can show popup (in stats/advanced mode)
@@ -258,46 +396,31 @@ function handlePicoMessage(msg) {
 
     switch (msg) {
         case 'CLOCK_START':
-            if (!state.clock.isRunning && state.clock.gameMs > 0) {
-                state.clock.isRunning = true;
-                lastTick = Date.now();
-                console.log('> CLOCK START');
-            }
+            startClock();
+            console.log('> CLOCK START');
             break;
         case 'CLOCK_STOP':
-            if (state.clock.isRunning) {
-                state.clock.isRunning = false;
-                console.log('> CLOCK STOP');
-            }
+            stopClock();
+            console.log('> CLOCK STOP');
             break;
         case 'CLOCK_TOGGLE':
-            if (state.clock.isRunning) {
-                state.clock.isRunning = false;
-                console.log('> CLOCK STOP (toggle)');
-            } else if (state.clock.gameMs > 0) {
-                state.clock.isRunning = true;
-                lastTick = Date.now();
-                console.log('> CLOCK START (toggle)');
-            }
+            if (state.clock.isRunning) { stopClock(); console.log('> CLOCK STOP (toggle)'); }
+            else { startClock(); console.log('> CLOCK START (toggle)'); }
             break;
         case 'SHOT_CLOCK_24':
             saveHistory();
             state.clock.shotMs = state.clock.shotClockSeconds * 1000;
+            reanchorClock();
             console.log('> SHOT CLOCK 24s');
             break;
         case 'SHOT_CLOCK_14':
             saveHistory();
             state.clock.shotMs = 14000;
+            reanchorClock();
             console.log('> SHOT CLOCK 14s');
             break;
         case 'UNDO':
-            if (history.length > 0) {
-                state = history.pop();
-                console.log('> UNDO');
-                io.emit('undo_triggered'); // UI can animate this
-                broadcastToCloud(currentGameCode, state);
-                persistGameState(currentGameCode, state);
-            }
+            performUndo();
             break;
         case 'SETTINGS':
             state.ui.isTouchUnlocked = !state.ui.isTouchUnlocked;
@@ -312,6 +435,20 @@ function handlePicoMessage(msg) {
     io.emit('state_update', state);
     broadcastToCloud(currentGameCode, state);
     persistGameState(currentGameCode, state);
+}
+
+function performUndo() {
+    if (history.length === 0) return;
+    const entry = history.pop();
+    state = entry.state;
+    // Re-anchor in case the clock was running before the undone action.
+    if (state.clock.isRunning) reanchorClock();
+    else { gameDeadlineMs = null; shotDeadlineMs = null; }
+    // Best-effort delete of any rows the undone action wrote.
+    entry.shotIds.forEach(id => { deleteShotEvent(id).catch(() => {}); });
+    entry.actionIds.forEach(id => { deleteGameAction(id).catch(() => {}); });
+    console.log(`> UNDO — reverted (${entry.shotIds.length} shot(s), ${entry.actionIds.length} action(s) deleted)`);
+    io.emit('undo_triggered');
 }
 
 // ── 6. SERVER ─────────────────────────────────────────────────
@@ -338,6 +475,7 @@ app.get('/api/health', (req, res) => {
             period: state.clock.period,
             score: `${state.teamA.score}-${state.teamB.score}`,
         },
+        queues: { shots: shotQueue.length, actions: actionQueue.length },
         system: {
             cpuTemp,
             heapMb: (mem.heapUsed / 1024 / 1024).toFixed(1),
@@ -354,19 +492,38 @@ app.get('/api/network-ip', (req, res) => {
 io.on('connection', (socket) => {
     console.log(`🔌 UI connected: ${socket.id}`);
     socket.emit('state_update', state);
+    // New clients should know hardware status without waiting for a flap.
+    socket.emit('pico_status', { connected: picoConnected, source: picoConnected ? 'Pico W' : null });
 
     socket.on('setup_game', async (config) => {
         console.log('\n📋 Setting up game:', config.existingGameCode || 'NEW');
         try {
-            const gameCode = config.existingGameCode || await createGame(config);
+            let gameCode;
+            let restored = null;
+
+            if (config.existingGameCode) {
+                // Resume path — try to fetch persisted state before falling back.
+                gameCode = config.existingGameCode;
+                const row = await fetchGameByCode(gameCode);
+                if (row && row.data) restored = row.data;
+            } else {
+                gameCode = await createGame(config);
+            }
+
             currentGameCode = gameCode;
             state = getInitialState(config);
+            if (restored) hydrateFromPersisted(restored);
             state.meta.gameCode = gameCode;
             state.meta.gameActive = true;
             history = [];
-            socket.emit('game_ready', { gameCode });
+
+            // Pre-create the realtime channel so cloud viewers start receiving
+            // clock_tick from the very first tick (not just after first score).
+            ensureChannel(gameCode);
+
+            socket.emit('game_ready', { gameCode, resumed: !!restored });
             io.emit('state_update', state);
-            console.log(`✅ Game ${gameCode} started — Mode: ${state.meta.gameMode}`);
+            console.log(`✅ Game ${gameCode} ${restored ? 'RESUMED' : 'started'} — Mode: ${state.meta.gameMode}`);
         } catch (err) {
             console.error('❌ setup_game failed:', err.message);
             socket.emit('setup_error', { message: err.message });
@@ -429,63 +586,90 @@ io.on('connection', (socket) => {
                 }
                 break;
             }
-            case 'EDIT_FOULS': state[action.payload.team].fouls = Math.max(0, state[action.payload.team].fouls + action.payload.amount); break;
-            case 'EDIT_TIMEOUTS': state[action.payload.team].timeouts = Math.max(0, state[action.payload.team].timeouts + action.payload.amount); break;
-            case 'EDIT_PERIOD': state.clock.period = Math.max(1, Math.min(state.clock.totalPeriods + 1, state.clock.period + action.payload.amount)); break;
+            case 'EDIT_FOULS': {
+                const tk = action.payload.team;
+                const amount = action.payload.amount;
+                const before = state[tk].fouls;
+                state[tk].fouls = Math.max(0, state[tk].fouls + amount);
+                if (amount > 0 && state[tk].fouls > before) {
+                    persistGameAction({
+                        team: tk === 'teamA' ? 'A' : 'B',
+                        actionType: 'foul',
+                        period: state.clock.period,
+                        gameClockSec: Math.ceil(state.clock.gameMs / 1000),
+                    });
+                }
+                break;
+            }
+            case 'EDIT_TIMEOUTS': {
+                const tk = action.payload.team;
+                const amount = action.payload.amount;
+                const before = state[tk].timeouts;
+                state[tk].timeouts = Math.max(0, state[tk].timeouts + amount);
+                if (amount < 0 && state[tk].timeouts < before) {
+                    persistGameAction({
+                        team: tk === 'teamA' ? 'A' : 'B',
+                        actionType: 'timeout',
+                        period: state.clock.period,
+                        gameClockSec: Math.ceil(state.clock.gameMs / 1000),
+                    });
+                }
+                break;
+            }
+            case 'EDIT_PERIOD': state.clock.period = Math.max(1, Math.min(state.clock.totalPeriods + 4, state.clock.period + action.payload.amount)); break;
             case 'CLOCK_TOGGLE':
-                if (state.clock.isRunning) {
-                    state.clock.isRunning = false;
-                    console.log('> CLOCK STOP (touch)');
-                } else if (state.clock.gameMs > 0) {
-                    state.clock.isRunning = true;
-                    lastTick = Date.now();
-                    console.log('> CLOCK START (touch)');
-                }
+                if (state.clock.isRunning) { stopClock(); console.log('> CLOCK STOP (touch)'); }
+                else { startClock(); console.log('> CLOCK START (touch)'); }
                 break;
-            case 'CLOCK_START':
-                if (!state.clock.isRunning && state.clock.gameMs > 0) {
-                    state.clock.isRunning = true;
-                    lastTick = Date.now();
-                    console.log('> CLOCK START (touch)');
-                }
+            case 'CLOCK_START': startClock(); console.log('> CLOCK START (touch)'); break;
+            case 'CLOCK_STOP':  stopClock();  console.log('> CLOCK STOP (touch)');  break;
+            case 'EDIT_GAME_CLOCK':
+                state.clock.gameMs = Math.max(0, Math.round(state.clock.gameMs + (action.payload.amount * 1000)));
+                reanchorClock();
                 break;
-            case 'CLOCK_STOP':
-                if (state.clock.isRunning) {
-                    state.clock.isRunning = false;
-                    console.log('> CLOCK STOP (touch)');
-                }
+            case 'EDIT_SHOT_CLOCK':
+                state.clock.shotMs = Math.max(0, Math.round(state.clock.shotMs + (action.payload.amount * 1000)));
+                reanchorClock();
                 break;
-            case 'EDIT_GAME_CLOCK': state.clock.gameMs = Math.max(0, Math.round(state.clock.gameMs + (action.payload.amount * 1000))); break;
-            case 'EDIT_SHOT_CLOCK': state.clock.shotMs = Math.max(0, Math.round(state.clock.shotMs + (action.payload.amount * 1000))); break;
-            case 'SET_GAME_CLOCK':  state.clock.gameMs = Math.max(0, Math.round(action.payload.ms ?? 0)); break;
-            case 'SET_SHOT_CLOCK':  state.clock.shotMs = Math.max(0, Math.round(action.payload.ms ?? 0)); break;
+            case 'SET_GAME_CLOCK':
+                state.clock.gameMs = Math.max(0, Math.round(action.payload.ms ?? 0));
+                reanchorClock();
+                break;
+            case 'SET_SHOT_CLOCK':
+                state.clock.shotMs = Math.max(0, Math.round(action.payload.ms ?? 0));
+                reanchorClock();
+                break;
             case 'LOCK_TOUCH':
                 state.ui.isTouchUnlocked = false;
                 io.emit('settings_toggled', { unlocked: false });
                 break;
             case 'UNDO':
-                if (history.length > 0) {
-                    state = history.pop();
-                    io.emit('undo_triggered');
-                }
+                performUndo();
                 break;
             case 'NEXT_PERIOD':
-                state.clock.isRunning = false;
-                state.clock.period += 1;
-                state.clock.gameMs = state.clock.periodMinutes * 60 * 1000;
-                state.clock.shotMs = state.clock.shotClockSeconds * 1000;
-                state.teamA.fouls = 0; state.teamB.fouls = 0;
-                console.log(`> NEXT PERIOD: ${state.clock.period}`);
+                advancePeriod();
                 break;
-            case 'ADD_FOUL_A': saveHistory(); state.teamA.fouls = Math.min(99, state.teamA.fouls + 1); break;
-            case 'ADD_FOUL_B': saveHistory(); state.teamB.fouls = Math.min(99, state.teamB.fouls + 1); break;
+            case 'ADD_FOUL_A':
+                state.teamA.fouls = Math.min(99, state.teamA.fouls + 1);
+                persistGameAction({ team: 'A', actionType: 'foul', period: state.clock.period, gameClockSec: Math.ceil(state.clock.gameMs / 1000) });
+                break;
+            case 'ADD_FOUL_B':
+                state.teamB.fouls = Math.min(99, state.teamB.fouls + 1);
+                persistGameAction({ team: 'B', actionType: 'foul', period: state.clock.period, gameClockSec: Math.ceil(state.clock.gameMs / 1000) });
+                break;
             case 'TIMEOUT_A':
-                saveHistory();
-                if (state.teamA.timeouts > 0) { state.teamA.timeouts -= 1; state.clock.isRunning = false; }
+                if (state.teamA.timeouts > 0) {
+                    state.teamA.timeouts -= 1;
+                    stopClock();
+                    persistGameAction({ team: 'A', actionType: 'timeout', period: state.clock.period, gameClockSec: Math.ceil(state.clock.gameMs / 1000) });
+                }
                 break;
             case 'TIMEOUT_B':
-                saveHistory();
-                if (state.teamB.timeouts > 0) { state.teamB.timeouts -= 1; state.clock.isRunning = false; }
+                if (state.teamB.timeouts > 0) {
+                    state.teamB.timeouts -= 1;
+                    stopClock();
+                    persistGameAction({ team: 'B', actionType: 'timeout', period: state.clock.period, gameClockSec: Math.ceil(state.clock.gameMs / 1000) });
+                }
                 break;
             case 'SET_POSSESSION':
                 state.possession = action.payload.team || null;
@@ -501,21 +685,25 @@ io.on('connection', (socket) => {
 
     socket.on('end_game', async () => {
         if (!currentGameCode) return;
-        state.clock.isRunning = false;
+        stopClock();
         io.emit('score_pending_clear');
-        await finishGame(currentGameCode);
-        teardownChannel();
         const endedCode = currentGameCode;
+        // finishGame internally flushes the throttled persist before flipping status.
+        await finishGame(endedCode);
+        teardownChannel();
         currentGameCode = null; state = getInitialState(); history = [];
         socket.emit('game_ended', { finalCode: endedCode });
         io.emit('state_update', state);
         console.log(`🏁 Game ${endedCode} ended`);
     });
 
-    // DEV / TESTING — inject a simulated Pico button press from the browser
-    // (keyboard 1–9 on a laptop with no GPIO). Runs the exact same pipeline as
-    // a real UART message, so score_pending popups, clock, undo etc. all fire.
+    // DEV / TESTING — inject a simulated Pico button press from the browser.
+    // Gated to non-production so anyone on the LAN can't inject scores in prod.
     socket.on('dev_pico_message', (msg) => {
+        if (process.env.NODE_ENV === 'production') {
+            console.warn(`🚫 dev_pico_message rejected in production (msg: ${msg})`);
+            return;
+        }
         if (typeof msg === 'string' && msg.length) {
             console.log(`⌨️  dev_pico: ${msg}`);
             handlePicoMessage(msg);
@@ -525,7 +713,76 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log(`🔌 UI disconnected: ${socket.id}`));
 });
 
-// ── 7. BOOT ───────────────────────────────────────────────────
+// ── 7. RESUME / HYDRATE ───────────────────────────────────────
+function hydrateFromPersisted(data) {
+    const tA = data.teamA || {};
+    const tB = data.teamB || {};
+    const gs = data.gameState || {};
+    const settings = data.settings || {};
+
+    state.teamA.name = tA.name ?? state.teamA.name;
+    state.teamA.color = tA.color ?? state.teamA.color;
+    state.teamA.score = tA.score ?? 0;
+    state.teamA.fouls = tA.fouls ?? 0;
+    state.teamA.timeouts = tA.timeouts ?? state.teamA.timeouts;
+
+    state.teamB.name = tB.name ?? state.teamB.name;
+    state.teamB.color = tB.color ?? state.teamB.color;
+    state.teamB.score = tB.score ?? 0;
+    state.teamB.fouls = tB.fouls ?? 0;
+    state.teamB.timeouts = tB.timeouts ?? state.teamB.timeouts;
+
+    if (settings.periodDuration) state.clock.periodMinutes = settings.periodDuration;
+    if (settings.shotClockDuration) state.clock.shotClockSeconds = settings.shotClockDuration;
+    if (settings.periods) state.clock.totalPeriods = settings.periods;
+
+    state.clock.period = gs.period ?? 1;
+    // Always resume PAUSED — refs should restart the clock manually after a crash.
+    state.clock.isRunning = false;
+    const mins = gs.gameTime?.minutes ?? state.clock.periodMinutes;
+    const secs = gs.gameTime?.seconds ?? 0;
+    state.clock.gameMs = (mins * 60 + secs) * 1000;
+    state.clock.shotMs = (gs.shotClock ?? state.clock.shotClockSeconds) * 1000;
+    state.possession = gs.possession ?? null;
+
+    // Players carry through if the persisted row had them.
+    if (Array.isArray(tA.players) && tA.players.length) state.meta.players.teamA = tA.players;
+    if (Array.isArray(tB.players) && tB.players.length) state.meta.players.teamB = tB.players;
+
+    console.log(`♻️  Hydrated from persisted state — score ${state.teamA.score}-${state.teamB.score} P${state.clock.period}`);
+}
+
+// ── 8. PERIOD ADVANCE (with FIBA bucket replenishment + OT length) ──
+function advancePeriod() {
+    stopClock();
+    const total = state.clock.totalPeriods;
+    const oldPeriod = state.clock.period;
+    const newPeriod = Math.min(total + 4, oldPeriod + 1); // cap at 4 OTs
+
+    const isOT = newPeriod > total;
+    // FIBA OT is fixed at 5 minutes regardless of regulation length.
+    state.clock.gameMs = (isOT ? 5 : state.clock.periodMinutes) * 60 * 1000;
+    state.clock.shotMs = state.clock.shotClockSeconds * 1000;
+    state.teamA.fouls = 0;
+    state.teamB.fouls = 0;
+    state.clock.period = newPeriod;
+
+    // Replenish timeouts only when the bucket key changes between old and new
+    // period. Mid-bucket period changes (P1→P2) carry timeouts over.
+    if (state.meta.timeoutMode === 'fiba') {
+        const oldKey = timeoutBucketKey(oldPeriod, total);
+        const newKey = timeoutBucketKey(newPeriod, total);
+        if (oldKey !== newKey) {
+            const refill = fibaTimeoutsForPeriod(newPeriod, total);
+            state.teamA.timeouts = refill;
+            state.teamB.timeouts = refill;
+            console.log(`> Timeouts replenished for ${newKey}: ${refill} per team`);
+        }
+    }
+    console.log(`> NEXT PERIOD: ${newPeriod}${isOT ? ' (OT)' : ''}`);
+}
+
+// ── 9. BOOT ───────────────────────────────────────────────────
 const PORT = 3001;
 server.listen(PORT, () => {
     console.log(`\n╔═══════════════════════════════════╗`);
@@ -540,7 +797,11 @@ process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down...');
     serialReconnectTimers.forEach(t => clearTimeout(t));
     serialPorts.forEach(p => p.close());
+    if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
     if (buzzerPin) buzzerPin.digitalWrite(0);
+    try { pigpioModule?.terminate?.(); } catch (_) { }
     teardownChannel();
+    // Best-effort: flush any pending persist before we exit.
+    try { await flushPendingPersist(); } catch (_) { }
     process.exit(0);
 });

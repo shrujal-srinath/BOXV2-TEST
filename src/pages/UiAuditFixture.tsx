@@ -50,6 +50,7 @@ export default function UiAuditFixture() {
             period: 2,
             totalPeriods: 4,
             periodMinutes: 10,
+            shotClockSeconds: 24,
         };
         const possession: 'A' | 'B' | null = noPossession ? null : 'A';
         return { teamA, teamB, clock, possession };

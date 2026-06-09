@@ -87,6 +87,11 @@ export function useRefereeBox() {
     // Settings unlock flash
     const [settingsFlash, setSettingsFlash] = useState<boolean | null>(null);
 
+    // Hardware status — daemon emits pico_status on every serial open/close
+    // and once on each fresh socket connection.
+    const [picoConnected, setPicoConnected] = useState(false);
+    const [picoSource, setPicoSource] = useState<string | null>(null);
+
     const socketRef = useRef<Socket | null>(null);
     const reconnectAttemptRef = useRef(0);
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -192,6 +197,13 @@ export function useRefereeBox() {
             setScorePending(null);
         });
 
+        // Pico hardware connect/disconnect (Pico W on /dev/serial0 or C3 dongle)
+        socket.on('pico_status', ({ connected, source }: { connected: boolean; source: string | null }) => {
+            if (!mountedRef.current) return;
+            setPicoConnected(connected);
+            setPicoSource(source);
+        });
+
     }, []);
 
     const scheduleReconnect = useCallback(() => {
@@ -274,6 +286,8 @@ export function useRefereeBox() {
     return {
         gameState,
         isConnected,
+        picoConnected,
+        picoSource,
         gameCode,
         isSettingUp,
         setupError,
