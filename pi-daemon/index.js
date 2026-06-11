@@ -784,6 +784,14 @@ function advancePeriod() {
 
 // ── 9. BOOT ───────────────────────────────────────────────────
 const PORT = 3001;
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use — is another daemon instance running?`);
+        console.error('   Stop it (e.g. `sudo systemctl stop thebox-daemon` or `pkill -f pi-daemon`) and retry.');
+        process.exit(1);
+    }
+    throw err;
+});
 server.listen(PORT, () => {
     console.log(`\n╔═══════════════════════════════════╗`);
     console.log(`║   THE BOX — Hardware Daemon v3    ║`);

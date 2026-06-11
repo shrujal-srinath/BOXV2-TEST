@@ -12,6 +12,7 @@ import {
     PD, PT, PB, FTR, R3, TX, TYT, TYB, RA,
     BK_X, BK_H, CC_R,
     LANE_MARKS, LANE_MARK_LEN,
+    LANE_BLOCKS, LANE_BLOCK_LEN,
     LINE_HEAVY, LINE_THIN, LINE_FAINT,
 } from './CourtGeometry';
 
@@ -39,7 +40,7 @@ export const COURT_THEMES = {
         rim: '#FF8C00',
         backboard: 'rgba(240,244,255,0.95)',
     },
-    wood: {
+    wooden: {
         floor: '#C68647',
         line: 'rgba(20,12,4,0.92)',
         lineSoft: 'rgba(20,12,4,0.55)',
@@ -60,6 +61,19 @@ export const COURT_THEMES = {
         paintFill: 'rgba(232,17,45,0.14)',
         rim: '#E8112D',
         backboard: '#1A1A2E',
+    },
+    hicontrast: {
+        floor: '#000000',
+        line: '#FFFFFF',
+        lineSoft: 'rgba(255,255,255,0.7)',
+        lineDash: 'rgba(255,255,255,0.5)',
+        tint2pt: 'rgba(255,255,255,0.04)',
+        tint3pt: 'rgba(80,140,255,0.14)',
+        paintFill: 'rgba(220,38,38,0.22)',
+        // Cyan rim — separates cleanly from MADE green and MISS red markers
+        // that cluster at the basket.
+        rim: '#00E5FF',
+        backboard: '#FFFFFF',
     },
 } as const satisfies Record<string, CourtPalette>;
 
@@ -92,6 +106,23 @@ const LeftHalfMarkings = React.memo(({ T }: { T: CourtPalette }) => (
                 </React.Fragment>
             );
         })}
+
+        {/* FIBA 7-block lane pattern (6cm perpendicular ticks every 0.4m) */}
+        {LANE_BLOCKS.map(lm => (
+            <React.Fragment key={`b-${lm}`}>
+                <line x1={lm} y1={PT - LANE_BLOCK_LEN} x2={lm} y2={PT}
+                    stroke={T.line} strokeWidth={LINE_FAINT} />
+                <line x1={lm} y1={PB} x2={lm} y2={PB + LANE_BLOCK_LEN}
+                    stroke={T.line} strokeWidth={LINE_FAINT} />
+            </React.Fragment>
+        ))}
+
+        {/* Restricted-arc endpoint ticks (FIBA spec — short perpendicular ticks
+            where the restricted arc would meet the baseline edge of the rim post). */}
+        <line x1={BX_L - 0.8} y1={BY - RA} x2={BX_L + 0.8} y2={BY - RA}
+            stroke={T.line} strokeWidth={LINE_FAINT} />
+        <line x1={BX_L - 0.8} y1={BY + RA} x2={BX_L + 0.8} y2={BY + RA}
+            stroke={T.line} strokeWidth={LINE_FAINT} />
 
         {/* FT circle — solid half opens toward midcourt (sweep=1) */}
         <path d={`M ${PD} ${BY - FTR} A ${FTR} ${FTR} 0 0 1 ${PD} ${BY + FTR}`}
@@ -157,6 +188,22 @@ const RightHalfMarkings = React.memo(({ T }: { T: CourtPalette }) => {
                 );
             })}
 
+            {/* FIBA 7-block lane pattern (mirror of left half) */}
+            {LANE_BLOCKS.map(lm => (
+                <React.Fragment key={`b-${lm}`}>
+                    <line x1={mx(lm)} y1={PT - LANE_BLOCK_LEN} x2={mx(lm)} y2={PT}
+                        stroke={T.line} strokeWidth={LINE_FAINT} />
+                    <line x1={mx(lm)} y1={PB} x2={mx(lm)} y2={PB + LANE_BLOCK_LEN}
+                        stroke={T.line} strokeWidth={LINE_FAINT} />
+                </React.Fragment>
+            ))}
+
+            {/* Restricted-arc endpoint ticks (mirror) */}
+            <line x1={BX_R - 0.8} y1={BY - RA} x2={BX_R + 0.8} y2={BY - RA}
+                stroke={T.line} strokeWidth={LINE_FAINT} />
+            <line x1={BX_R - 0.8} y1={BY + RA} x2={BX_R + 0.8} y2={BY + RA}
+                stroke={T.line} strokeWidth={LINE_FAINT} />
+
             {/* FT circle — solid opens left (toward midcourt for right side, sweep=0) */}
             <path d={`M ${mx(PD)} ${BY - FTR} A ${FTR} ${FTR} 0 0 0 ${mx(PD)} ${BY + FTR}`}
                 stroke={T.line} strokeWidth={LINE_HEAVY} />
@@ -215,7 +262,7 @@ const Basket = React.memo(({ bx, by, rim, gradId }: {
 Basket.displayName = 'Basket';
 
 // ── Centerline + center circle ───────────────────────────────
-const CenterLine = React.memo(({ T }: { T: CourtPalette }) => (
+const CenterLine = React.memo(({ T, chevrons }: { T: CourtPalette; chevrons: boolean }) => (
     <g fill="none" pointerEvents="none">
         {/* Midcourt line */}
         <line x1={HALF} y1={0} x2={HALF} y2={LS_H}
@@ -225,6 +272,19 @@ const CenterLine = React.memo(({ T }: { T: CourtPalette }) => (
             stroke={T.lineSoft} strokeWidth={LINE_THIN} />
         {/* Jump-ball center dot */}
         <circle cx={HALF} cy={BY} r={0.6} fill={T.line} />
+
+        {/* Halfcourt directional chevrons — opt-in via Settings → Court aids
+            → Chevrons. Off by default; many users found them visually noisy. */}
+        {chevrons && (
+            <g opacity={0.35} stroke={T.line} strokeWidth={LINE_FAINT} strokeLinecap="round">
+                {/* Left half chevron pointing right */}
+                <polyline points={`${HALF - 12},${BY - 3} ${HALF - 9},${BY} ${HALF - 12},${BY + 3}`} fill="none" />
+                <polyline points={`${HALF - 16},${BY - 3} ${HALF - 13},${BY} ${HALF - 16},${BY + 3}`} fill="none" />
+                {/* Right half chevron pointing left */}
+                <polyline points={`${HALF + 12},${BY - 3} ${HALF + 9},${BY} ${HALF + 12},${BY + 3}`} fill="none" />
+                <polyline points={`${HALF + 16},${BY - 3} ${HALF + 13},${BY} ${HALF + 16},${BY + 3}`} fill="none" />
+            </g>
+        )}
     </g>
 ));
 CenterLine.displayName = 'CenterLine';
@@ -249,10 +309,15 @@ export const CourtLinesBackground = React.memo(({ T }: { T: CourtPalette }) => (
 ));
 CourtLinesBackground.displayName = 'CourtLinesBackground';
 
-export const CourtLinesForeground = React.memo(({ T }: { T: CourtPalette }) => (
+export const CourtLinesForeground = React.memo(({ T, chevrons = false }: {
+    T: CourtPalette; chevrons?: boolean;
+}) => (
     <g>
-        <CenterLine T={T} />
-        {/* Re-draw paint + arc on top of hex layer so cells don't cover lines */}
+        <CenterLine T={T} chevrons={chevrons} />
+        {/* Re-draw paint + arc + 3pt corner straights on top of hex layer so
+            cells don't dim the markings. Background renders these for the
+            empty-court look; foreground keeps them crisp at full LINE_HEAVY
+            weight even when hex tints / heatmap pack the chart. */}
         <g fill="none" pointerEvents="none">
             <rect x={0} y={PT} width={PD} height={PB - PT}
                 stroke={T.line} strokeWidth={LINE_HEAVY} />
@@ -261,6 +326,16 @@ export const CourtLinesForeground = React.memo(({ T }: { T: CourtPalette }) => (
             <path d={`M ${TX} ${TYT} A ${R3} ${R3} 0 0 1 ${TX} ${TYB}`}
                 stroke={T.line} strokeWidth={LINE_HEAVY} />
             <path d={`M ${LS_W - TX} ${TYT} A ${R3} ${R3} 0 0 0 ${LS_W - TX} ${TYB}`}
+                stroke={T.line} strokeWidth={LINE_HEAVY} />
+            {/* Left half corner straights (baseline → arc tangent) */}
+            <line x1={0} y1={TYT} x2={TX} y2={TYT}
+                stroke={T.line} strokeWidth={LINE_HEAVY} />
+            <line x1={0} y1={TYB} x2={TX} y2={TYB}
+                stroke={T.line} strokeWidth={LINE_HEAVY} />
+            {/* Right half corner straights (mirrored) */}
+            <line x1={LS_W} y1={TYT} x2={LS_W - TX} y2={TYT}
+                stroke={T.line} strokeWidth={LINE_HEAVY} />
+            <line x1={LS_W} y1={TYB} x2={LS_W - TX} y2={TYB}
                 stroke={T.line} strokeWidth={LINE_HEAVY} />
         </g>
         <CourtOutline T={T} />

@@ -160,42 +160,30 @@ export const ScorePanel: React.FC<{
         <div style={{
             position: 'relative',
             width: '90%', maxWidth,
-            padding: 6,
-            border: `1px solid ${color}55`,
-            background: `linear-gradient(180deg, ${color}06 0%, transparent 50%, ${color}10 100%)`,
+            padding: '10px 0 14px',
+            border: `1px solid ${color}44`,
+            background: flash
+                ? `linear-gradient(180deg, ${color}18 0%, ${color}08 100%)`
+                : `linear-gradient(180deg, ${color}08 0%, transparent 60%)`,
             boxShadow: flash
-                ? `0 0 60px ${color}88, inset 0 0 28px ${color}33`
-                : `0 0 18px ${color}1f, inset 0 0 14px ${color}0a`,
-            transition: 'box-shadow 0.42s',
+                ? `0 0 48px ${color}66, inset 0 0 24px ${color}22`
+                : `0 0 12px ${color}18`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'box-shadow 0.42s, background 0.42s',
         }}>
-            <CornerBrackets color={color} size={14} thickness={2} />
-            <div style={{
-                background: SB_BG,
-                backgroundImage: SB_DOT_GRID,
-                border: `1px solid ${color}33`,
-                padding: '6px 0 10px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: 'relative', overflow: 'hidden',
+            <CornerBrackets color={`${color}99`} size={12} thickness={1.5} />
+            <span style={{
+                fontFamily: SB_OSW, fontWeight: 700, fontStyle: 'italic',
+                fontSize, lineHeight: 1, color,
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '-0.04em',
+                textShadow: flash
+                    ? `0 0 40px ${color}, 0 0 20px ${color}bb`
+                    : `0 0 18px ${color}66`,
+                transition: 'text-shadow 0.42s',
             }}>
-                <div style={{
-                    position: 'absolute', inset: 0,
-                    backgroundImage: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.022) 0px, rgba(255,255,255,0.022) 1px, transparent 1px, transparent 3px)',
-                    pointerEvents: 'none',
-                }} />
-                <span style={{
-                    fontFamily: SB_OSW, fontWeight: 700, fontStyle: 'italic',
-                    fontSize, lineHeight: 1, color,
-                    fontVariantNumeric: 'tabular-nums',
-                    letterSpacing: '-0.04em',
-                    textShadow: flash
-                        ? `0 0 50px ${color}, 0 0 24px ${color}cc, 0 0 10px ${color}`
-                        : `0 0 22px ${color}55, 0 0 8px ${color}88`,
-                    transition: 'text-shadow 0.42s',
-                    position: 'relative', zIndex: 1,
-                }}>
-                    {value}
-                </span>
-            </div>
+                {value}
+            </span>
         </div>
     );
 };

@@ -17,7 +17,11 @@ const ICE_SERVERS = {
 export class HostWebRTCManager {
     private gameCode: string;
     private channel: any;
-    private peers: Map<string, { pc: RTCPeerConnection, dc: RTCDataChannel }> = new Map();
+    // `dc`   — lossy/low-latency channel for high-frequency clock ticks (a dropped
+    //          tick self-heals on the next one).
+    // `snap` — reliable, ordered channel for full game snapshots, where a dropped
+    //          packet must NOT strand a stale score on the receiver.
+    private peers: Map<string, { pc: RTCPeerConnection, dc: RTCDataChannel, snap: RTCDataChannel }> = new Map();
 
     constructor(gameCode: string) {
         this.gameCode = gameCode;
@@ -43,6 +47,7 @@ export class HostWebRTCManager {
     private async createPeer(clientId: string) {
         const pc = new RTCPeerConnection(ICE_SERVERS);
         const dc = pc.createDataChannel('game-sync', { ordered: true, maxRetransmits: 0 }); // UDP-like speed
+        const snap = pc.createDataChannel('game-snapshot', { ordered: true }); // reliable, for full snapshots
 
         pc.onicecandidate = (e) => {
             if (e.candidate) {
@@ -50,7 +55,7 @@ export class HostWebRTCManager {
             }
         };
 
-        this.peers.set(clientId, { pc, dc });
+        this.peers.set(clientId, { pc, dc, snap });
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -67,6 +72,24 @@ export class HostWebRTCManager {
                 peer.dc.send(data);
             }
         });
+    }
+
+    /** Send full game snapshots over the reliable, ordered channel. */
+    public broadcastReliable(data: string) {
+        this.peers.forEach(peer => {
+            if (peer.snap.readyState === 'open') {
+                peer.snap.send(data);
+            }
+        });
+    }
+
+    /** Number of peers with at least one open data channel — drives "X connected" UI. */
+    public get connectedCount(): number {
+        let n = 0;
+        this.peers.forEach(peer => {
+            if (peer.dc.readyState === 'open' || peer.snap.readyState === 'open') n++;
+        });
+        return n;
     }
 
     public cleanup() {

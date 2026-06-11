@@ -19,7 +19,9 @@ interface Props {
     onCancel: () => void;
 }
 
-type Column = 'min' | 'sec' | 'ms';
+// Centiseconds (1/100s) — 2-digit precision shown to user.
+// Internally we store centiseconds (0-99); multiply by 10 to get ms.
+type Column = 'min' | 'sec' | 'cs';
 
 const GAME_PRESETS: Array<{ label: string; ms: number }> = [
     { label: '10:00', ms: 600_000 },
@@ -44,33 +46,28 @@ function msToParts(ms: number) {
     const totalSec = Math.floor(ms / 1000);
     const min = Math.floor(totalSec / 60);
     const sec = totalSec % 60;
-    const milli = Math.max(0, ms - totalSec * 1000);
-    return { min, sec, milli };
+    const cs  = Math.floor(Math.max(0, ms - totalSec * 1000) / 10); // centiseconds 0-99
+    return { min, sec, cs };
 }
-function partsToMs(min: number, sec: number, milli: number) {
-    return Math.max(0, (min * 60 + sec) * 1000 + milli);
+function partsToMs(min: number, sec: number, cs: number) {
+    return Math.max(0, (min * 60 + sec) * 1000 + cs * 10);
 }
 
 const TimeEditor: React.FC<Props> = ({ mode, currentMs, onApply, onCancel }) => {
     const init = msToParts(currentMs);
-    const [min,   setMin]   = useState<number>(init.min);
-    const [sec,   setSec]   = useState<number>(init.sec);
-    const [milli, setMilli] = useState<number>(init.milli);
-    const [showMs, setShowMs] = useState<boolean>(false);
+    const [min,  setMin]  = useState<number>(init.min);
+    const [sec,  setSec]  = useState<number>(init.sec);
+    const [cs,   setCs]   = useState<number>(init.cs);
     const [focusCol, setFocusCol] = useState<Column>(mode === 'shot' ? 'sec' : 'min');
     const [draft, setDraft] = useState<string>('');
 
     const accent = mode === 'game' ? SB_WHITE : SB_AMBER;
 
-    const targetMs = partsToMs(min, sec, showMs ? milli : 0);
-    const targetLabel = showMs
-        ? `${pad2(min)}:${pad2(sec)}.${pad3(milli)}`
-        : `${min}:${pad2(sec)}`;
+    const targetMs    = partsToMs(min, sec, cs);
+    const targetLabel = `${pad2(min)}:${pad2(sec)}.${pad2(cs)}`;
     const currentLabel = (() => {
         const p = msToParts(currentMs);
-        return showMs
-            ? `${pad2(p.min)}:${pad2(p.sec)}.${pad3(p.milli)}`
-            : `${p.min}:${pad2(p.sec)}`;
+        return `${pad2(p.min)}:${pad2(p.sec)}.${pad2(p.cs)}`;
     })();
 
     // ── Numpad input flows into focused column ───────────────
@@ -85,8 +82,7 @@ const TimeEditor: React.FC<Props> = ({ mode, currentMs, onApply, onCancel }) => 
         }
         if (k === '✕') { setDraft(''); applyDraftToColumn(focusCol, ''); return; }
 
-        const max = focusCol === 'ms' ? 3 : 2;
-        if (draft.length >= max) return;
+        if (draft.length >= 2) return;
         const next = (draft === '0' ? '' : draft) + k;
         setDraft(next);
         applyDraftToColumn(focusCol, next);
@@ -96,25 +92,21 @@ const TimeEditor: React.FC<Props> = ({ mode, currentMs, onApply, onCancel }) => 
         const n = str === '' ? 0 : parseInt(str, 10);
         if (col === 'min') setMin(clamp(n, 0, 99));
         if (col === 'sec') setSec(clamp(n, 0, 59));
-        if (col === 'ms')  setMilli(clamp(n, 0, 999));
+        if (col === 'cs')  setCs(clamp(n, 0, 99));
     };
 
-    const focusColumn = (c: Column) => {
-        if (c === 'ms' && !showMs) return;
-        setFocusCol(c);
-        setDraft('');
-    };
+    const focusColumn = (c: Column) => { setFocusCol(c); setDraft(''); };
 
     const bumpFocused = (delta: number) => {
-        if (focusCol === 'min')      setMin(m   => clamp(m + delta, 0, 99));
-        else if (focusCol === 'sec') setSec(s   => clamp(s + delta, 0, 59));
-        else                          setMilli(v => clamp(v + delta * 100, 0, 999));
+        if (focusCol === 'min')      setMin(m => clamp(m + delta, 0, 99));
+        else if (focusCol === 'sec') setSec(s => clamp(s + delta, 0, 59));
+        else                          setCs(v  => clamp(v + delta, 0, 99));
         setDraft('');
     };
 
     const applyPreset = (ms: number) => {
         const p = msToParts(ms);
-        setMin(p.min); setSec(p.sec); setMilli(p.milli);
+        setMin(p.min); setSec(p.sec); setCs(p.cs);
         setDraft('');
     };
 
@@ -167,7 +159,7 @@ const TimeEditor: React.FC<Props> = ({ mode, currentMs, onApply, onCancel }) => 
                     {/* LEFT: stepper columns + presets + readout */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-                        {/* Stepper columns */}
+                        {/* Stepper columns — always MM:SS.CC */}
                         <div style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             gap: 8,
@@ -191,33 +183,16 @@ const TimeEditor: React.FC<Props> = ({ mode, currentMs, onApply, onCancel }) => 
                                 onUp={() => { setFocusCol('sec'); bumpFocused(1); }}
                                 onDown={() => { setFocusCol('sec'); bumpFocused(-1); }}
                             />
-                            {showMs && (
-                                <>
-                                    <Separator label="." />
-                                    <StepperColumn
-                                        label="MS"
-                                        value={pad3(milli)}
-                                        accent={accent}
-                                        focused={focusCol === 'ms'}
-                                        onTap={() => focusColumn('ms')}
-                                        onUp={() => { setFocusCol('ms'); bumpFocused(1); }}
-                                        onDown={() => { setFocusCol('ms'); bumpFocused(-1); }}
-                                    />
-                                </>
-                            )}
-                        </div>
-
-                        {/* Precision toggle */}
-                        <div style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            justifyContent: 'center',
-                            paddingTop: 8, borderTop: `1px solid ${SB_BDR}`,
-                        }}>
-                            <span style={{ fontSize: 8, color: SB_DIM, letterSpacing: '0.28em', fontWeight: 700 }}>
-                                PRECISION
-                            </span>
-                            <ToggleChip label="MIN:SEC"    active={!showMs} onClick={() => { setShowMs(false); if (focusCol === 'ms') setFocusCol('sec'); }} accent={accent} />
-                            <ToggleChip label="MIN:SEC.MS" active={showMs}  onClick={() => setShowMs(true)} accent={accent} />
+                            <Separator label="." />
+                            <StepperColumn
+                                label="1/100s"
+                                value={pad2(cs)}
+                                accent={accent}
+                                focused={focusCol === 'cs'}
+                                onTap={() => focusColumn('cs')}
+                                onUp={() => { setFocusCol('cs'); bumpFocused(1); }}
+                                onDown={() => { setFocusCol('cs'); bumpFocused(-1); }}
+                            />
                         </div>
 
                         {/* Presets */}
@@ -286,7 +261,6 @@ const TimeEditor: React.FC<Props> = ({ mode, currentMs, onApply, onCancel }) => 
 
 // ── helpers ──────────────────────────────────────────────────
 function pad2(n: number): string { return String(n).padStart(2, '0'); }
-function pad3(n: number): string { return String(n).padStart(3, '0'); }
 
 const StepperColumn: React.FC<{
     label: string;
@@ -363,23 +337,6 @@ const Arrow: React.FC<{ direction: 'up' | 'down'; onClick: () => void; accent: s
     </div>
 );
 
-const ToggleChip: React.FC<{
-    label: string; active: boolean; onClick: () => void; accent: string;
-}> = ({ label, active, onClick, accent }) => (
-    <div
-        onClick={onClick}
-        style={{
-            padding: '4px 10px',
-            border: `1px solid ${active ? accent : SB_BDR_HI}`,
-            background: active ? `${accent}1f` : 'transparent',
-            color: active ? accent : SB_DIM,
-            fontFamily: SB_RM, fontSize: 8, fontWeight: 700,
-            letterSpacing: '0.22em', textTransform: 'uppercase',
-            cursor: 'pointer', userSelect: 'none',
-            WebkitTapHighlightColor: 'transparent',
-        }}
-    >{label}</div>
-);
 
 const PresetChip: React.FC<{ label: string; onClick: () => void; accent: string }> = ({
     label, onClick, accent,

@@ -310,41 +310,14 @@ export default function RefereeScreen() {
     }, [scorePending, disablePopup]);
 
     // ── Touch deck ↔ daemon unlock ────────────────────────────
-    // The daemon rejects every ui_action while touch is locked. The on-screen
-    // touch deck IS the unlocked mode, so unlock the daemon for as long as we're
-    // on that screen (incl. when the shot popup overlays it) and re-lock on exit.
+    // The daemon rejects every ui_action while touch is locked. Unlock while in
+    // touch_scoring OR settings so that the manual override controls actually work.
+    // Re-lock when leaving both screens entirely.
     useEffect(() => {
-        if (screen !== 'touch_scoring') return;
+        if (screen !== 'touch_scoring' && screen !== 'settings') return;
         sendAction('UNLOCK_TOUCH');
         return () => { sendAction('LOCK_TOUCH'); };
     }, [screen, sendAction]);
-
-    // ── DEV: keyboard 1–9 emulates the 9 physical Pico buttons ───
-    // Lets the unit be fully tested on a laptop with no GPIO. Each key injects
-    // the same UART message the hardware would send, through the real pipeline.
-    //   1/2/3 → HOME +1/+2/+3      4/5/6 → AWAY +1/+2/+3
-    //   7 → clock start/stop       8 → reset shot clock (24)
-    //   9 → undo                   0 → lock/unlock touch (settings)
-    useEffect(() => {
-        if (!import.meta.env.DEV) return;
-        const KEYMAP: Record<string, string> = {
-            '1': 'SCORE_A1', '2': 'SCORE_A2', '3': 'SCORE_A3',
-            '4': 'SCORE_B1', '5': 'SCORE_B2', '6': 'SCORE_B3',
-            '7': 'CLOCK_TOGGLE', '8': 'SHOT_CLOCK_24', '9': 'UNDO',
-            '0': 'SETTINGS',
-            's': 'SHOT_CLOCK_14', // after offensive rebound
-        };
-        const onKey = (e: KeyboardEvent) => {
-            const el = e.target as HTMLElement;
-            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-            const msg = KEYMAP[e.key];
-            if (!msg) return;
-            e.preventDefault();
-            devPico(msg);
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [devPico]);
 
     // ── CONNECTING → LIVE_GAME ───────────────────────────────
     useEffect(() => {
@@ -698,6 +671,10 @@ export default function RefereeScreen() {
             if (scorePending && gameState.meta.gameMode === 'advanced') {
                 return (
                     <PiAdvancedShotFlow
+                        // Key forces a clean remount when a new score event lands
+                        // mid-attribution, so a half-completed flow can't leak
+                        // its court/player selections into the new event.
+                        key={`${scorePending.team}-${scorePending.points}-${gameState.teamA.score}-${gameState.teamB.score}`}
                         event={scorePending}
                         teamA={gameState.teamA}
                         teamB={gameState.teamB}
@@ -707,6 +684,7 @@ export default function RefereeScreen() {
                         gameCode={displayGameCode ?? undefined}
                         onAttribute={attributeShot}
                         onSkip={dismissScorePending}
+                        onUndo={() => sendAction('UNDO')}
                     />
                 );
             }
@@ -796,6 +774,8 @@ export default function RefereeScreen() {
             if (scorePending && gameState.meta.gameMode === 'advanced') {
                 return (
                     <PiAdvancedShotFlow
+                        // Remount on each new score event (see live_game note).
+                        key={`${scorePending.team}-${scorePending.points}-${gameState.teamA.score}-${gameState.teamB.score}`}
                         event={scorePending}
                         teamA={gameState.teamA}
                         teamB={gameState.teamB}
@@ -805,6 +785,7 @@ export default function RefereeScreen() {
                         gameCode={displayGameCode ?? undefined}
                         onAttribute={attributeShot}
                         onSkip={dismissScorePending}
+                        onUndo={() => sendAction('UNDO')}
                     />
                 );
             }
@@ -862,62 +843,7 @@ export default function RefereeScreen() {
     return (
         <Suspense fallback={<LazyFallback />}>
             {renderScreen()}
-            {import.meta.env.DEV && <DevKeyLegend />}
         </Suspense>
-    );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// DEV KEYBOARD LEGEND — only rendered in `vite dev`. Shows the 1–9
-// → Pico-button mapping so the unit is testable without GPIO.
-// ═══════════════════════════════════════════════════════════════
-function DevKeyLegend() {
-    const [open, setOpen] = useState(true);
-    const RM = "'JetBrains Mono', monospace";
-    const rows: [string, string][] = [
-        ['1 2 3', 'HOME +1 / +2 / +3'],
-        ['4 5 6', 'AWAY +1 / +2 / +3'],
-        ['7', 'CLOCK START / STOP'],
-        ['8', 'SHOT CLOCK → 24s'],
-        ['s', 'SHOT CLOCK → 14s (off. reb)'],
-        ['9', 'UNDO'],
-        ['0', 'LOCK / UNLOCK TOUCH'],
-    ];
-    return (
-        <div style={{
-            position: 'fixed', left: 10, bottom: 10, zIndex: 9999,
-            background: 'rgba(10,10,11,0.92)', border: '1px solid rgba(255,255,255,0.18)',
-            borderRadius: 6, fontFamily: RM, color: '#A1A1AA',
-            boxShadow: '0 8px 28px rgba(0,0,0,0.6)', userSelect: 'none',
-            backdropFilter: 'blur(4px)',
-        }}>
-            <div
-                onClick={() => setOpen(o => !o)}
-                style={{
-                    display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                    padding: '6px 10px', borderBottom: open ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                }}
-            >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E' }} />
-                <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.2em', color: '#F4F4F5' }}>
-                    DEV · KEYS 1–9 = PICO
-                </span>
-                <span style={{ fontSize: 9, color: '#71717A', marginLeft: 4 }}>{open ? '▾' : '▸'}</span>
-            </div>
-            {open && (
-                <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {rows.map(([k, label]) => (
-                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{
-                                minWidth: 44, fontSize: 9, fontWeight: 700, color: '#F4F4F5',
-                                letterSpacing: '0.1em',
-                            }}>{k}</span>
-                            <span style={{ fontSize: 8, letterSpacing: '0.06em', color: '#A1A1AA' }}>{label}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
     );
 }
 

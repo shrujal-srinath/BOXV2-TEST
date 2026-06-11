@@ -28,6 +28,8 @@ import {
     useMinimizeHeader,
     useDisableScorePopup,
     useDisableTouchDeck,
+    useShotTypeSelection,
+    useQuickEntry,
 } from '../../services/gameControlPrefs';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -540,16 +542,14 @@ const CenterControlColumn: React.FC<{
                     }}>{fmtClock(clock.gameMs, showMs)}</span>
                 </div>
 
-                {/* 8-stepper row: ±1m ±10s ±1s ±0.1s */}
+                {/* 6-stepper row: ±1m ±5s ±1s */}
                 <div style={{ display: 'flex', gap: 4 }}>
-                    <Step label="−1m"   color={SB_WHITE} onClick={() => adjGame(-60)} flex />
-                    <Step label="−10s"  color={SB_WHITE} onClick={() => adjGame(-10)} flex />
-                    <Step label="−1s"   color={SB_WHITE} onClick={() => adjGame(-1)}  flex />
-                    <Step label="−0.1s" color={SB_WHITE} onClick={() => adjGame(-0.1)} flex />
-                    <Step label="+0.1s" color={SB_WHITE} onClick={() => adjGame(0.1)}  flex />
-                    <Step label="+1s"   color={SB_WHITE} onClick={() => adjGame(1)}    flex />
-                    <Step label="+10s"  color={SB_WHITE} onClick={() => adjGame(10)}   flex />
-                    <Step label="+1m"   color={SB_WHITE} onClick={() => adjGame(60)}   flex />
+                    <Step label="−1m"  color={SB_WHITE} onClick={() => adjGame(-60)} flex />
+                    <Step label="−5s"  color={SB_WHITE} onClick={() => adjGame(-5)}  flex />
+                    <Step label="−1s"  color={SB_WHITE} onClick={() => adjGame(-1)}  flex />
+                    <Step label="+1s"  color={SB_WHITE} onClick={() => adjGame(1)}   flex />
+                    <Step label="+5s"  color={SB_WHITE} onClick={() => adjGame(5)}   flex />
+                    <Step label="+1m"  color={SB_WHITE} onClick={() => adjGame(60)}  flex />
                 </div>
 
                 {/* Presets + EDIT EXACT */}
@@ -791,10 +791,12 @@ const ConsolePrefsCard: React.FC = () => {
 // ── Court settings accordion (sits at top of center column) ──
 const GameControlSettingsAccordion: React.FC = () => {
     const [open, setOpen] = useState(false);
-    const [keepClock, setKeepClock] = useKeepClockOnShotViolation();
-    const [minHeader, setMinHeader] = useMinimizeHeader();
-    const [noPopup, setNoPopup]     = useDisableScorePopup();
-    const [noTouch, setNoTouch]     = useDisableTouchDeck();
+    const [keepClock, setKeepClock]   = useKeepClockOnShotViolation();
+    const [minHeader, setMinHeader]   = useMinimizeHeader();
+    const [noPopup, setNoPopup]       = useDisableScorePopup();
+    const [noTouch, setNoTouch]       = useDisableTouchDeck();
+    const [shotType, setShotType]     = useShotTypeSelection();
+    const [quickEntry, setQuickEntry] = useQuickEntry();
 
     const Toggle: React.FC<{ on: boolean; onToggle: () => void }> = ({ on, onToggle }) => (
         <div
@@ -881,28 +883,40 @@ const GameControlSettingsAccordion: React.FC = () => {
             {open && (
                 <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column' }}>
                     <PrefRow
-                        title="Keep game clock running after shot clock hits 0"
-                        help="When ON, the game clock keeps ticking after a shot-clock violation and the shot clock blinks red so the ref knows to reset it. When OFF, the game clock stops automatically (classic FIBA behavior)."
+                        title="Keep clock after shot violation"
+                        help="Game clock keeps ticking when shot clock hits 0. Shot clock blinks red as a reset reminder. Off = FIBA auto-stop."
                         on={keepClock}
                         onToggle={() => setKeepClock(!keepClock)}
                     />
                     <PrefRow
-                        title="Minimize touch deck header"
-                        help="Collapse the top action bar (CAST · HARDWARE · SETTINGS · END · BACK TO SCORING) down to a single gear icon. Tap it any time to reopen the full header."
+                        title="Minimize header"
+                        help="Collapse the top bar to a single gear icon."
                         on={minHeader}
                         onToggle={() => setMinHeader(!minHeader)}
                     />
                     <PrefRow
-                        title="Disable score popup (skip player picker)"
-                        help="When ON, scoring a basket just updates the score — no “WHO SCORED?” / court popup. Useful for fast-paced games where you only care about the score. +1 still asks who shot the free throw."
+                        title="Skip player picker"
+                        help="Score updates instantly — no WHO SCORED popup. Useful for fast games where player stats don't matter."
                         on={noPopup}
                         onToggle={() => setNoPopup(!noPopup)}
                     />
                     <PrefRow
-                        title="Disable on-screen touch deck"
-                        help="When ON, the “OPEN TOUCH DECK” pull-up tab and header button are hidden. The scoreboard becomes view-only — use the Pico hardware buttons or this Settings panel to score. Useful when the screen is mounted as a passive display."
+                        title="Disable touch deck"
+                        help="Hide the on-screen scoring deck. Score via hardware buttons only."
                         on={noTouch}
                         onToggle={() => setNoTouch(!noTouch)}
+                    />
+                    <PrefRow
+                        title="Shot type tagging"
+                        help="Add a context step after player pick — tag Fastbreak, Contested, Pull-up, etc. Off by default."
+                        on={shotType}
+                        onToggle={() => setShotType(!shotType)}
+                    />
+                    <PrefRow
+                        title="Quick entry chips"
+                        help="Show quick-spot shortcut buttons on the court (Rim, Mid, Corner 3, Top 3, etc.) for fast one-tap location entry."
+                        on={quickEntry}
+                        onToggle={() => setQuickEntry(!quickEntry)}
                     />
                 </div>
             )}
@@ -972,6 +986,7 @@ const PiCourtCard: React.FC = () => {
     const [units,        setUnits]        = useState(() => lsG('boxv2-pi-court-units', 'm'));
     const [piTheme,      setPiTheme]      = useState(() => lsG('boxv2-pi-court-theme', 'dark'));
     const [shotMode,     setShotMode]     = useState(() => lsG('boxv2-pi-court-shotmode', 'made'));
+    const [viewMode,     setViewMode]     = useState(() => lsG('boxv2-pi-court-viewmode', 'hex'));
     const [hexSize,      setHexSize]      = useState(() => lsN('boxv2-pi-court-hexsize', 25));
     const [gridOutlines, setGridOutlines] = useState(() => lsB('boxv2-pi-court-gridoutlines', true));
     const [zoneTint,     setZoneTint]     = useState(() => lsB('boxv2-pi-court-zonetint', true));
@@ -979,6 +994,8 @@ const PiCourtCard: React.FC = () => {
     const [distRings,    setDistRings]    = useState(() => lsB('boxv2-pi-court-distrings', false));
     const [lineRim,      setLineRim]      = useState(() => lsB('boxv2-pi-court-linetorim', false));
     const [zoneLabels,   setZoneLabels]   = useState(() => lsB('boxv2-pi-court-zonelabels', true));
+    const [rimAccent,    setRimAccent]    = useState(() => lsB('boxv2-pi-court-rimaccent', false));
+    const [chevrons,     setChevrons]     = useState(() => lsB('boxv2-pi-court-chevrons', false));
 
     // ── sub-components ─────────────────────────────────────────
     const SectionHdr: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -1063,32 +1080,59 @@ const PiCourtCard: React.FC = () => {
         >{label}</div>
     );
 
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    // Compact 2-up toggle row — puts two labeled toggles side-by-side
+    const TogglePair: React.FC<{
+        items: { label: string; on: boolean; onToggle: () => void }[];
+    }> = ({ items }) => (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {items.map(({ label, on, onToggle }) => (
+                <div key={label}
+                    onClick={onToggle}
+                    style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '6px 8px',
+                        background: on ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${on ? '#EF4444aa' : 'rgba(255,255,255,0.10)'}`,
+                        cursor: 'pointer', userSelect: 'none',
+                        WebkitTapHighlightColor: 'transparent',
+                        transition: 'background 0.12s, border-color 0.12s',
+                    }}
+                >
+                    <span style={{
+                        fontFamily: SB_RM, fontSize: 8, fontWeight: 700,
+                        color: on ? '#EF4444' : SB_DIM,
+                        letterSpacing: '0.16em', textTransform: 'uppercase',
+                    }}>{label}</span>
+                    <IosToggle on={on} onToggle={() => {}} />
+                </div>
+            ))}
+        </div>
+    );
 
-            {/* VIEW ──────────────────────────────────────────── */}
-            <SectionHdr>View</SectionHdr>
-            <Row label="Court view">
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+
+            {/* VIEW + THEME in one row each ─────────────────── */}
+            <SectionHdr>View &amp; theme</SectionHdr>
+            <Row label="Court">
                 <Seg opts={[['false','HALF'],['true','FULL']]} val={String(fullCourt)}
                     onChange={v => { const b = v === 'true'; setFullCourt(b); save('boxv2-pi-court-fullcourt', b); }} />
+            </Row>
+            <Row label="Theme">
+                <Seg opts={[['dark','VOID'],['wooden','WOOD'],['white','LIGHT'],['hicontrast','A11Y']]} val={piTheme}
+                    onChange={v => { setPiTheme(v); save('boxv2-pi-court-theme', v); }} />
             </Row>
             <Row label="Units">
                 <Seg opts={[['m','M'],['ft','FT']]} val={units}
                     onChange={v => { setUnits(v); save('boxv2-pi-court-units', v); }} />
             </Row>
-
-            {/* THEME ─────────────────────────────────────────── */}
-            <SectionHdr>Theme</SectionHdr>
-            <Row label="Court theme">
-                <Seg opts={[['dark','VOID'],['wooden','WOOD'],['white','LIGHT']]} val={piTheme}
-                    onChange={v => { setPiTheme(v); save('boxv2-pi-court-theme', v); }} />
-            </Row>
-
-            {/* SHOT MODE ─────────────────────────────────────── */}
-            <SectionHdr>Shot mode</SectionHdr>
             <Row label="Default mark">
                 <Seg opts={[['made','MADE'],['miss','MISS']]} val={shotMode}
                     onChange={v => { setShotMode(v); save('boxv2-pi-court-shotmode', v); }} />
+            </Row>
+            <Row label="View mode">
+                <Seg opts={[['hex','HEX'],['zone','ZONE'],['dots','DOTS']]} val={viewMode}
+                    onChange={v => { setViewMode(v); save('boxv2-pi-court-viewmode', v); }} />
             </Row>
 
             {/* HEX GRID ──────────────────────────────────────── */}
@@ -1100,44 +1144,26 @@ const PiCourtCard: React.FC = () => {
                     style={{ width: 100, accentColor: '#EF4444', cursor: 'pointer' }}
                 />
             </Row>
-            <Row label="Grid outlines">
-                <IosToggle on={gridOutlines} onToggle={() => { const n = !gridOutlines; setGridOutlines(n); save('boxv2-pi-court-gridoutlines', n); }} />
-            </Row>
-            <Row label="Zone tint">
-                <IosToggle on={zoneTint} onToggle={() => { const n = !zoneTint; setZoneTint(n); save('boxv2-pi-court-zonetint', n); }} />
-            </Row>
-            <Row label="Heatmap">
-                <IosToggle on={heatmap} onToggle={() => { const n = !heatmap; setHeatmap(n); save('boxv2-pi-court-heatmap', n); }} />
-            </Row>
+            <TogglePair items={[
+                { label: 'Outlines',  on: gridOutlines, onToggle: () => { const n = !gridOutlines; setGridOutlines(n); save('boxv2-pi-court-gridoutlines', n); } },
+                { label: 'Zone tint', on: zoneTint,     onToggle: () => { const n = !zoneTint;     setZoneTint(n);     save('boxv2-pi-court-zonetint', n); } },
+                { label: 'Heatmap',   on: heatmap,      onToggle: () => { const n = !heatmap;      setHeatmap(n);      save('boxv2-pi-court-heatmap', n); } },
+                { label: 'Zone labels', on: zoneLabels, onToggle: () => { const n = !zoneLabels;   setZoneLabels(n);   save('boxv2-pi-court-zonelabels', n); } },
+            ]} />
 
             {/* COURT AIDS ────────────────────────────────────── */}
             <SectionHdr>Court aids</SectionHdr>
-            <Row label="Distance rings">
-                <IosToggle on={distRings} onToggle={() => { const n = !distRings; setDistRings(n); save('boxv2-pi-court-distrings', n); }} />
-            </Row>
-            <Row label="Line to rim">
-                <IosToggle on={lineRim} onToggle={() => { const n = !lineRim; setLineRim(n); save('boxv2-pi-court-linetorim', n); }} />
-            </Row>
-            <Row label="Zone labels">
-                <IosToggle on={zoneLabels} onToggle={() => { const n = !zoneLabels; setZoneLabels(n); save('boxv2-pi-court-zonelabels', n); }} />
-            </Row>
+            <TogglePair items={[
+                { label: 'Dist. rings', on: distRings, onToggle: () => { const n = !distRings; setDistRings(n); save('boxv2-pi-court-distrings', n); } },
+                { label: 'Line to rim', on: lineRim,   onToggle: () => { const n = !lineRim;   setLineRim(n);   save('boxv2-pi-court-linetorim', n); } },
+                { label: 'Rim accent',  on: rimAccent, onToggle: () => { const n = !rimAccent; setRimAccent(n); save('boxv2-pi-court-rimaccent', n); } },
+                { label: 'Chevrons',    on: chevrons,  onToggle: () => { const n = !chevrons;  setChevrons(n);  save('boxv2-pi-court-chevrons', n); } },
+            ]} />
 
             {/* DATA ───────────────────────────────────────────── */}
             <SectionHdr>Data</SectionHdr>
             <DataBtn label="Clear all shots" accent="#EF4444"
                 onClick={() => { if (confirm('Clear all shot data?')) localStorage.removeItem('boxv2-local-shots'); }} />
-            <DataBtn label="Seed demo shots"
-                onClick={() => {
-                    const demo = [
-                        { zoneId: 'mid_left',  made: true  },
-                        { zoneId: 'mid_right', made: false },
-                        { zoneId: 'corner_3_left', made: true },
-                        { zoneId: 'paint',     made: true  },
-                        { zoneId: 'top_key_3', made: false },
-                    ];
-                    localStorage.setItem('boxv2-demo-shots', JSON.stringify(demo));
-                }}
-            />
         </div>
     );
 };

@@ -58,6 +58,7 @@ const PiLocalDisplay      = lazy(() => import('./pages/PiLocalDisplay'));
 const UiAuditFixture      = lazy(() => import('./pages/UiAuditFixture'));
 const CastSetupPage       = lazy(() => import('./pages/CastSetupPage'));
 const CourtHexMapPage     = lazy(() => import('./pages/CourtHexMapPage'));
+const LanControlPage      = lazy(() => import('./pages/LanControlPage'));
 
 // Tablet PWA pages (no auth wrapper)
 const StandaloneTablet    = lazy(() => import('./pages/StandaloneTablet').then(m => ({ default: m.StandaloneTablet })));
@@ -186,6 +187,7 @@ function App() {
               <Route path="/uiaudit" element={<UiAuditFixture />} />
               <Route path="/uiaudit/:variant" element={<UiAuditFixture />} />
               <Route path="/cast" element={<CastSetupPage />} />
+              <Route path="/lan-control/:gameCode" element={<LanControlPage />} />
 
               {/* ── Tournament PUBLIC viewer (shareable QR link, no auth) ── */}
               {/* /t/:id      → bracket/results/live scores for spectators   */}

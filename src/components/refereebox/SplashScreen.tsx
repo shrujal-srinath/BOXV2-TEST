@@ -1,8 +1,10 @@
 // src/components/refereebox/SplashScreen.tsx
 // ═══════════════════════════════════════════════════════════════
 // THE BOX — Pi Boot Dial v5  (pixel-matched to splash-a.html reference)
-// Phase 1 (0–3000ms): Animated radial progress dial, 7 SVG layers
-// Phase 2 (3350ms+):  Wordmark end screen, QR + Enter CTA
+// Phase 0: Minimal "LOADING.." hold until fonts + first paint are ready
+//          (the dial clock does NOT start until the screen is visible)
+// Phase 1 (0–3500ms after arming): Animated radial dial, 7 SVG layers
+// Phase 2 (+350ms):  Wordmark end screen, QR + Enter CTA
 //
 // Light mode (Courtside): same geometry, animation, and timing —
 // only the color palette swaps. Dark mode is byte-for-byte identical
@@ -20,7 +22,15 @@ interface SplashScreenProps {
 
 // ── Constants ──────────────────────────────────────────────────
 
-const DURATION = 3000;
+// +500ms over the original 3000 — the dial only starts once the page has
+// actually painted (see the arming effect), so it can afford to breathe.
+const DURATION = 3500;
+
+// Pre-boot hold: never start the dial before the loading text has been
+// visible this long, and never wait longer than the cap (fonts.ready can
+// stall on a Pi with no network).
+const PREBOOT_MIN_MS = 500;
+const PREBOOT_MAX_MS = 4000;
 const C_L3 = 2 * Math.PI * 180;   // ≈ 1131
 const C_L4 = 2 * Math.PI * 152;   // ≈ 955
 
@@ -243,10 +253,38 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ isDaemonConnected, onComple
     const hudDrawRef  = useRef<HTMLDivElement>(null);
 
     const continuedRef = useRef(false);
-    const t0Ref        = useRef(Date.now());
+    // Re-anchored by the animation effect the moment the dial is armed.
+    const t0Ref        = useRef(0);
     const rafRef       = useRef(0);
     const ivRef        = useRef<ReturnType<typeof setInterval> | null>(null);
     const autoRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // ── Pre-boot arming ──────────────────────────────────────────
+    // The dial used to start its 3s clock at React mount — but on the Pi the
+    // first visible paint lands seconds later (JS parse, font fetch, SVG
+    // build), so refs only ever saw the tail end. Hold on a minimal
+    // "LOADING.." screen until the page has painted and fonts are in, THEN
+    // start the dial from 0. The full splash DOM (SVG layers, QR) builds
+    // underneath the loading overlay during the hold, so the dial starts
+    // jank-free.
+    const [armed, setArmed] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        const minHold = new Promise<void>(res => setTimeout(res, PREBOOT_MIN_MS));
+        const fonts   = typeof document !== 'undefined' && document.fonts?.ready
+            ? document.fonts.ready.then(() => undefined)
+            : Promise.resolve();
+        const cap     = new Promise<void>(res => setTimeout(res, PREBOOT_MAX_MS));
+        Promise.race([Promise.all([minHold, fonts]).then(() => undefined), cap]).then(() => {
+            if (cancelled) return;
+            // Double-RAF: guarantees the browser has painted (and is keeping
+            // up) before the animation clock starts ticking.
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (!cancelled) setArmed(true);
+            }));
+        });
+        return () => { cancelled = true; };
+    }, []);
 
     // ── Exit animation ───────────────────────────────────────────
     function doExit() {
@@ -262,12 +300,14 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ isDaemonConnected, onComple
         setTimeout(() => onCompleteRef.current(), 900);
     }
 
-    // Keyboard: Enter / Space proceed
+    // Keyboard: Enter / Space proceed — only once the dial is armed, so a
+    // buffered keypress during the pre-boot hold can't skip the splash.
     useEffect(() => {
+        if (!armed) return;
         const h = (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') doExit(); };
         window.addEventListener('keydown', h);
         return () => window.removeEventListener('keydown', h);
-    }, []);
+    }, [armed]);
 
     // ── Build static SVG structure (7 layers, all imperative) ────
     useEffect(() => {
@@ -501,7 +541,10 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ isDaemonConnected, onComple
     }, [p]);
 
     // ── Animation loop ───────────────────────────────────────────
+    // Starts only once armed — t0 anchors to the moment the loading overlay
+    // lifts, so the ref sees the full 0→100 sweep.
     useEffect(() => {
+        if (!armed) return;
         t0Ref.current = Date.now();
         let ended = false;
 
@@ -602,7 +645,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ isDaemonConnected, onComple
             if (ivRef.current) clearInterval(ivRef.current);
             if (autoRef.current) clearTimeout(autoRef.current);
         };
-    }, [p]);
+    }, [p, armed]);
 
     // tvCode — read or create
     const [tvCode] = useState<string>(() => {
@@ -646,7 +689,43 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ isDaemonConnected, onComple
                 }
                 @keyframes ctaIn  { to { opacity: 1; transform: translateY(0) } }
                 @keyframes keyBlink { 50% { background: ${p.enterKeyBlinkBg} } }
+                @keyframes preBootDot {
+                    0%, 100% { opacity: 0.15 }
+                    50%      { opacity: 1 }
+                }
             `}</style>
+
+            {/* ── Pre-boot loading overlay ───────────────────────
+                Shown from first paint until the system is ready to animate
+                (fonts in + page painted). Deliberately minimal — the splash
+                dial underneath builds while this is up, then takes over
+                from 0%. Clicks are swallowed so a stray tap can't skip the
+                splash before it has even been seen. */}
+            <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                    position: 'absolute', inset: 0, zIndex: 40,
+                    background: p.pageBg,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: armed ? 0 : 1,
+                    pointerEvents: armed ? 'none' : 'auto',
+                    transition: 'opacity 400ms ease',
+                }}
+            >
+                <div style={{
+                    display: 'flex', alignItems: 'baseline', gap: 2,
+                    fontFamily: "'JetBrains Mono',monospace", fontSize: 13,
+                    letterSpacing: '0.42em', textTransform: 'uppercase',
+                    color: p.primaryStrong,
+                }}>
+                    LOADING
+                    {[0, 1, 2].map(i => (
+                        <span key={i} style={{
+                            animation: `preBootDot 1.2s ease-in-out ${i * 0.2}s infinite`,
+                        }}>.</span>
+                    ))}
+                </div>
+            </div>
 
             {/* Background grid */}
             <div style={{
@@ -698,9 +777,11 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ isDaemonConnected, onComple
                 <span>v3.0_FIELD</span>
             </div>
 
-            {/* Dial host */}
+            {/* Dial host — the height clamp keeps the full compass ring
+                (incl. the 000/180 degree labels) visible between the top and
+                bottom rails on short screens like the Pi's 1024×600 panel. */}
             <div ref={dialWrapRef} style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: '90px 48px' }}>
-                <div style={{ position: 'relative', width: 'min(580px, 76vmin)', aspectRatio: '1' }}>
+                <div style={{ position: 'relative', width: 'min(580px, 76vmin, calc(100dvh - 196px))', aspectRatio: '1' }}>
 
                     {/* SVG dial */}
                     <svg

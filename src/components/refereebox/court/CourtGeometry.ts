@@ -44,6 +44,12 @@ export const LANE_MARKS    = COURT.laneMarks; // [11.67, 17.0, 22.33, 27.67]
 export const LANE_MARK_LEN = 1.2;
 export const M_PER_UNIT    = 0.15;            // 1 unit = 15cm
 
+// FIBA spec: 7 hash marks per side at 0.4m intervals starting 1.75m from baseline.
+// Existing LANE_MARKS covers the 4 wider neutral-zone blocks; LANE_BLOCKS adds
+// the full 7-tick FIBA pattern (0.4u = 6cm long, perpendicular to lane edge).
+export const LANE_BLOCKS = [11.67, 14.33, 17.0, 19.67, 22.33, 25.0, 27.67];
+export const LANE_BLOCK_LEN = 0.6;
+
 // FIBA line width 5cm = 0.33 court units
 export const LINE_HEAVY = 0.55;  // visible-bold, used for arc & paint
 export const LINE_THIN  = 0.40;  // standard markings
@@ -79,6 +85,15 @@ export function landscapeToPortrait(lx: number, ly: number): { portX: number; po
 /** Classify a landscape hex's centroid via the portrait zones util. */
 export function classifyLandscape(lx: number, ly: number): ShotZoneId {
     return classifyZone(ly, landscapeToDepth(lx));
+}
+
+/** Portrait (persisted) → landscape, team-aware. Convention: A shoots on the
+ *  left basket, B on the right (same convention as the line-to-rim ruler and
+ *  the top team strip). portY is depth from the team's basket; portX is width. */
+export function portraitToLandscape(
+    portX: number, portY: number, side: 'A' | 'B',
+): { lx: number; ly: number } {
+    return { lx: side === 'B' ? LS_W - portY : portY, ly: portX };
 }
 
 // ── Hex grid generation ───────────────────────────────────────
@@ -162,8 +177,10 @@ export function isBeyondArc(lx: number, ly: number): boolean {
 export function splitHexAtArc(cell: HexCell, hexR: number): 'inside' | 'outside' | 'split' {
     const verts = hexVertices(cell.cx, cell.cy, hexR);
     let inside = 0, outside = 0;
-    for (const [vx, vy] of verts) (isBeyondArc(vx, vy) ? outside++ : inside++);
-    isBeyondArc(cell.cx, cell.cy) ? outside++ : inside++;
+    for (const [vx, vy] of verts) {
+        if (isBeyondArc(vx, vy)) outside++; else inside++;
+    }
+    if (isBeyondArc(cell.cx, cell.cy)) outside++; else inside++;
     if (outside === 0) return 'inside';
     if (inside === 0) return 'outside';
     return 'split';
@@ -297,20 +314,19 @@ export function nearest(idx: HexIndex, lx: number, ly: number): HexCell {
 // ── Heatmap aggregation (cell-keyed) ─────────────────────────
 export interface CellAgg { made: number; attempts: number }
 
+/** A shot already mapped to LANDSCAPE coords (x = lx depth, y = ly width).
+ *  Producers convert from the persisted portrait coords via portraitToLandscape
+ *  so team B's shots land on the right basket. */
 export interface ShotPoint { x: number; y: number; made: boolean }
 
-/** Aggregate shots into hex cells via the spatial index. */
+/** Aggregate landscape shots into hex cells via the spatial index. */
 export function aggregateShotsByCell(
     idx: HexIndex,
     shots: ShotPoint[],
 ): Map<string, CellAgg> {
     const m = new Map<string, CellAgg>();
     for (const s of shots) {
-        // Portrait shot (x, y) → landscape (lx=y, ly=x) on the left half (canonical)
-        const lx = s.y;
-        const ly = s.x;
-        const cell = nearest(idx, lx, ly);
-        if (cell.kind === 'rim' && !isAtRim(s)) continue;
+        const cell = nearest(idx, s.x, s.y);
         const cur = m.get(cell.id);
         if (cur) {
             cur.attempts++;
@@ -320,10 +336,6 @@ export function aggregateShotsByCell(
         }
     }
     return m;
-}
-
-function isAtRim(s: ShotPoint): boolean {
-    return Math.hypot(s.x - COURT.basketX, s.y - COURT.basketY) <= 1.6;
 }
 
 // ── Quick-spot definitions (re-classified centroids) ─────────
@@ -354,7 +366,6 @@ export function assertQuickSpotZonesInDev(): void {
     for (const spot of QUICK_SPOTS) {
         const actual = classifyLandscape(spot.lx, spot.ly);
         if (actual !== spot.zone) {
-            // eslint-disable-next-line no-console
             console.warn(
                 `[CourtGeometry] Quick-spot "${spot.label}" centroid (${spot.lx}, ${spot.ly}) ` +
                 `classifies as "${actual}" but is labeled "${spot.zone}". Fix centroid.`

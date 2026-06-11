@@ -20,6 +20,7 @@ import type { ScorePendingEvent, Player, TeamState, ClockState } from '../../hoo
 import type { ShotZoneId } from '../shotchart/types/shotTypes';
 import { useShotChart } from '../../hooks/useShotChart';
 import { useReducedMotion } from '../../lib/colorPalettes';
+import { getShotTypeSelection } from '../../services/gameControlPrefs';
 
 interface PiAdvancedShotFlowProps {
     event: ScorePendingEvent;
@@ -35,14 +36,14 @@ interface PiAdvancedShotFlowProps {
         period?: number; gameClockSec?: number; attributes?: string[];
     }) => void;
     onSkip: () => void;
+    /** Fires the daemon UNDO action (rolls back the last shot + score). */
+    onUndo?: () => void;
 }
 
 type Step = 'court' | 'player' | 'context';
 
 const PLAYER_SECONDS  = 12;  // 12s to pick player — enough to glance at roster
 const CONTEXT_SECONDS = 9;   // 9s to add context tags
-/** After a court tap, wait this long before auto-advancing if the ref doesn't act. */
-const COURT_IDLE_COMMIT_MS = 1500;
 
 const RM  = "'JetBrains Mono', monospace";
 const OSW = "'Oswald', sans-serif";
@@ -229,7 +230,7 @@ function GameHeader({ teamA, teamB, teamAColor, teamBColor, clock, scoringTeam }
 
 // ─────────────────────────────────────────────────────────────
 export default function PiAdvancedShotFlow({
-    event, teamA, teamB, teamAColor, teamBColor, clock, gameCode, onAttribute, onSkip,
+    event, teamA, teamB, teamAColor, teamBColor, clock, gameCode, onAttribute, onSkip, onUndo,
 }: PiAdvancedShotFlowProps) {
     const { team, points, players } = event;
     const teamColor = team === 'A' ? teamAColor : teamBColor;
@@ -240,9 +241,13 @@ export default function PiAdvancedShotFlow({
     const { allShots } = useShotChart(gameCode ?? null);
 
     // Free throws (+1) skip the court — there's no location to record.
-    // Free throw → player → context.    Field goal → court → player → context.
-    const isFreeThrow = points === 1;
-    const steps: Step[] = isFreeThrow ? ['player', 'context'] : ['court', 'player', 'context'];
+    // Free throw → player → [context].    Field goal → court → player → [context].
+    // The context (shot-type tagging) step is gated by the shot type selection pref.
+    const isFreeThrow   = points === 1;
+    const showShotType  = getShotTypeSelection();
+    const steps: Step[] = isFreeThrow
+        ? (showShotType ? ['player', 'context'] : ['player'])
+        : (showShotType ? ['court', 'player', 'context'] : ['court', 'player']);
 
     const [stepIndex, setStepIndex]       = useState(0);
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -251,21 +256,17 @@ export default function PiAdvancedShotFlow({
     const [courtY,         setCourtY]         = useState<number | null>(null);
     const [selectedAttrs,  setSelectedAttrs]  = useState<Set<string>>(() => new Set());
     const [secondsLeft,    setSecondsLeft]    = useState<number | null>(null);
-    /** Idle commit countdown after a court tap — null when no tap yet. */
-    const [courtIdleMsLeft, setCourtIdleMsLeft] = useState<number | null>(null);
 
-    const step          = steps[stepIndex];
-    const doneRef       = useRef(false);
-    const courtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const courtIdleStartRef = useRef<number | null>(null);
+    const step    = steps[stepIndex];
+    const doneRef = useRef(false);
 
-    const goNext = useCallback(() => setStepIndex(i => Math.min(i + 1, steps.length - 1)), []);
+    const goNext = useCallback(() => setStepIndex(i => Math.min(i + 1, steps.length - 1)), [steps.length]);
     const goPrev = useCallback(() => setStepIndex(i => Math.max(i - 1, 0)), []);
 
-    const finalize = useCallback((opts: { unattributed?: boolean } = {}) => {
+    const finalize = useCallback((opts: { unattributed?: boolean; playerOverride?: Player | null } = {}) => {
         if (doneRef.current) return;
         doneRef.current = true;
-        const player = opts.unattributed ? null : selectedPlayer;
+        const player = opts.unattributed ? null : ('playerOverride' in opts ? opts.playerOverride! : selectedPlayer);
         onAttribute({
             team, points,
             playerId:     player?.id   ?? null,
@@ -279,11 +280,18 @@ export default function PiAdvancedShotFlow({
         });
     }, [selectedPlayer, selectedZone, courtX, courtY, selectedAttrs, team, points, clock, onAttribute, isFreeThrow]);
 
-    useEffect(() => {
-        if (step === 'player')       setSecondsLeft(PLAYER_SECONDS);
-        else if (step === 'context') setSecondsLeft(CONTEXT_SECONDS);
-        else                         setSecondsLeft(null);
-    }, [step]);
+    // Reset the countdown when the step changes — done during render (the
+    // documented "adjust state when a prop changes" pattern) instead of an
+    // effect, so the new countdown is visible on the very first paint.
+    const [countdownStep, setCountdownStep] = useState<Step | null>(null);
+    if (countdownStep !== step) {
+        setCountdownStep(step);
+        setSecondsLeft(
+            step === 'player'  ? PLAYER_SECONDS
+            : step === 'context' ? CONTEXT_SECONDS
+            : null
+        );
+    }
 
     useEffect(() => {
         if (secondsLeft === null) return;
@@ -296,57 +304,32 @@ export default function PiAdvancedShotFlow({
         return () => clearTimeout(t);
     }, [secondsLeft, step, finalize]);
 
-    useEffect(() => () => { if (courtTimerRef.current) clearTimeout(courtTimerRef.current); }, []);
-
-    // ── Idle commit countdown (drives the confirm strip progress) ────
-    useEffect(() => {
-        if (step !== 'court' || selectedZone === null) {
-            if (courtTimerRef.current) clearTimeout(courtTimerRef.current);
-            setCourtIdleMsLeft(null);
-            courtIdleStartRef.current = null;
-            return;
-        }
-        // Restart the idle window every time the selection changes.
-        courtIdleStartRef.current = Date.now();
-        setCourtIdleMsLeft(COURT_IDLE_COMMIT_MS);
-        const start = courtIdleStartRef.current;
-        const tickHandle: ReturnType<typeof setInterval> = setInterval(() => {
-            if (courtIdleStartRef.current !== start) return; // superseded
-            const remaining = COURT_IDLE_COMMIT_MS - (Date.now() - start);
-            if (remaining <= 0) {
-                clearInterval(tickHandle);
-                setCourtIdleMsLeft(0);
-                goNext();
-            } else {
-                setCourtIdleMsLeft(remaining);
-            }
-        }, 60);
-        return () => clearInterval(tickHandle);
-    }, [step, selectedZone, courtX, courtY, goNext]);
-
     function handleCourtTap(zone: ShotZoneId, x: number, y: number) {
+        // Tap commits immediately — no confirm step, no idle countdown.
+        // Drag-to-adjust (HexLayer) allows in-flight repositioning before lift.
         setSelectedZone(zone);
         setCourtX(x);
         setCourtY(y);
-        // The idle-commit useEffect above watches selectedZone/courtX/courtY
-        // and restarts the COURT_IDLE_COMMIT_MS countdown.
-    }
-
-    function handleConfirmLocation() {
-        if (courtTimerRef.current) clearTimeout(courtTimerRef.current);
         goNext();
     }
 
     function handleSkipLocation() {
-        if (courtTimerRef.current) clearTimeout(courtTimerRef.current);
         setSelectedZone('unlocated');
         setCourtX(null);
         setCourtY(null);
         goNext();
     }
 
-    function handlePlayerSelect(p: Player) { setSelectedPlayer(p); goNext(); }
-    function handleMarkUnattributed()       { setSelectedPlayer(null); goNext(); }
+    function handlePlayerSelect(p: Player) {
+        setSelectedPlayer(p);
+        if (!showShotType) finalize({ playerOverride: p });
+        else goNext();
+    }
+    function handleMarkUnattributed() {
+        setSelectedPlayer(null);
+        if (!showShotType) finalize({ unattributed: true });
+        else goNext();
+    }
     function toggleAttr(id: string) {
         setSelectedAttrs(prev => {
             const next = new Set(prev);
@@ -473,69 +456,19 @@ export default function PiAdvancedShotFlow({
                                 selectedX={courtX}
                                 selectedY={courtY}
                                 existingShots={allShots}
+                                lockMode={
+                                    points === 2 ? 'two'
+                                    : points === 3 ? 'three'
+                                    : null
+                                }
+                                onUndoLastShot={onUndo}
+                                scoringTeam={team}
+                                teamAName={teamA.name}
+                                teamBName={teamB.name}
+                                teamAColor={teamAColor}
+                                teamBColor={teamBColor}
                             />
                         </div>
-
-                        {/* Confirm strip — appears once a hex is tapped */}
-                        {selectedZone && (
-                            <div style={{
-                                flexShrink: 0,
-                                display: 'flex', alignItems: 'stretch',
-                                background: 'rgba(7,9,14,0.96)',
-                                borderTop: `1px solid ${teamColor}44`,
-                                animation: reducedMotion ? 'none' : 'piStepFade 0.18s ease-out',
-                            }}>
-                                {/* RE-TAP hint */}
-                                <div style={{
-                                    flex: 1, display: 'flex', flexDirection: 'column',
-                                    justifyContent: 'center', padding: '8px 14px',
-                                    borderRight: '1px solid rgba(255,255,255,0.06)',
-                                }}>
-                                    <span style={{
-                                        fontFamily: RM, fontSize: 8, fontWeight: 700,
-                                        letterSpacing: '0.22em', color: 'rgba(255,255,255,0.6)',
-                                        textTransform: 'uppercase',
-                                    }}>SELECTED — TAP AGAIN TO MOVE</span>
-                                    <span style={{
-                                        fontFamily: OSW, fontStyle: 'italic', fontWeight: 700,
-                                        fontSize: 18, color: teamColor, marginTop: 2,
-                                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                    }}>
-                                        {zoneLabel ?? selectedZone}
-                                    </span>
-                                </div>
-
-                                {/* CONFIRM button (with idle commit progress bar) */}
-                                <button
-                                    onClick={handleConfirmLocation}
-                                    style={{
-                                        position: 'relative',
-                                        minWidth: 200,
-                                        padding: '0 24px',
-                                        background: teamColor, color: '#000',
-                                        border: 'none',
-                                        fontFamily: RM, fontSize: 13, fontWeight: 800,
-                                        letterSpacing: '0.18em', textTransform: 'uppercase',
-                                        cursor: 'pointer', userSelect: 'none',
-                                        WebkitTapHighlightColor: 'transparent', overflow: 'hidden',
-                                        boxShadow: `inset 0 0 24px ${teamColor}88`,
-                                    }}
-                                >
-                                    {/* Idle progress bar */}
-                                    {courtIdleMsLeft !== null && (
-                                        <div style={{
-                                            position: 'absolute', left: 0, top: 0, bottom: 0,
-                                            width: `${(courtIdleMsLeft / COURT_IDLE_COMMIT_MS) * 100}%`,
-                                            background: 'rgba(255,255,255,0.18)',
-                                            pointerEvents: 'none',
-                                            transition: 'width 60ms linear',
-                                        }} />
-                                    )}
-                                    <span style={{ position: 'relative' }}>✓ CONFIRM →</span>
-                                </button>
-                            </div>
-                        )}
                     </div>
                 )}
 
@@ -620,7 +553,7 @@ export default function PiAdvancedShotFlow({
                         <FooterButton label="SKIP LOCATION" onClick={handleSkipLocation} />
                         <div style={{ flex: 1 }} />
                         <span style={{ fontFamily: RM, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: zoneLabel ? teamColor : 'rgba(255,255,255,0.22)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                            {zoneLabel ?? '— TAP COURT TO MARK —'}
+                            {zoneLabel ?? `TAP ${team === 'A' ? 'LEFT' : 'RIGHT'} HALF · DRAG TO FINE-TUNE`}
                         </span>
                     </>
                 )}

@@ -9,6 +9,11 @@ const LS_KEEP_CLOCK_ON_SHOT_VIOLATION = 'boxv2-game-keep-clock-on-shot-violation
 const LS_MINIMIZE_HEADER              = 'boxv2-game-minimize-header';
 const LS_DISABLE_SCORE_POPUP          = 'boxv2-game-disable-score-popup';
 const LS_DISABLE_TOUCH_DECK           = 'boxv2-game-disable-touch-deck';
+const LS_SHOT_TYPE_SELECTION          = 'boxv2-game-shot-type-selection';
+const LS_QUICK_ENTRY                  = 'boxv2-game-quick-entry';
+const LS_HAPTICS                      = 'boxv2-pi-haptics';
+const LS_RIM_ACCENT                   = 'boxv2-pi-court-rimaccent';
+const LS_CHEVRONS                     = 'boxv2-pi-court-chevrons';
 
 const EVT = 'boxv2-game-control-prefs-changed';
 
@@ -64,3 +69,29 @@ export const useDisableScorePopup = () =>
 
 export const useDisableTouchDeck = () =>
     useBoolPref(getDisableTouchDeck, setDisableTouchDeck);
+
+export const getShotTypeSelection = () => readBool(LS_SHOT_TYPE_SELECTION, false);
+export const setShotTypeSelection = (v: boolean) => writeBool(LS_SHOT_TYPE_SELECTION, v);
+
+export const useShotTypeSelection = () =>
+    useBoolPref(getShotTypeSelection, setShotTypeSelection);
+
+export const getQuickEntry = () => readBool(LS_QUICK_ENTRY, false);
+export const setQuickEntry = (v: boolean) => writeBool(LS_QUICK_ENTRY, v);
+
+export const useQuickEntry = () =>
+    useBoolPref(getQuickEntry, setQuickEntry);
+
+export const getHaptics = () => readBool(LS_HAPTICS, true);
+export const setHaptics = (v: boolean) => writeBool(LS_HAPTICS, v);
+
+export const useHaptics = () =>
+    useBoolPref(getHaptics, setHaptics);
+
+export const getRimAccent = () => readBool(LS_RIM_ACCENT, false);
+export const setRimAccent = (v: boolean) => writeBool(LS_RIM_ACCENT, v);
+export const useRimAccent = () => useBoolPref(getRimAccent, setRimAccent);
+
+export const getChevrons = () => readBool(LS_CHEVRONS, false);
+export const setChevrons = (v: boolean) => writeBool(LS_CHEVRONS, v);
+export const useChevrons = () => useBoolPref(getChevrons, setChevrons);

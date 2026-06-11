@@ -9,6 +9,7 @@ import {
     subscribeCastSignal,
     type TvDisplay,
 } from '../../services/tvDisplayService';
+import PiDirectLinkScreen from './PiDirectLinkScreen';
 
 // ── Colour tokens ────────────────────────────────────────────────────────────
 const BG         = '#080808';
@@ -79,7 +80,7 @@ const PiWatchScreen: React.FC<PiWatchScreenProps> = ({ onBack }) => {
     const navigate = useNavigate();
 
     const [tvCode] = useState<string>(getOrCreateTvCode);
-    const [activeTab, setActiveTab] = useState<'cast' | 'code'>('cast');
+    const [activeTab, setActiveTab] = useState<'cast' | 'code' | 'direct'>('cast');
     const [inputCode, setInputCode] = useState('');
     const [flashedKey, setFlashedKey] = useState<string | null>(null);
     const [registered, setRegistered] = useState(false);
@@ -363,6 +364,24 @@ const PiWatchScreen: React.FC<PiWatchScreenProps> = ({ onBack }) => {
                             }}
                         >
                             WATCH USING GAME CODE
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('direct')}
+                            style={{
+                                fontFamily: SG,
+                                fontWeight: 700,
+                                fontSize: 11,
+                                letterSpacing: '0.12em',
+                                textTransform: 'uppercase',
+                                padding: '8px 20px',
+                                cursor: 'pointer',
+                                border: 'none',
+                                borderRadius: 4,
+                                background: activeTab === 'direct' ? RED : 'transparent',
+                                color: activeTab === 'direct' ? '#000' : MUTED2,
+                            }}
+                        >
+                            DIRECT LINK · BETA
                         </button>
                     </div>
 
@@ -770,6 +789,11 @@ const PiWatchScreen: React.FC<PiWatchScreenProps> = ({ onBack }) => {
                     </div>
                 </footer>
             </div>
+
+            {/* ── Direct Link (beta) — full-screen LAN scoring session ── */}
+            {activeTab === 'direct' && (
+                <PiDirectLinkScreen onBack={() => setActiveTab('cast')} />
+            )}
         </>
     );
 };
