@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.thebox.the_box_app",
+      "sha256_cert_fingerprints": [
+        "13:8E:C8:1C:34:95:78:64:81:3C:2A:83:17:B0:3E:47:73:4D:E3:19:5C:47:6B:85:72:1A:5D:79:6A:29:C3:95"
+      ]
+    }
+  }
+]
