@@ -18,6 +18,11 @@
   applied to prod.
 - the_box_app repo has ~10 dirty files needing the same slicing treatment (small).
 
+> **Added later on 2026-07-07:** the advanced-stats/shot-UX program now has its own master plan
+> — `ADVANCED-STATS-MASTERPLAN.md` (S1–S8) + `DESIGN-BRIEF-shot-experience.md` (Claude Design
+> handoff). Its S1 phase SUBSUMES queue item 2 below (the deferred-shot team bug) — if Shrujal
+> asks for shot-UX/stats work, follow that plan instead of improvising.
+
 ## 2. Your ordered queue (each item ≈ one session unless noted)
 
 1. **PLAN-R Phase 1 — security + hygiene.** The leaked Supabase anon key in
