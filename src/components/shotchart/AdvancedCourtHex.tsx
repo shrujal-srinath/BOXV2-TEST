@@ -509,8 +509,11 @@ export const AdvancedCourtHex: React.FC<AdvancedCourtHexProps> = ({
         if (x < 0 || x > 100 || rawY < 0 || rawY > courtH) return;
         const cell = findCell(x, rawY);
         if (!cell) return;
-        const outY = fullCourt && cell.y > HALF_H ? courtH - cell.y : cell.y;
-        onCourtTap(cell.x, outY);
+        // Persist the RAW tap point (mirrored to near-half depth), not the snapped
+        // hex center — the cell is only for the visual pulse. Matches the Pi path
+        // (PiHexCourt) so exact shot locations survive for stats re-binning.
+        const outY = fullCourt && rawY > HALF_H ? courtH - rawY : rawY;
+        onCourtTap(x, outY);
         setPulseId(cell.id);
         setTimeout(() => setPulseId(null), 700);
     }, [onCourtTap, findCell, courtH, fullCourt]);
@@ -522,8 +525,11 @@ export const AdvancedCourtHex: React.FC<AdvancedCourtHexProps> = ({
         if (x < 0 || x > 100 || rawY < 0 || rawY > courtH) return;
         const cell = findCell(x, rawY);
         if (!cell) return;
-        const outY = fullCourt && cell.y > HALF_H ? courtH - cell.y : cell.y;
-        onCourtTap(cell.x, outY);
+        // Persist the RAW tap point (mirrored to near-half depth), not the snapped
+        // hex center — the cell is only for the visual pulse. Matches the Pi path
+        // (PiHexCourt) so exact shot locations survive for stats re-binning.
+        const outY = fullCourt && rawY > HALF_H ? courtH - rawY : rawY;
+        onCourtTap(x, outY);
         setPulseId(cell.id);
         setTimeout(() => setPulseId(null), 700);
     }, [onCourtTap, findCell, courtH, fullCourt]);

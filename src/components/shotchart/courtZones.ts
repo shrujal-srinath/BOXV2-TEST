@@ -54,7 +54,9 @@ export const ZONES: Record<ShotZoneId, ZoneDefinition> = {
     },
     restricted: {
         id: 'restricted', label: 'Restricted area', shortLabel: 'RA',
-        pointValue: 2, cx: 50, cy: 12,
+        // cy 16 (not 12): within 1.6u of the basket classifyZone returns at_rim,
+        // and centroids MUST self-classify — shotService backfills x/y from them.
+        pointValue: 2, cx: 50, cy: 16,
     },
     paint_left: {
         id: 'paint_left', label: 'Paint left', shortLabel: 'PL',
@@ -73,12 +75,14 @@ export const ZONES: Record<ShotZoneId, ZoneDefinition> = {
         pointValue: 2, cx: 80, cy: 14,
     },
     mid_elbow_left: {
+        // cy 42 (not 38): the elbow band starts ABOVE the FT line (y > 38.67);
+        // at y=38 the point classifies as mid_baseline_left.
         id: 'mid_elbow_left', label: 'Left elbow', shortLabel: 'LEL',
-        pointValue: 2, cx: 24, cy: 38,
+        pointValue: 2, cx: 24, cy: 42,
     },
     mid_elbow_right: {
         id: 'mid_elbow_right', label: 'Right elbow', shortLabel: 'REL',
-        pointValue: 2, cx: 76, cy: 38,
+        pointValue: 2, cx: 76, cy: 42,
     },
     mid_top: {
         id: 'mid_top', label: 'Mid top of key', shortLabel: 'MT',
@@ -93,12 +97,15 @@ export const ZONES: Record<ShotZoneId, ZoneDefinition> = {
         pointValue: 3, cx: 97, cy: 10,
     },
     three_wing_left: {
+        // (6.5, 28) not (10, 40): the old centroid sat at 143.6° from the basket,
+        // inside classifyZone's three_top_left angular band (>115°..155°) — so
+        // wing-3 shots captured zone-only were re-binned as top-3 downstream.
         id: 'three_wing_left', label: 'Left wing 3', shortLabel: 'LW3',
-        pointValue: 3, cx: 10, cy: 40,
+        pointValue: 3, cx: 6.5, cy: 28,
     },
     three_wing_right: {
         id: 'three_wing_right', label: 'Right wing 3', shortLabel: 'RW3',
-        pointValue: 3, cx: 90, cy: 40,
+        pointValue: 3, cx: 93.5, cy: 28,
     },
     three_top_left: {
         id: 'three_top_left', label: 'Top left 3', shortLabel: 'TL3',

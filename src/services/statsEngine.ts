@@ -399,24 +399,33 @@ const DEFAULT_BANDS: Array<Omit<DistanceBand, 'fgm' | 'fga' | 'fgPct' | 'points'
   { label: '0–3 ft', minFt: 0, maxFt: 3 },
   { label: '3–10 ft', minFt: 3, maxFt: 10 },
   { label: '10–16 ft', minFt: 10, maxFt: 16 },
-  { label: '16 ft–3PT', minFt: 16, maxFt: 22 },
-  { label: '3-Pointers', minFt: 22, maxFt: 999 },
+  { label: '16 ft–3PT', minFt: 16, maxFt: 999 },
+  { label: '3-Pointers', minFt: 0, maxFt: 999 },
 ];
 
 export const distanceBands = (shots: ShotEvent[], side?: TeamSide): DistanceBand[] => {
   const fgs = shots.filter(
     s => s.shotType !== 'free_throw' && s.x != null && s.y != null && (!side || s.teamSide === side)
   );
-  return DEFAULT_BANDS.map(band => {
-    const inBand = fgs.filter(s => {
+  // Three-pointers are binned by ZONE, not by raw distance: a FIBA corner 3 is
+  // only ~21.7 ft from the rim, so a pure >=22ft cut silently re-bins every
+  // corner 3 into the long-2 band. Bands 0-3 are 2PT-only distance ranges;
+  // band 4 collects everything classified beyond the arc.
+  const twoPtBands = DEFAULT_BANDS.slice(0, 4).map(b => ({ ...b, fgm: 0, fga: 0, points: 0 }));
+  const threeBand = { ...DEFAULT_BANDS[4], fgm: 0, fga: 0, points: 0 };
+  for (const s of fgs) {
+    const zone = s.zone !== 'unlocated' ? classifyZone(s.x!, s.y!) : s.zone;
+    let band;
+    if (zone.startsWith('three_')) {
+      band = threeBand;
+    } else {
       const d = shotDistanceFt(s.x!, s.y!);
-      return d >= band.minFt && d < band.maxFt;
-    });
-    const fgm = inBand.filter(s => s.made).length;
-    const fga = inBand.length;
-    const pts = inBand.reduce((sum, s) => sum + (s.made ? s.points : 0), 0);
-    return { ...band, fgm, fga, fgPct: pct(fgm, fga), points: pts };
-  });
+      band = twoPtBands.find(b => d >= b.minFt && d < b.maxFt) ?? twoPtBands[3];
+    }
+    band.fga += 1;
+    if (s.made) { band.fgm += 1; band.points += s.points; }
+  }
+  return [...twoPtBands, threeBand].map(b => ({ ...b, fgPct: pct(b.fgm, b.fga) }));
 };
 
 /**
