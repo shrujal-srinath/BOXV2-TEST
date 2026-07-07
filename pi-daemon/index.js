@@ -456,6 +456,13 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    next();
+});
+
 app.get('/api/state', (req, res) => res.json(state));
 app.get('/api/health', (req, res) => {
     let cpuTemp = null;
@@ -487,6 +494,21 @@ app.get('/api/health', (req, res) => {
 app.get('/api/network-ip', (req, res) => {
     try { res.json({ ip: execSync("hostname -I | awk '{print $1}'").toString().trim() }); }
     catch (e) { res.json({ ip: 'localhost' }); }
+});
+app.get('/api/network-status', async (req, res) => {
+    try {
+        const ip = execSync("hostname -I | awk '{print $1}'").toString().trim() || 'localhost';
+        let online = false;
+        try {
+            const resp = await fetch('https://eoowagimooxsqcrrihbw.supabase.co/rest/v1/', { timeout: 3000 });
+            online = resp.ok;
+        } catch (_) {
+            online = false;
+        }
+        res.json({ ip, online, mode: online ? 'online' : 'offline' });
+    } catch (e) {
+        res.json({ ip: 'localhost', online: false, mode: 'error' });
+    }
 });
 
 io.on('connection', (socket) => {
@@ -533,11 +555,13 @@ io.on('connection', (socket) => {
     // Shot attribution — sent back from UI after popup completes
     // Score already counted; this persists the location/player metadata.
     socket.on('shot_attributed', (data) => {
-        console.log(`📊 Shot: Team ${data.team} +${data.points} | Player: ${data.playerName || 'none'} | Zone: ${data.zone || 'unlocated'}`);
+        const made = data.made ?? true; // legacy score-button flow only sends makes
+        console.log(`📊 Shot: Team ${data.team} ${made ? '+' : 'MISS '}${data.points} | Player: ${data.playerName || 'none'} | Zone: ${data.zone || 'unlocated'}`);
         if (currentGameCode && state.meta.gameMode !== 'quick') {
             persistShotEvent({
                 team: data.team,
                 points: data.points,
+                made,
                 playerId: data.playerId ?? null,
                 playerName: data.playerName ?? null,
                 zone: data.zone ?? 'unlocated',
@@ -545,6 +569,7 @@ io.on('connection', (socket) => {
                 y: data.y ?? null,
                 period: data.period ?? state.clock.period,
                 gameClockSec: data.gameClockSec ?? Math.ceil(state.clock.gameMs / 1000),
+                shotClockSec: data.shotClockSec ?? null,
                 attributes: Array.isArray(data.attributes) ? data.attributes : [],
             });
         }

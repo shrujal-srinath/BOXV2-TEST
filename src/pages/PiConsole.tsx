@@ -103,7 +103,8 @@ export default function PiConsole() {
             gameCode, playerId: shot.playerId, teamSide: shot.teamSide,
             x: shot.x, y: shot.y, zone: shot.zone, made: shot.made, points: shot.points,
             shotType: shot.shotType, period: timer.period,
-            gameClockSec: timer.minutes * 60 + timer.seconds, attributes: [],
+            gameClockSec: timer.minutes * 60 + timer.seconds,
+            shotClockSec: timer.shotClock, attributes: [],
         });
     }, [gameCode, timer]);
 

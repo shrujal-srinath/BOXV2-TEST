@@ -22,6 +22,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { io, type Socket } from 'socket.io-client';
 import PiTouchScoringScreen from '../components/refereebox/PiTouchScoringScreen';
 import PiAdvancedShotFlow from '../components/refereebox/PiAdvancedShotFlow';
 import type { ScorePendingEvent, Player } from '../hooks/useRefereeBox';
@@ -43,17 +44,63 @@ interface TeamModel {
 
 const DEFAULTS = { periodMinutes: 10, shotClockSeconds: 24, totalPeriods: 4 };
 
+type ConnMode = 'trying' | 'direct' | 'webrtc' | 'cloud';
+
 export default function LanControlPage() {
     const { gameCode = '' } = useParams();
     const code = gameCode.toUpperCase();
     const navigate = useNavigate();
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const piIp = searchParams.get('pi');
 
     const [teamA, setTeamA] = useState<TeamModel>({ name: 'TEAM A', score: 0, fouls: 0, timeouts: 4, color: '#2563EB', players: [] });
     const [teamB, setTeamB] = useState<TeamModel>({ name: 'TEAM B', score: 0, fouls: 0, timeouts: 4, color: '#DC2626', players: [] });
     const [possession, setPossession] = useState<'A' | 'B' | null>('A');
     const [settings, setSettings] = useState(DEFAULTS);
     const [scorePending, setScorePending] = useState<ScorePendingEvent | null>(null);
+    const [connMode, setConnMode] = useState<ConnMode>(piIp ? 'trying' : 'webrtc');
     const seededRef = useRef(false);
+    const directSocketRef = useRef<Socket | null>(null);
+
+    // Try direct Socket.io connection if Pi IP is in URL
+    useEffect(() => {
+        if (!piIp || connMode !== 'trying') {
+            return;
+        }
+
+        const sock = io(`http://${piIp}:3001`, { timeout: 2500, reconnection: false });
+        directSocketRef.current = sock;
+
+        const handleConnect = () => {
+            console.log('✓ Connected to Pi daemon via Socket.io');
+            setConnMode('direct');
+        };
+
+        const handleStateUpdate = (s: any) => {
+            setTeamA(t => ({ ...t, score: s.teamA.score, fouls: s.teamA.fouls, timeouts: s.teamA.timeouts }));
+            setTeamB(t => ({ ...t, score: s.teamB.score, fouls: s.teamB.fouls, timeouts: s.teamB.timeouts }));
+        };
+
+        const handleConnectError = (err: any) => {
+            console.log('✗ Direct connection failed, falling back to WebRTC:', err.message);
+            sock.disconnect();
+            setConnMode('webrtc');
+        };
+
+        sock.on('connect', handleConnect);
+        sock.on('state_update', handleStateUpdate);
+        sock.on('connect_error', handleConnectError);
+
+        const cleanup = () => {
+            sock.off('connect', handleConnect);
+            sock.off('state_update', handleStateUpdate);
+            sock.off('connect_error', handleConnectError);
+            sock.disconnect();
+        };
+
+        return cleanup;
+    }, [piIp, connMode]);
 
     // Clock engine (host). Also mirrors the clock to Supabase for cloud spectators.
     const timer = useSupabaseBroadcast({
@@ -63,7 +110,7 @@ export default function LanControlPage() {
         shotClockDuration: settings.shotClockSeconds,
     });
 
-    // LAN transport + best-effort cloud mirror.
+    // LAN transport + best-effort cloud mirror (only for WebRTC mode).
     const { sendSnapshot, peerCount } = useDirectLinkHost(code);
     const { coalesce, append, pending } = useMirrorQueue();
 
@@ -151,11 +198,16 @@ export default function LanControlPage() {
         });
     }, [code, coalesce]);
 
-    // Push to LAN + queue mirror whenever scoreboard state changes.
+    // Push to LAN (WebRTC) or direct Socket.io + queue mirror whenever scoreboard state changes.
     useEffect(() => {
-        sendSnapshot(buildSnapshot());
-        mirrorState();
-    }, [teamA, teamB, possession, sendSnapshot, buildSnapshot, mirrorState]);
+        const snapshot = buildSnapshot();
+        if (connMode === 'direct' && directSocketRef.current?.connected) {
+            directSocketRef.current.emit('ui_action_state', snapshot);
+        } else {
+            sendSnapshot(snapshot);
+            mirrorState();
+        }
+    }, [teamA, teamB, possession, connMode, buildSnapshot, sendSnapshot, mirrorState]);
 
     // ── Score helpers ───────────────────────────────────────────
     const applyScore = useCallback((side: 'A' | 'B', delta: number) => {
@@ -202,6 +254,13 @@ export default function LanControlPage() {
 
     // ── Deck action dispatch ────────────────────────────────────
     const handleAction = useCallback((type: string, payload?: Record<string, unknown>) => {
+        // In direct Socket.io mode, emit to daemon and let it drive the state
+        if (connMode === 'direct' && directSocketRef.current?.connected) {
+            directSocketRef.current.emit('ui_action', { type, payload });
+            return;
+        }
+
+        // Otherwise, local state mutation (WebRTC/cloud mode)
         const teamKey = payload?.team as ('teamA' | 'teamB' | 'A' | 'B' | undefined);
         const side: 'A' | 'B' = teamKey === 'teamB' || teamKey === 'B' ? 'B' : 'A';
         const amount = Number(payload?.amount ?? 0);
@@ -238,7 +297,7 @@ export default function LanControlPage() {
             case 'TRIGGER_BUZZER': /* no horn on the controller */ break;
             default: break;
         }
-    }, [timer, applyScore]);
+    }, [connMode, timer, applyScore]);
 
     // ── Render ──────────────────────────────────────────────────
     const gameMs = timer.minutes * 60_000 + timer.seconds * 1_000 + timer.tenths * 100;
@@ -274,13 +333,13 @@ export default function LanControlPage() {
                 possession={possession}
                 teamAColor={teamA.color}
                 teamBColor={teamB.color}
-                isConnected={peerCount > 0}
+                isConnected={connMode === 'direct' || peerCount > 0}
                 gameCode={code}
                 sendAction={handleAction}
                 onClose={() => navigate('/')}
             />
 
-            {/* Direct Link status pill — LED link + cloud-mirror backlog */}
+            {/* Status pill — shows connection mode */}
             <div style={{
                 position: 'fixed', top: 6, left: '50%', transform: 'translateX(-50%)',
                 zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10,
@@ -290,13 +349,28 @@ export default function LanControlPage() {
                 letterSpacing: '0.16em', textTransform: 'uppercase',
                 pointerEvents: 'none', userSelect: 'none',
             }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: peerCount > 0 ? '#22C55E' : '#F59E0B' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: peerCount > 0 ? '#22C55E' : '#F59E0B' }} />
-                    {peerCount > 0 ? `LED LINKED · ${code}` : `LINKING · ${code}`}
-                </span>
-                <span style={{ color: pending > 0 ? '#F59E0B' : 'rgba(255,255,255,0.4)' }}>
-                    {pending > 0 ? `SYNC ${pending}` : 'SYNCED'}
-                </span>
+                {connMode === 'direct' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#22C55E' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22C55E' }} />
+                        {`DIRECT · ${piIp}`}
+                    </span>
+                ) : connMode === 'trying' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#F59E0B' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#F59E0B', animation: 'pulse 1.2s ease-in-out infinite' }} />
+                        {`CONNECTING · ${piIp}`}
+                    </span>
+                ) : (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: peerCount > 0 ? '#22C55E' : '#F59E0B' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: peerCount > 0 ? '#22C55E' : '#F59E0B' }} />
+                        {peerCount > 0 ? `WEBRTC · ${code}` : `LINKING · ${code}`}
+                    </span>
+                )}
+                {connMode !== 'direct' && (
+                    <span style={{ color: pending > 0 ? '#F59E0B' : 'rgba(255,255,255,0.4)' }}>
+                        {pending > 0 ? `SYNC ${pending}` : 'SYNCED'}
+                    </span>
+                )}
+                <style>{`@keyframes pulse { 0%,100% { opacity: 0.4 } 50% { opacity: 1 } }`}</style>
             </div>
         </>
     );

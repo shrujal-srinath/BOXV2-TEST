@@ -18,7 +18,7 @@
 //   • Minimize-header pref support (collapses to a single ⚙)
 // ═══════════════════════════════════════════════════════════════
 
-import React from 'react';
+import React, { useState } from 'react';
 import { fibaTimeoutsForPeriod, bucketLabel } from '../../services/fibaTimeouts';
 import { useMinimizeHeader } from '../../services/gameControlPrefs';
 
@@ -41,6 +41,8 @@ interface Props {
     onConnectHardware?: () => void;
     onSettings?: () => void;
     onEndGame?: () => void;
+    /** Advanced mode: log a missed attempt (no score). Opens the attribution flow. */
+    onLogMiss?: (team: 'A' | 'B', points: 2 | 3) => void;
 }
 
 // ── Tokens (shared with LockedScoreboardMinimal) ──────────────
@@ -841,8 +843,9 @@ const PiTouchScoringScreenMinimal: React.FC<Props> = ({
     teamAColor = HOME_C, teamBColor = AWAY_C,
     isConnected = true, gameCode,
     sendAction, onClose,
-    onCast, onConnectHardware, onSettings, onEndGame,
+    onCast, onConnectHardware, onSettings, onEndGame, onLogMiss,
 }) => {
+    const [missOpen, setMissOpen] = useState(false);
     const inBonusA = teamA.fouls >= 5;
     const inBonusB = teamB.fouls >= 5;
     const live = clock.isRunning;
@@ -978,6 +981,37 @@ const PiTouchScoringScreenMinimal: React.FC<Props> = ({
                     <HeaderBtn label="SETTINGS" icon={<IconGear />} onClick={onSettings} accent={AMBER} />
                     {onEndGame && (
                         <HeaderBtn label="END" icon={<IconStop />} onClick={onEndGame} accent={RED} />
+                    )}
+                    {onLogMiss && (
+                        <div style={{ position: 'relative' }}>
+                            <HeaderBtn label="LOG MISS" icon={<span style={{ fontWeight: 900, fontSize: 12 }}>✕</span>} onClick={() => setMissOpen(o => !o)} accent={AMBER} />
+                            {missOpen && (
+                                <div style={{
+                                    position: 'absolute', top: 42, right: 0, zIndex: 50,
+                                    background: SURFACE_HI, border: `1px solid ${BDR_HI}`,
+                                    padding: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6,
+                                    boxShadow: '0 8px 28px rgba(0,0,0,0.6)', minWidth: 220,
+                                }}>
+                                    {([['A', teamAColor, (teamA as any).name || 'HOME'], ['B', teamBColor, (teamB as any).name || 'AWAY']] as const).map(([side, color, name]) =>
+                                        ([2, 3] as const).map(pts => (
+                                            <div
+                                                key={`${side}${pts}`}
+                                                onClick={() => { onLogMiss(side as 'A' | 'B', pts); setMissOpen(false); }}
+                                                style={{
+                                                    padding: '10px 8px', border: `1px solid ${color}55`,
+                                                    background: `${color}1a`, color: '#fff',
+                                                    fontFamily: RM, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                                                    textAlign: 'center', cursor: 'pointer', textTransform: 'uppercase',
+                                                    userSelect: 'none', WebkitTapHighlightColor: 'transparent',
+                                                }}
+                                            >
+                                                {String(name).slice(0, 10)} · {pts}PT
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     )}
                     <HeaderBtn label="BACK TO SCORING" icon={<IconBack />} onClick={onClose} accent={GREEN} filled />
                 </div>

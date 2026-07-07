@@ -22,10 +22,11 @@ interface Props {
     gameCode: string;
     /** URL the controller (phone/laptop) opens — encoded into the pairing QR. */
     controllerUrl?: string;
+    piStatus?: { ip: string; online: boolean } | null;
     onBack: () => void;
 }
 
-const PiDirectLinkReceiver: React.FC<Props> = ({ gameCode, controllerUrl, onBack }) => {
+const PiDirectLinkReceiver: React.FC<Props> = ({ gameCode, controllerUrl, piStatus, onBack }) => {
     const [snap, setSnap] = useState<DirectLinkSnapshot | null>(null);
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
@@ -106,6 +107,12 @@ const PiDirectLinkReceiver: React.FC<Props> = ({ gameCode, controllerUrl, onBack
                     <div style={{ fontSize: 13, letterSpacing: '0.4em', color: '#22C55E', fontWeight: 700 }}>
                         CODE · {gameCode.toUpperCase()}
                     </div>
+                    {piStatus && (
+                        <div style={{ fontSize: 9, letterSpacing: '0.1em', color: piStatus.online ? '#22C55E' : '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: piStatus.online ? '#22C55E' : '#F59E0B' }} />
+                            {piStatus.online ? 'Pi online — direct LAN ready' : 'Pi offline — LAN only (no cloud)'}
+                        </div>
+                    )}
                     {controllerUrl && (
                         <div style={{ fontSize: 9, letterSpacing: '0.05em', color: '#52525B' }}>
                             {controllerUrl}

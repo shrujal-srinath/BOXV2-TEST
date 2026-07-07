@@ -604,10 +604,12 @@ export const HalfCourtCanvas: React.FC<HalfCourtCanvasProps> = ({
         const scaleY = CH / rect.height;
         const mx = (e.clientX - rect.left) * scaleX;
         const my = (e.clientY - rect.top)  * scaleY;
-        const idx = findHex(mx, my);
-        if (idx < 0) return;
-        const h = HEX_CENTERS[idx];
-        const [ax, ay] = canvasToApp(h.x, h.y);
+        // Reject taps outside the court; otherwise store the EXACT tapped point.
+        // (Previously snapped to the nearest hex centre, which lost precision and
+        //  could even drop valid taps near hex-cell corners. The hex grid remains
+        //  the live heat *preview* only — see render.)
+        if (mx < PAD || mx > PAD + W || my < PAD || my > PAD + H) return;
+        const [ax, ay] = canvasToApp(mx, my);
         onCourtTap(ax, ay);
     }, [interactive, onCourtTap]);
 

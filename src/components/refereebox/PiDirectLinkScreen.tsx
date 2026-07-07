@@ -35,13 +35,29 @@ const PiDirectLinkScreen: React.FC<Props> = ({ onBack }) => {
     const [code, setCode] = useState<string | null>(null);
     const [error, setError] = useState(false);
     const [attempt, setAttempt] = useState(0);
+    const [piStatus, setPiStatus] = useState<{ ip: string; online: boolean } | null>(null);
     const createdRef = useRef(false);
 
     useEffect(() => {
         createdRef.current = false;
         setCode(null);
         setError(false);
+        setPiStatus(null);
         let alive = true;
+
+        (async () => {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const statusResp = await fetch('http://localhost:3001/api/network-status', { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (!alive) return;
+                const status = await statusResp.json();
+                if (alive) setPiStatus(status);
+            } catch (e) {
+                if (alive) setPiStatus({ ip: 'localhost', online: false });
+            }
+        })();
 
         const settings: GameSettings = {
             gameName: 'LAN Game',
@@ -111,7 +127,8 @@ const PiDirectLinkScreen: React.FC<Props> = ({ onBack }) => {
         <div style={{ position: 'fixed', inset: 0, zIndex: 80 }}>
             <PiDirectLinkReceiver
                 gameCode={code}
-                controllerUrl={`${controllerBase()}/lan-control/${code}`}
+                controllerUrl={`${controllerBase()}/lan-control/${code}?pi=${piStatus?.ip ?? ''}`}
+                piStatus={piStatus}
                 onBack={onBack}
             />
         </div>

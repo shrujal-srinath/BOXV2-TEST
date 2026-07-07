@@ -65,6 +65,8 @@ export interface ScorePendingEvent {
     points: 1 | 2 | 3;
     players: Player[];
     gameMode: 'quick' | 'stats' | 'advanced';
+    /** False when logging a missed attempt (no score counted). Defaults to a make. */
+    made?: boolean;
 }
 
 const SOCKET_URL = 'http://localhost:3001';
@@ -248,6 +250,7 @@ export function useRefereeBox() {
     const attributeShot = useCallback((data: {
         team: 'A' | 'B';
         points: number;
+        made?: boolean;
         playerId: string | null;
         playerName: string | null;
         zone?: string;
@@ -260,6 +263,18 @@ export function useRefereeBox() {
         socketRef.current?.emit('shot_attributed', data);
         setScorePending(null);
     }, []);
+
+    // Launch the attribution flow for a MISSED attempt. Purely client-side — the
+    // daemon's shot_attributed handler only persists, so no score is counted.
+    const requestMiss = useCallback((team: 'A' | 'B', points: 1 | 2 | 3) => {
+        setScorePending(prev => {
+            const players = gameState
+                ? (team === 'A' ? gameState.meta.players.teamA : gameState.meta.players.teamB)
+                : [];
+            const gameMode = gameState?.meta.gameMode ?? 'advanced';
+            return { team, points, players: players ?? [], gameMode, made: false };
+        });
+    }, [gameState]);
 
     // Dismiss popup without attribution
     const dismissScorePending = useCallback(() => {
@@ -298,6 +313,7 @@ export function useRefereeBox() {
         sendAction,
         endGame,
         attributeShot,
+        requestMiss,
         dismissScorePending,
         devPico,
         formatGameClock,

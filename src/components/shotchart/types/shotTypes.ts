@@ -62,6 +62,8 @@ export interface ShotEvent {
     shotType: ShotType;
     period: number;
     gameClockSec: number | null;
+    /** Shot-clock seconds remaining at the shot (migration 012). Null/undefined if untracked. */
+    shotClockSec?: number | null;
     attributes: ShotAttribute[];
     assistedBy: string | null;
     reboundedBy: string | null;

@@ -99,6 +99,7 @@ export default function RefereeScreen() {
         sendAction,
         endGame,
         attributeShot,
+        requestMiss,
         dismissScorePending,
         devPico,
     } = useRefereeBox();
@@ -807,6 +808,7 @@ export default function RefereeScreen() {
                     onConnectHardware={() => openAux('phone_setup', 'touch_scoring')}
                     onSettings={() => setScreen('settings')}
                     onEndGame={handleEndGameRequest}
+                    onLogMiss={gameState.meta.gameMode === 'advanced' ? requestMiss : undefined}
                 />
                 {scorePending && gameState.meta.gameMode === 'stats' && (
                     <PiStatsPlayerPicker

@@ -30,7 +30,7 @@ interface PiAdvancedShotFlowProps {
     /** Active game code — used to fetch shot history for the in-court heatmap. */
     gameCode?: string;
     onAttribute: (data: {
-        team: 'A' | 'B'; points: number;
+        team: 'A' | 'B'; points: number; made: boolean;
         playerId: string | null; playerName: string | null;
         zone?: string; x?: number; y?: number;
         period?: number; gameClockSec?: number; attributes?: string[];
@@ -233,6 +233,7 @@ export default function PiAdvancedShotFlow({
     event, teamA, teamB, teamAColor, teamBColor, clock, gameCode, onAttribute, onSkip, onUndo,
 }: PiAdvancedShotFlowProps) {
     const { team, points, players } = event;
+    const made = event.made ?? true;
     const teamColor = team === 'A' ? teamAColor : teamBColor;
     const teamName  = team === 'A' ? teamA.name : teamB.name;
     const reducedMotion = useReducedMotion();
@@ -268,7 +269,7 @@ export default function PiAdvancedShotFlow({
         doneRef.current = true;
         const player = opts.unattributed ? null : ('playerOverride' in opts ? opts.playerOverride! : selectedPlayer);
         onAttribute({
-            team, points,
+            team, points, made,
             playerId:     player?.id   ?? null,
             playerName:   player?.name ?? null,
             zone:         isFreeThrow ? 'free_throw' : (selectedZone ?? 'unlocated'),
@@ -278,7 +279,7 @@ export default function PiAdvancedShotFlow({
             gameClockSec: Math.ceil(clock.gameMs / 1000),
             attributes:   Array.from(selectedAttrs),
         });
-    }, [selectedPlayer, selectedZone, courtX, courtY, selectedAttrs, team, points, clock, onAttribute, isFreeThrow]);
+    }, [selectedPlayer, selectedZone, courtX, courtY, selectedAttrs, team, points, made, clock, onAttribute, isFreeThrow]);
 
     // Reset the countdown when the step changes — done during render (the
     // documented "adjust state when a prop changes" pattern) instead of an
