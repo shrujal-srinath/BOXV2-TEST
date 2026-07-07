@@ -35,6 +35,7 @@ export interface CreateShotParams {
     shotType: ShotType;
     period: number;
     gameClockSec: number | null;
+    shotClockSec?: number | null;
     attributes?: ShotAttribute[];
     assistedBy?: string | null;
     inputMethod?: 'live' | 'post_game_edit';
@@ -61,6 +62,7 @@ export const createShotEvent = async (params: CreateShotParams): Promise<string 
             shot_type: params.shotType,
             period: params.period,
             game_clock_sec: params.gameClockSec,
+            shot_clock_sec: params.shotClockSec ?? null,
             attributes: params.attributes || [],
             assisted_by: params.assistedBy || null,
             input_method: params.inputMethod || 'live',
@@ -202,6 +204,39 @@ export const createGameAction = async (params: {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// GAME ACTIONS — READ
+// ═══════════════════════════════════════════════════════════════════════════
+
+function mapRowToGameAction(row: any): GameAction {
+    return {
+        id: row.id,
+        gameCode: row.game_code,
+        playerId: row.player_id,
+        teamSide: row.team_side,
+        actionType: row.action_type,
+        subtype: row.subtype,
+        period: row.period,
+        gameClockSec: row.game_clock_sec,
+        relatedShotId: row.related_shot_id,
+        createdAt: row.created_at,
+    };
+}
+
+export const getActionsForGame = async (gameCode: string): Promise<GameAction[]> => {
+    const { data, error } = await supabase
+        .from('game_actions')
+        .select('*')
+        .eq('game_code', gameCode)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        console.error('[ShotService] getActionsForGame failed:', error);
+        return [];
+    }
+    return (data || []).map(mapRowToGameAction);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // REAL-TIME SUBSCRIPTION
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -331,6 +366,7 @@ function mapRowToShotEvent(row: any): ShotEvent {
         shotType: row.shot_type,
         period: row.period,
         gameClockSec: row.game_clock_sec,
+        shotClockSec: row.shot_clock_sec ?? null,
         attributes: row.attributes || [],
         assistedBy: row.assisted_by,
         reboundedBy: row.rebounded_by,

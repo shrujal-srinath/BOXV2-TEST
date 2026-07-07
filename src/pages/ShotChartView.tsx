@@ -305,6 +305,15 @@ export const ShotChartView: React.FC = () => {
                     <div style={{ color: '#333', fontSize: 10, marginTop: 2 }}>
                         {filteredShots.length} shots tracked
                     </div>
+                    {code && (
+                        <Link to={`/game/${code}/stats`} style={{
+                            display: 'inline-block', marginTop: 6, color: '#F59E0B',
+                            fontSize: 11, fontWeight: 800, textTransform: 'uppercase',
+                            letterSpacing: '0.12em', textDecoration: 'none',
+                        }}>
+                            Full Stats →
+                        </Link>
+                    )}
                 </div>
             </header>
 

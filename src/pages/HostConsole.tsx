@@ -511,6 +511,7 @@ export const HostConsole: React.FC = () => {
             shotType: shot.shotType,
             period: timer.period,
             gameClockSec: timer.minutes * 60 + timer.seconds,
+            shotClockSec: timer.shotClock,
             attributes: shot.attributes,
         });
     }, [gameCode, timer]);

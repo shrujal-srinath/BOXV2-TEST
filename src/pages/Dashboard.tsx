@@ -224,6 +224,15 @@ export const Dashboard: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Game Stats link */}
+                <button
+                  onClick={() => navigate(`/game/${g.code}/stats`)}
+                  className="w-full h-9 mb-2 inline-flex items-center justify-center gap-1.5 bg-cs-elevated hover:bg-cs-overlay dark:bg-zinc-800/60 dark:hover:bg-zinc-800 text-cs-text-2 dark:text-zinc-300 border-[0.5px] border-cs-border dark:border dark:border-zinc-700 text-[11px] font-semibold uppercase tracking-[0.073em] cs-pill dark:rounded-xl dark:tracking-normal dark:normal-case transition-colors duration-150 cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6m4 6V5m4 14v-9" /></svg>
+                  Game Stats →
+                </button>
+
                 {/* Actions */}
                 <div className="flex gap-2">
                   {isMyGames ? (

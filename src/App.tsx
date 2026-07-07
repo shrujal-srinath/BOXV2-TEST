@@ -35,7 +35,6 @@ const HomePage            = lazy(() => import('./pages/HomePage').then(m => ({ d
 const WatchPage           = lazy(() => import('./pages/WatchPage').then(m => ({ default: m.WatchPage })));
 const Dashboard           = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const GameSetup           = lazy(() => import('./pages/GameSetup').then(m => ({ default: m.GameSetup })));
-const HostConsole         = lazy(() => import('./pages/HostConsole').then(m => ({ default: m.HostConsole })));
 const SpectatorView       = lazy(() => import('./pages/SpectatorView').then(m => ({ default: m.SpectatorView })));
 const ShotChartView       = lazy(() => import('./pages/ShotChartView').then(m => ({ default: m.ShotChartView })));
 const TvKiosk             = lazy(() => import('./pages/TvKiosk').then(m => ({ default: m.TvKiosk })));
@@ -59,6 +58,10 @@ const UiAuditFixture      = lazy(() => import('./pages/UiAuditFixture'));
 const CastSetupPage       = lazy(() => import('./pages/CastSetupPage'));
 const CourtHexMapPage     = lazy(() => import('./pages/CourtHexMapPage'));
 const LanControlPage      = lazy(() => import('./pages/LanControlPage'));
+const ScorerHost          = lazy(() => import('./pages/ScorerHost'));
+const GameStatsPage        = lazy(() => import('./pages/GameStatsPage').then(m => ({ default: m.GameStatsPage })));
+const PlayerGameStatsPage  = lazy(() => import('./pages/PlayerGameStatsPage').then(m => ({ default: m.PlayerGameStatsPage })));
+const PlayerSeasonStatsPage = lazy(() => import('./pages/PlayerSeasonStatsPage').then(m => ({ default: m.PlayerSeasonStatsPage })));
 
 // Tablet PWA pages (no auth wrapper)
 const StandaloneTablet    = lazy(() => import('./pages/StandaloneTablet').then(m => ({ default: m.StandaloneTablet })));
@@ -174,6 +177,9 @@ function App() {
               <Route path="/watch-live" element={<WatchPage />} />
               <Route path="/watch/:gameCode" element={<SpectatorView />} />
               <Route path="/game/:code/shots" element={<ShotChartView />} />
+              <Route path="/game/:code/stats" element={<GameStatsPage />} />
+              <Route path="/player/:playerId/game/:code" element={<PlayerGameStatsPage />} />
+              <Route path="/player/:playerId/season" element={<PlayerSeasonStatsPage />} />
               <Route path="/tv" element={<TvKiosk />} />
               <Route path="/wall" element={<WallView />} />
               <Route path="/referee" element={<RefereeScreen />} />
@@ -208,7 +214,7 @@ function App() {
               } />
 
               <Route path="/host/:gameCode" element={
-                <ProtectedHostRoute><HostConsole /></ProtectedHostRoute>
+                <ProtectedHostRoute><ScorerHost /></ProtectedHostRoute>
               } />
 
               {/* Tournament admin routes */}

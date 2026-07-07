@@ -621,15 +621,24 @@ const CenterPanel: React.FC<{ game: BasketballGame }> = ({ game }) => {
         {game.settings?.gameName || 'BASKETBALL'}
       </div>
 
-      {/* Shot Chart Link for completed games */}
+      {/* Stats links for completed games */}
       {game?.status === 'completed' && (
-        <Link
-          to={`/game/${game.code}/shots`}
-          className="text-yellow-500 text-[10px] md:text-xs font-bold uppercase tracking-widest mt-2 hover:text-yellow-400 transition-colors"
-          style={{ fontFamily: '"Oswald", sans-serif' }}
-        >
-          View Shot Chart →
-        </Link>
+        <div className="flex items-center gap-4 mt-2">
+          <Link
+            to={`/game/${game.code}/stats`}
+            className="text-yellow-500 text-[10px] md:text-xs font-bold uppercase tracking-widest hover:text-yellow-400 transition-colors"
+            style={{ fontFamily: '"Oswald", sans-serif' }}
+          >
+            View Stats →
+          </Link>
+          <Link
+            to={`/game/${game.code}/shots`}
+            className="text-zinc-500 text-[10px] md:text-xs font-bold uppercase tracking-widest hover:text-zinc-300 transition-colors"
+            style={{ fontFamily: '"Oswald", sans-serif' }}
+          >
+            Shot Chart →
+          </Link>
+        </div>
       )}
     </div>
   );
