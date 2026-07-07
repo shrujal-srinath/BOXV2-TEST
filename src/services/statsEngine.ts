@@ -15,8 +15,9 @@
 //     basketball scoring (incl. free throws) flows through shot_events.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { ShotEvent, GameAction } from '../components/shotchart/types/shotTypes';
-import { ZONES, classifyZone, COURT } from '../components/shotchart/courtZones';
+import type { ShotEvent, GameAction, ShotZoneId } from '../components/shotchart/types/shotTypes';
+import { ZONES, classifyZone, COURT, SHOT_ATTRIBUTES } from '../components/shotchart/courtZones';
+import { ZONE_PRIOR, zonePoints } from '../lib/xppa';
 import type { Player } from '../types';
 import type {
   TeamSide,
@@ -31,6 +32,15 @@ import type {
   PossessionBucket,
   PeriodScore,
   PlottedShot,
+  AttributeSplit,
+  SpecialPoints,
+  LeadFlow,
+  ClutchStats,
+  ClutchTeamLine,
+  AssistLink,
+  AssistNetwork,
+  ShotClockBin,
+  ShotQualitySummary,
 } from '../components/stats/types';
 import { resolveGameMode, deriveCapabilities } from './gameMode';
 
@@ -366,8 +376,14 @@ export const buildTeamComparison = (box: GameBoxScore): TeamComparisonRow[] => {
 
 // ── advanced: zone aggregation + distance bands + plotted shots ───────────────
 
-export const aggregateZones = (shots: ShotEvent[], side?: TeamSide): ZoneAggregate[] => {
-  const fgs = shots.filter(s => s.shotType !== 'free_throw' && (!side || s.teamSide === side));
+export const aggregateZones = (
+  shots: ShotEvent[],
+  side?: TeamSide,
+  playerId?: string
+): ZoneAggregate[] => {
+  const fgs = shots.filter(
+    s => s.shotType !== 'free_throw' && (!side || s.teamSide === side) && (!playerId || s.playerId === playerId)
+  );
   const byZone = new Map<string, { fgm: number; fga: number; pts: number }>();
 
   for (const s of fgs) {
@@ -505,4 +521,306 @@ export const buildRosterIndex = (gameData: any): Map<string, { name: string; num
     }
   }
   return map;
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ADVANCED ANALYTICS (2026-07-07) — every function below derives from data the
+// pipeline ALREADY persists (shot_events.attributes / assisted_by /
+// shot_clock_sec / game_clock_sec). Pure + unit-tested; see statsEngine.test.ts.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Effective zone for analytics: re-derive from coords when located, else stored. */
+const effectiveZone = (s: ShotEvent): ShotZoneId =>
+  s.x != null && s.y != null && s.zone !== 'unlocated' ? classifyZone(s.x, s.y) : s.zone;
+
+/** Field goals only, optionally filtered by team side and/or player. */
+const fieldGoals = (shots: ShotEvent[], side?: TeamSide, playerId?: string): ShotEvent[] =>
+  shots.filter(
+    s => s.shotType !== 'free_throw' && (!side || s.teamSide === side) && (!playerId || s.playerId === playerId)
+  );
+
+/** Chronological order: period asc → clock desc (counts down) → createdAt asc. */
+const sortChrono = (shots: ShotEvent[]): ShotEvent[] =>
+  [...shots].sort((p, q) => {
+    if (p.period !== q.period) return p.period - q.period;
+    const pc = p.gameClockSec ?? 0;
+    const qc = q.gameClockSec ?? 0;
+    if (pc !== qc) return qc - pc;
+    return (p.createdAt ?? '').localeCompare(q.createdAt ?? '');
+  });
+
+// ── attribute splits (fastbreak / contested / catch-and-shoot / …) ───────────
+
+/**
+ * Shooting split per shot-attribute tag. Rows may overlap (one shot can carry
+ * several tags) — they are per-tag lenses, not a partition. Only tags with at
+ * least one attempt are returned, in SHOT_ATTRIBUTES declaration order.
+ */
+export const attributeSplits = (
+  shots: ShotEvent[],
+  side?: TeamSide,
+  playerId?: string
+): AttributeSplit[] => {
+  const fgs = fieldGoals(shots, side, playerId);
+  const rows: AttributeSplit[] = [];
+  for (const def of SHOT_ATTRIBUTES) {
+    const tagged = fgs.filter(s => s.attributes?.includes(def.id));
+    if (tagged.length === 0) continue;
+    const fgm = tagged.filter(s => s.made).length;
+    const points = tagged.reduce((sum, s) => sum + (s.made ? s.points : 0), 0);
+    rows.push({
+      attribute: def.id,
+      label: def.label,
+      category: def.category as AttributeSplit['category'],
+      fgm,
+      fga: tagged.length,
+      fgPct: pct(fgm, tagged.length),
+      points,
+    });
+  }
+  return rows;
+};
+
+// ── special team points (broadcast staples) ──────────────────────────────────
+
+const PAINT_ZONES: ReadonlySet<ShotZoneId> = new Set<ShotZoneId>([
+  'at_rim', 'restricted', 'paint_left', 'paint_right',
+]);
+
+/**
+ * Fastbreak / second-chance / off-turnover points come from attribute tags;
+ * points-in-paint is zone-derived. Field-goal points only (tags are not
+ * captured on free throws today — see the pipeline deep-dive doc).
+ */
+export const specialPoints = (shots: ShotEvent[], side?: TeamSide): SpecialPoints => {
+  const makes = fieldGoals(shots, side).filter(s => s.made);
+  const tagPts = (tag: string) =>
+    makes.filter(s => s.attributes?.includes(tag as never)).reduce((sum, s) => sum + s.points, 0);
+  return {
+    fastbreak: tagPts('fastbreak'),
+    secondChance: tagPts('second_chance'),
+    offTurnover: tagPts('off_turnover'),
+    inPaint: makes.filter(s => PAINT_ZONES.has(effectiveZone(s))).reduce((sum, s) => sum + s.points, 0),
+  };
+};
+
+// ── lead flow (changes / ties / time in front) ───────────────────────────────
+
+/**
+ * Derived from the reconstructed timeline (which starts with a synthetic 0-0
+ * point). `totalGameSec` extends the final segment to the end of the game so
+ * "time leading" adds up to the full game; defaults to the last scoring event.
+ */
+export const leadFlow = (
+  timeline: ScoreTimelinePoint[],
+  opts: { totalGameSec?: number } = {}
+): LeadFlow => {
+  let leadChanges = 0;
+  let timesTied = 0;
+  let timeA = 0, timeB = 0, timeTied = 0;
+  let lastNonZeroSign = 0;
+
+  for (let i = 1; i < timeline.length; i++) {
+    const prev = timeline[i - 1];
+    const cur = timeline[i];
+    const dt = Math.max(0, cur.elapsedSec - prev.elapsedSec);
+    if (prev.lead > 0) timeA += dt;
+    else if (prev.lead < 0) timeB += dt;
+    else timeTied += dt;
+
+    const sign = Math.sign(cur.lead);
+    if (cur.lead === 0 && prev.lead !== 0) timesTied += 1;
+    if (sign !== 0) {
+      if (lastNonZeroSign !== 0 && sign !== lastNonZeroSign) leadChanges += 1;
+      lastNonZeroSign = sign;
+    }
+  }
+
+  const last = timeline[timeline.length - 1];
+  if (last && opts.totalGameSec != null && opts.totalGameSec > last.elapsedSec) {
+    const tail = opts.totalGameSec - last.elapsedSec;
+    if (last.lead > 0) timeA += tail;
+    else if (last.lead < 0) timeB += tail;
+    else timeTied += tail;
+  }
+
+  return { leadChanges, timesTied, timeLeadingSecA: timeA, timeLeadingSecB: timeB, timeTiedSec: timeTied };
+};
+
+// ── clutch (late + close) ────────────────────────────────────────────────────
+
+const emptyClutchLine = (): ClutchTeamLine => ({
+  pts: 0, fgm: 0, fga: 0, fgPct: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0,
+});
+
+/**
+ * NBA-style clutch: events inside the last `windowSec` of the FINAL regulation
+ * period (any overtime period counts entirely) while the margin — measured
+ * BEFORE the event — is within `marginMax`. Score is reconstructed by replaying
+ * shots chronologically, so misses are evaluated against the true margin too.
+ */
+export const clutchStats = (
+  shots: ShotEvent[],
+  opts: { totalPeriods?: number; windowSec?: number; marginMax?: number } = {}
+): ClutchStats => {
+  const totalPeriods = opts.totalPeriods ?? 4;
+  const windowSec = opts.windowSec ?? 300;
+  const marginMax = opts.marginMax ?? 5;
+
+  const teamA = emptyClutchLine();
+  const teamB = emptyClutchLine();
+  const perPlayer = new Map<string, { side: TeamSide; pts: number; fgm: number; fga: number }>();
+  let hasClutchTime = false;
+
+  let a = 0, b = 0;
+  for (const s of sortChrono(shots)) {
+    const inOT = s.period > totalPeriods;
+    const inWindow =
+      inOT || (s.period === totalPeriods && s.gameClockSec != null && s.gameClockSec <= windowSec);
+    const close = Math.abs(a - b) <= marginMax;
+
+    if (inWindow && close) {
+      hasClutchTime = true;
+      const line = s.teamSide === 'A' ? teamA : teamB;
+      const isFt = s.shotType === 'free_throw';
+      if (isFt) {
+        line.fta += 1;
+        if (s.made) { line.ftm += 1; line.pts += 1; }
+      } else {
+        line.fga += 1;
+        if (s.points === 3) line.tpa += 1;
+        if (s.made) {
+          line.fgm += 1;
+          line.pts += s.points;
+          if (s.points === 3) line.tpm += 1;
+        }
+      }
+      if (s.playerId) {
+        let p = perPlayer.get(s.playerId);
+        if (!p) { p = { side: s.teamSide, pts: 0, fgm: 0, fga: 0 }; perPlayer.set(s.playerId, p); }
+        if (!isFt) {
+          p.fga += 1;
+          if (s.made) p.fgm += 1;
+        }
+        if (s.made) p.pts += isFt ? 1 : s.points;
+      }
+    }
+
+    // Apply the score AFTER evaluating the margin the shooter faced.
+    if (s.made) {
+      if (s.teamSide === 'A') a += s.shotType === 'free_throw' ? 1 : s.points;
+      else b += s.shotType === 'free_throw' ? 1 : s.points;
+    }
+  }
+
+  teamA.fgPct = pct(teamA.fgm, teamA.fga);
+  teamB.fgPct = pct(teamB.fgm, teamB.fga);
+
+  return {
+    hasClutchTime,
+    windowSec,
+    marginMax,
+    teamA,
+    teamB,
+    players: Array.from(perPlayer.entries())
+      .map(([playerId, p]) => ({ playerId, ...p }))
+      .sort((x, y) => y.pts - x.pts),
+  };
+};
+
+// ── assist network ───────────────────────────────────────────────────────────
+
+/** Passer→scorer edges from made field goals carrying `assistedBy`. */
+export const assistNetwork = (shots: ShotEvent[], side?: TeamSide): AssistNetwork => {
+  const makes = fieldGoals(shots, side).filter(s => s.made);
+  const byPair = new Map<string, AssistLink>();
+  let assistedFgm = 0;
+
+  for (const s of makes) {
+    if (!s.assistedBy || !s.playerId) continue;
+    assistedFgm += 1;
+    const key = `${s.assistedBy}→${s.playerId}`;
+    const link = byPair.get(key);
+    if (link) {
+      link.count += 1;
+      link.points += s.points;
+    } else {
+      byPair.set(key, { fromPlayerId: s.assistedBy, toPlayerId: s.playerId, count: 1, points: s.points });
+    }
+  }
+
+  const links = Array.from(byPair.values()).sort((x, y) => y.count - x.count || y.points - x.points);
+  const unassistedFgm = makes.length - assistedFgm;
+  return {
+    links,
+    assistedFgm,
+    unassistedFgm,
+    assistedPct: pct(assistedFgm, makes.length),
+    topDuo: links[0] ?? null,
+  };
+};
+
+// ── shot-clock usage histogram (finer than Early/Mid/Late) ───────────────────
+
+/**
+ * Continuous shot-clock histogram: bins descend from the full clock in
+ * `binSize`-second steps; each bin covers (hi−binSize, hi], the last includes 0.
+ */
+export const possessionHistogram = (
+  shots: ShotEvent[],
+  opts: { shotClockDuration?: number; binSize?: number } = {},
+  side?: TeamSide
+): ShotClockBin[] => {
+  const duration = opts.shotClockDuration ?? 24;
+  const binSize = opts.binSize ?? 3;
+  const fgs = fieldGoals(shots, side).filter(s => s.shotClockSec != null);
+
+  const bins: ShotClockBin[] = [];
+  for (let hi = duration; hi > 0; hi -= binSize) {
+    const lo = Math.max(0, hi - binSize);
+    const isLast = lo === 0;
+    const inBin = fgs.filter(s => {
+      const sc = s.shotClockSec as number;
+      return sc <= hi && (isLast ? sc >= 0 : sc > lo);
+    });
+    const fgm = inBin.filter(s => s.made).length;
+    bins.push({
+      label: `${hi}–${lo}s`,
+      maxSc: hi,
+      minSc: lo,
+      fgm,
+      fga: inBin.length,
+      fgPct: pct(fgm, inBin.length),
+      points: inBin.reduce((sum, s) => sum + (s.made ? s.points : 0), 0),
+    });
+  }
+  return bins;
+};
+
+// ── shot quality (xPPA vs actual) ────────────────────────────────────────────
+
+/**
+ * "Were the looks good, and were they converted?" Expected points use the tuned
+ * league priors from lib/xppa.ts (per effective zone × zone point value); actual
+ * points use the recorded result. delta > 0 → shot-making beat the shot diet.
+ * Field goals only; requires miss logging for an honest read (makes-only data
+ * inflates ppaActual — gate on capabilities.hasMisses in UI).
+ */
+export const shotQuality = (
+  shots: ShotEvent[],
+  side?: TeamSide,
+  playerId?: string
+): ShotQualitySummary => {
+  const fgs = fieldGoals(shots, side, playerId);
+  let expectedPts = 0;
+  let actualPts = 0;
+  for (const s of fgs) {
+    const zone = effectiveZone(s);
+    expectedPts += ZONE_PRIOR[zone] * zonePoints(zone);
+    if (s.made) actualPts += s.points;
+  }
+  const fga = fgs.length;
+  const ppaExpected = fga > 0 ? expectedPts / fga : 0;
+  const ppaActual = fga > 0 ? actualPts / fga : 0;
+  return { fga, expectedPts, actualPts, ppaExpected, ppaActual, delta: ppaActual - ppaExpected };
 };

@@ -9,6 +9,11 @@ import type { GameStatsData } from '../useGameStats';
 import type { TeamBoxScore, StatCapabilities } from '../types';
 import type { ShotEvent } from '../../shotchart/types/shotTypes';
 import { printGraphicsCss, comparisonBarsHTML, timelineSvg } from './printGraphics';
+import {
+  attributeSplits, specialPoints, leadFlow, clutchStats,
+  assistNetwork, possessionHistogram, shotQuality,
+} from '../../../services/statsEngine';
+import { buildHexbins } from '../../../services/hexbinEngine';
 
 // ── small helpers ────────────────────────────────────────────────────────────
 
@@ -121,6 +126,23 @@ export const exportJSON = (data: GameStatsData) => {
     leads: data.leads,
     comparison: data.comparison,
     shots: data.mode === 'advanced' ? data.shots : undefined,
+    // Advanced analytics (2026-07-07): everything below derives from data the
+    // pipeline already persists — attributes, assisted_by, shot/game clocks.
+    analytics: {
+      specialPoints: { teamA: specialPoints(data.shots, 'A'), teamB: specialPoints(data.shots, 'B') },
+      attributeSplits: { teamA: attributeSplits(data.shots, 'A'), teamB: attributeSplits(data.shots, 'B') },
+      leadFlow: leadFlow(data.timeline),
+      clutch: clutchStats(data.shots, { totalPeriods: data.gameData?.settings?.periods ?? 4 }),
+      assists: { teamA: assistNetwork(data.shots, 'A'), teamB: assistNetwork(data.shots, 'B') },
+      shotClockUsage: {
+        teamA: possessionHistogram(data.shots, {}, 'A'),
+        teamB: possessionHistogram(data.shots, {}, 'B'),
+      },
+      shotQuality: { teamA: shotQuality(data.shots, 'A'), teamB: shotQuality(data.shots, 'B') },
+      hexbins: data.mode === 'advanced'
+        ? { teamA: buildHexbins(data.shots, { side: 'A' }), teamB: buildHexbins(data.shots, { side: 'B' }) }
+        : undefined,
+    },
   };
   download(JSON.stringify(payload, null, 2), `${slug(data.gameData?.settings?.gameName ?? data.gameCode)}-stats.json`, 'application/json');
 };

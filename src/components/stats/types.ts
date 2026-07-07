@@ -152,6 +152,91 @@ export interface PossessionBucket {
   points: number;
 }
 
+/** Shooting split for one shot attribute tag (fastbreak, contested, …). */
+export interface AttributeSplit {
+  attribute: string;            // ShotAttribute id, e.g. 'fastbreak'
+  label: string;                // display label from SHOT_ATTRIBUTES
+  category: 'context' | 'quality' | 'type';
+  fgm: number;
+  fga: number;
+  fgPct: number;
+  points: number;
+}
+
+/** Headline derived team scoring numbers (NBA broadcast staples). */
+export interface SpecialPoints {
+  fastbreak: number;            // points on shots tagged 'fastbreak'
+  secondChance: number;         // points on shots tagged 'second_chance'
+  offTurnover: number;          // points on shots tagged 'off_turnover'
+  inPaint: number;              // made FG points from paint zones (zone-derived)
+}
+
+/** Lead-flow summary derived from the score timeline. */
+export interface LeadFlow {
+  leadChanges: number;          // sign flips of the lead (A↔B)
+  timesTied: number;            // distinct returns to a tied score (excl. 0-0 start)
+  timeLeadingSecA: number;      // seconds of game time spent with A ahead
+  timeLeadingSecB: number;
+  timeTiedSec: number;
+}
+
+/** One team's shooting line inside the clutch window. */
+export interface ClutchTeamLine {
+  pts: number;
+  fgm: number; fga: number; fgPct: number;
+  tpm: number; tpa: number;
+  ftm: number; fta: number;
+}
+
+/** Clutch-time (late + close) splits. */
+export interface ClutchStats {
+  /** True when any event met the clutch definition (late window AND close margin). */
+  hasClutchTime: boolean;
+  windowSec: number;            // e.g. 300 = last 5:00 of the final period (+ all OT)
+  marginMax: number;            // "close" threshold, e.g. within 5
+  teamA: ClutchTeamLine;
+  teamB: ClutchTeamLine;
+  players: Array<{ playerId: string; side: TeamSide; pts: number; fgm: number; fga: number }>;
+}
+
+/** One passer→scorer edge in the assist network. */
+export interface AssistLink {
+  fromPlayerId: string;         // the passer (assistedBy)
+  toPlayerId: string;           // the scorer
+  count: number;
+  points: number;               // points generated on those makes
+}
+
+/** Assist-network summary for one team (or the whole game). */
+export interface AssistNetwork {
+  links: AssistLink[];          // sorted by count desc
+  assistedFgm: number;
+  unassistedFgm: number;
+  assistedPct: number;          // % of made FGs that were assisted
+  topDuo: AssistLink | null;
+}
+
+/** Fine-grained shot-clock usage bin (continuous histogram, advanced). */
+export interface ShotClockBin {
+  label: string;                // "24–21s", …, "3–0s"
+  maxSc: number;                // inclusive upper bound (seconds remaining)
+  minSc: number;                // exclusive lower bound (inclusive for the last bin)
+  fgm: number;
+  fga: number;
+  fgPct: number;
+  points: number;
+}
+
+/** Shot-quality (xPPA) summary: were the looks good, and were they converted? */
+export interface ShotQualitySummary {
+  fga: number;
+  expectedPts: number;          // Σ league-prior FG% × zone point value
+  actualPts: number;            // Σ made points (FGs only)
+  ppaExpected: number;          // expectedPts / fga
+  ppaActual: number;            // actualPts / fga
+  delta: number;                // ppaActual − ppaExpected (+ = beat the looks)
+}
+
 /** A single shot positioned for the exact-location shot map (advanced). */
 export interface PlottedShot {
   id: string;
