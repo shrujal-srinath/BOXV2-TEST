@@ -249,14 +249,21 @@ add per-player PDF sheet w/ shot chart; keep A4 print path (coaches like it).
 
 ## 6. Phasing (each ≈ one Opus session; respect PLAN-R sequencing)
 
+> **2026-07-07 late-session update (Fable):** the ENGINE halves of S4 and S5 are **BUILT,
+> TESTED (109 goldens), and COMMITTED** (`d379db5`): attributeSplits, specialPoints, leadFlow,
+> clutchStats, assistNetwork, possessionHistogram, shotQuality, per-player aggregateZones,
+> and `hexbinEngine.buildHexbins` — plus the full `analytics` block in exportJSON. What
+> remains of S4/S5 is pure UI consumption. Implementation truth for all of it:
+> **`COURT-PIPELINE-DEEPDIVE.md`** (same folder) — §5 has the upgraded per-phase specs.
+
 | Phase | What | Depends on |
 |---|---|---|
-| S1 | Headless `useShotAttribution` + event queue + web deferred-flow fix (team toggle, made/miss, attrs) + FT fake-location fix | none (but coordinate with PLAN-R Phase 6 file moves) |
+| S1 | Headless `useShotAttribution` + event queue + web deferred-flow fix (team toggle, made/miss, attrs) + FT fake-location fix (incl. one-line data migration — deep-dive §6.1) | none (but coordinate with PLAN-R Phase 6 file moves) |
 | S2 | Miss button (Pi + web) + `hasMisses` verification end-to-end | S1 |
 | S3 | Pi experience polish pass 1 (receipt moment, choreography, timeout escalation, haptics, theme tokens) — from DESIGN-BRIEF + Claude Design outputs | S1; design brief iterated with Shrujal |
-| S4 | statsEngine additions B2 (+ tests, same golden style as `e7d827b`) + StatsHub surfacing (attribute splits, clutch, lead changes, oreb/dreb, xPPA post-game) | none |
-| S5 | Hexbin engine + player-tab visuals (**get screenshots from Shrujal first**) | S4 |
-| S6 | Share cards 1-4 + composer stat picker | S4 (cards 1,3,4 need B2/B3 outputs) |
+| S4 | ~~engine~~ ✅ built (`d379db5`) → **remaining: StatsHub UI surfacing** (specialPoints/leadFlow/clutch strip, attribute bars, assist network w/ roster names, possession histogram, shotQuality panel gated on hasMisses, oreb/dreb columns) — spec: deep-dive §5.1 | engine done |
+| S5 | ~~hexbin engine~~ ✅ built → **remaining: `HexShotChart` component** (size/color encodings, legend, minAttempts + player filters) (**get screenshots from Shrujal first**) — spec: deep-dive §5.2 | S4 engine |
+| S6 | Share cards 1-4 + composer stat picker (hexbin card plugs `buildHexbins`+`hexPath` into `courtGroupSvg`) | engine done |
 | S7 | Career aggregation pipeline + career views + career/milestone cards | S4; identity plan §8 for full value |
 | S8 | Substitution tracking → minutes/+‑/lineups (own design pass) | S1 |
 

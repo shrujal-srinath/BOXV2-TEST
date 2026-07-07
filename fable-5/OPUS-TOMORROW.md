@@ -22,6 +22,12 @@
 > — `ADVANCED-STATS-MASTERPLAN.md` (S1–S8) + `DESIGN-BRIEF-shot-experience.md` (Claude Design
 > handoff). Its S1 phase SUBSUMES queue item 2 below (the deferred-shot team bug) — if Shrujal
 > asks for shot-UX/stats work, follow that plan instead of improvising.
+>
+> **Final-night addition:** Fable BUILT the hard analytics engine (`d379db5` — attribute
+> splits, clutch, lead flow, assist network, possession histogram, xPPA shot quality, hexbin
+> engine, exportJSON analytics block; 109 golden tests). **`COURT-PIPELINE-DEEPDIVE.md` is now
+> the engineering truth for the whole capture→export pipeline** — read it before touching any
+> shot/stats code. S4/S5 remaining work is UI-only consumption of these engines.
 
 ## 2. Your ordered queue (each item ≈ one session unless noted)
 
