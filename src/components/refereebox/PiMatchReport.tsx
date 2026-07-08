@@ -24,6 +24,7 @@ import QRCode from 'qrcode';
 import ReviewHexChart, { type HexFilter } from './ReviewHexChart';
 import { landscapeBinId, type LandscapeHexBin } from '../../services/hexbinEngine';
 import { buildGameReport, type GameReport } from '../../services/gameReport';
+import { persistGameReport } from '../../services/statsPersistService';
 import { getGameByCode } from '../../services/supabaseGameService';
 import { getShotsForGame, getActionsForGame } from '../../services/shotService';
 import { classifyZone, ZONES } from '../shotchart/courtZones';
@@ -127,7 +128,11 @@ export default function PiMatchReport({ score, onClose, onNewGame }: Props) {
             .then(([game, shots, actions]) => {
                 if (!live) return;
                 if (!game) { setLoad({ status: 'error' }); return; }
-                setLoad({ status: 'ready', report: buildGameReport(game, shots, actions), shots });
+                const report = buildGameReport(game, shots, actions);
+                setLoad({ status: 'ready', report, shots });
+                // After-game persistence (PLAN-U P3): the Pi report is a persist
+                // trigger too — fire-and-forget, idempotent, graceful pre-014.
+                void persistGameReport(report, game);
             })
             .catch(() => { if (live) setLoad({ status: 'error' }); });
         return () => { live = false; };

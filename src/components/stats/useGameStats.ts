@@ -14,6 +14,8 @@ import {
   buildRosterIndex,
 } from '../../services/statsEngine';
 import { resolveGameMode } from '../../services/gameMode';
+import { buildGameReport } from '../../services/gameReport';
+import { persistGameReport } from '../../services/statsPersistService';
 import type { ShotEvent, GameAction } from '../shotchart/types/shotTypes';
 import type {
   GameMode,
@@ -56,7 +58,7 @@ export const useGameStats = (gameCode: string): GameStatsData => {
     (async () => {
       try {
         const [{ data: gameRow, error: gameErr }, shots, actions] = await Promise.all([
-          supabase.from('games').select('data').eq('code', gameCode).single(),
+          supabase.from('games').select('data, status').eq('code', gameCode).single(),
           getShotsForGame(gameCode),
           getActionsForGame(gameCode),
         ]);
@@ -84,6 +86,15 @@ export const useGameStats = (gameCode: string): GameStatsData => {
           loading: false, error: null, notFound: false, gameCode, gameData, mode,
           shots, actions, box, timeline, runs, leads, comparison, rosterIndex,
         });
+
+        // Lazy after-game persistence (PLAN-U P3): viewing a FINISHED game's
+        // stats durably saves its per-player/per-team package (idempotent;
+        // no-ops for quick games or until migration 014 is applied).
+        // Fire-and-forget — must never affect the view. Live games are never
+        // persisted (partial snapshots would pin behind the session guard).
+        if (mode !== 'quick' && gameRow.status === 'completed') {
+          void persistGameReport(buildGameReport(gameData, shots, actions), gameData);
+        }
       } catch (e: any) {
         if (!alive) return;
         setState(s => ({ ...s, loading: false, error: e?.message ?? 'Failed to load game stats' }));

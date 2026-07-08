@@ -269,6 +269,7 @@ interface GameDataLike {
   createdAt?: string | number;
   settings?: {
     gameName?: string;
+    gameMode?: string;
     periodDuration?: number;
     periods?: number;
     periodType?: 'quarter' | 'half';
