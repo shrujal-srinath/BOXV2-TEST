@@ -255,6 +255,26 @@ add per-player PDF sheet w/ shot chart; keep A4 print path (coaches like it).
 > and `hexbinEngine.buildHexbins` — plus the full `analytics` block in exportJSON. What
 > remains of S4/S5 is pure UI consumption. Implementation truth for all of it:
 > **`COURT-PIPELINE-DEEPDIVE.md`** (same folder) — §5 has the upgraded per-phase specs.
+>
+> **2026-07-08 update (Fable, final session):** four more pieces BUILT + COMMITTED
+> (`27c1bd3`, `4ceb3a6` — 143 goldens green):
+> 1. **S1 core** — `src/services/shotAttribution.ts` headless machine + `useShotAttribution`
+>    hook: canonical court→player→context, FT skip, prefill (web deferred entry), MISS events,
+>    TICK timers with Pi-parity expiry, and the mid-flow score QUEUE (overflow auto-flushes
+>    oldest queued unattributed). 22 tests are the flow contract. **Remaining S1 work: wire
+>    the Pi flow + web console as RENDERERS of this machine** (delete their local state logic).
+> 2. **FT honesty** — free throws persist `zone:'free_throw'`, x/y NULL (shotService
+>    normalizes; 4 console call sites cleaned; `PersistedZone` type). Migration
+>    `013_free_throw_zone_cleanup.sql` written, NOT applied to prod.
+> 3. **The post-game engine** — `src/services/gameReport.ts` `buildGameReport()`: the
+>    run-after-each-game package (everything + per-player packages + weight-ordered
+>    HIGHLIGHTS: game high / double-double / biggest run / clutch star / best duo / hot hand /
+>    wire-to-wire). exportJSON emits it. **S6 share cards and S7 career persistence should
+>    consume THIS, not re-derive.**
+> 4. **S5 UI** — `stats/advanced/HexShotChart.tsx` hexmap SHIPPED as the Shot Charts hero
+>    (radial bloom entrance, hover lift + recede, zone tooltip w/ Δ-vs-exp chip, team pills,
+>    jersey player rail, FG%/VS-EXP/VOLUME metrics, min-sample control, reduced-motion).
+>    Restyle freely when Shrujal's reference screenshots arrive — the engine API is stable.
 
 | Phase | What | Depends on |
 |---|---|---|
