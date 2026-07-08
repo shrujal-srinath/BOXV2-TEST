@@ -12,10 +12,15 @@ import { FORMAT_DIMS, type CardFormat } from './cards/shared';
 import { buildPlayerCard, PLAYER_BLOCKS } from './cards/playerCard';
 import { buildGameCard, GAME_BLOCKS } from './cards/gameCard';
 import { buildShotArtCard, SHOTART_BLOCKS } from './cards/shotArtCard';
+import { buildHeatmapCard, buildMvpCard, buildMomentumCard, buildQuartersCard } from './cards/reportCards';
+import { buildGameReport } from '../../../services/gameReport';
 import { svgToPng, shareImage, downloadBlob } from './shareImage';
 import { cx } from '../ui/cx';
 
-type Template = 'player' | 'game' | 'shotart';
+type Template = 'player' | 'heatmap' | 'mvp' | 'momentum' | 'quarters' | 'game' | 'shotart';
+
+/** Fixed-layout report cards have no block toggles. */
+const NO_BLOCKS: Array<{ id: string; label: string }> = [];
 
 const slug = (s: string) => (s || 'thebox').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -51,26 +56,37 @@ export const ShareComposer = ({ data, initialTemplate = 'player', initialPlayerI
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  const blockDefs = template === 'player' ? PLAYER_BLOCKS : template === 'game' ? GAME_BLOCKS : SHOTART_BLOCKS;
+  const defsFor = (t: Template) =>
+    t === 'player' ? PLAYER_BLOCKS : t === 'game' ? GAME_BLOCKS : t === 'shotart' ? SHOTART_BLOCKS : NO_BLOCKS;
+  const blockDefs = defsFor(template);
   const [blocks, setBlocks] = useState<Set<string>>(new Set(blockDefs.map(b => b.id)));
 
   // When template changes, reset its default blocks.
   const onTemplate = (t: Template) => {
     setTemplate(t);
-    const defs = t === 'player' ? PLAYER_BLOCKS : t === 'game' ? GAME_BLOCKS : SHOTART_BLOCKS;
-    setBlocks(new Set(defs.map(b => b.id)));
+    setBlocks(new Set(defsFor(t).map(b => b.id)));
   };
+
+  // The post-game package — single source for the report cards.
+  const report = useMemo(
+    () => buildGameReport(data.gameData, data.shots, data.actions),
+    [data.gameData, data.shots, data.actions]
+  );
 
   const svg = useMemo(() => {
     try {
       if (template === 'player') return playerId ? buildPlayerCard(data, playerId, { format, blocks }) : '';
+      if (template === 'heatmap') return playerId ? buildHeatmapCard(report, data.shots, playerId, { format }) : '';
+      if (template === 'mvp') return buildMvpCard(report, { format });
+      if (template === 'momentum') return buildMomentumCard(report, { format });
+      if (template === 'quarters') return buildQuartersCard(report, data.shots, { format });
       if (template === 'game') return buildGameCard(data, { format, blocks });
       return buildShotArtCard(data, side, { format, blocks });
     } catch (e) {
       console.error('[ShareComposer] card build failed', e);
       return '';
     }
-  }, [template, format, playerId, side, blocks, data]);
+  }, [template, format, playerId, side, blocks, data, report]);
 
   const exportImage = async (mode: 'share' | 'download') => {
     if (!svg) return;
@@ -125,6 +141,10 @@ export const ShareComposer = ({ data, initialTemplate = 'player', initialPlayerI
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-zinc-500 mb-2">Template</p>
               <div className="flex flex-wrap gap-1.5">
+                <Chip active={template === 'mvp'} onClick={() => onTemplate('mvp')}>MVP</Chip>
+                <Chip active={template === 'heatmap'} onClick={() => onTemplate('heatmap')}>Heat</Chip>
+                <Chip active={template === 'momentum'} onClick={() => onTemplate('momentum')}>Momentum</Chip>
+                <Chip active={template === 'quarters'} onClick={() => onTemplate('quarters')}>Quarters</Chip>
                 <Chip active={template === 'player'} onClick={() => onTemplate('player')}>Player</Chip>
                 <Chip active={template === 'game'} onClick={() => onTemplate('game')}>Game</Chip>
                 <Chip active={template === 'shotart'} onClick={() => onTemplate('shotart')}>Shot Art</Chip>
@@ -139,7 +159,7 @@ export const ShareComposer = ({ data, initialTemplate = 'player', initialPlayerI
               </div>
             </div>
 
-            {template === 'player' && allPlayers.length > 0 && (
+            {(template === 'player' || template === 'heatmap') && allPlayers.length > 0 && (
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-zinc-500 mb-2">Player</p>
                 <select
@@ -163,6 +183,7 @@ export const ShareComposer = ({ data, initialTemplate = 'player', initialPlayerI
               </div>
             )}
 
+            {blockDefs.length > 0 && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 dark:text-zinc-500 mb-2">Include</p>
               <div className="space-y-1.5">
@@ -173,7 +194,7 @@ export const ShareComposer = ({ data, initialTemplate = 'player', initialPlayerI
                       checked={blocks.has(b.id)}
                       onChange={() => setBlocks(prev => {
                         const n = new Set(prev);
-                        n.has(b.id) ? n.delete(b.id) : n.add(b.id);
+                        if (n.has(b.id)) n.delete(b.id); else n.add(b.id);
                         return n;
                       })}
                       className="w-4 h-4 accent-red-600"
@@ -183,6 +204,7 @@ export const ShareComposer = ({ data, initialTemplate = 'player', initialPlayerI
                 ))}
               </div>
             </div>
+            )}
 
             <div className="pt-1 space-y-2">
               <button

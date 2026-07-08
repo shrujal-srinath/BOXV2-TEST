@@ -7,13 +7,15 @@
 // Light + dark, design system.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useGameStats } from './useGameStats';
+import { buildGameReport } from '../../services/gameReport';
 import { GameHeaderV2 } from './GameHeaderV2';
 import { BoxScoreTable } from './boxscore/BoxScoreTable';
 import { TeamComparison } from './summary/TeamComparison';
 import { ScoringTimelineChart } from './summary/ScoringTimelineChart';
 import { LeadRunStrip } from './summary/LeadRunStrip';
+import { GameStoryPanel } from './summary/GameStoryPanel';
 import { ShotMap } from './advanced/ShotMap';
 import { HexShotChart } from './advanced/HexShotChart';
 import { ZoneHeatmap } from './advanced/ZoneHeatmap';
@@ -42,6 +44,13 @@ export const StatsHub = ({ gameCode, onBack, onPlayerClick }: Props) => {
   const data = useGameStats(gameCode);
   const [tab, setTab] = useState<Tab>('summary');
   const [shareOpen, setShareOpen] = useState(false);
+
+  // The post-game package (highlights, special points, clutch, shot profile).
+  // Hook-safe: computed before the conditional returns below.
+  const report = useMemo(
+    () => (data.box ? buildGameReport(data.gameData, data.shots, data.actions) : null),
+    [data.box, data.gameData, data.shots, data.actions]
+  );
 
   if (data.loading) {
     return (
@@ -161,6 +170,7 @@ export const StatsHub = ({ gameCode, onBack, onPlayerClick }: Props) => {
 
       {tab === 'summary' && (
         <div className="space-y-6">
+          {report && <GameStoryPanel report={report} />}
           <LeadRunStrip box={box} leads={data.leads} runs={data.runs} />
           <ScoringTimelineChart
             box={box}
