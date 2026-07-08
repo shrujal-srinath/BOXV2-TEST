@@ -41,6 +41,7 @@ const PiTouchScoringMinimal = lazy(() => import('../components/refereebox/PiTouc
 // STATS    mode → compact PiStatsPlayerPicker  (player only, modal style)
 // QUICK    mode → no popup (auto-dismissed upstream)
 import AdvancedFlowHost from '../components/refereebox/AdvancedFlowHost';
+const PiMatchReport = lazy(() => import('../components/refereebox/PiMatchReport'));
 import PiStatsPlayerPicker from '../components/refereebox/PiStatsPlayerPicker';
 
 import { subscribePhoneControl } from '../services/castControlService';
@@ -77,6 +78,7 @@ type Screen =
     | 'quick_game_confirm'
     | 'roster_setup'
     | 'post_game'
+    | 'match_report'
     | 'phone_setup'
     | 'touch_scoring';
 
@@ -759,7 +761,28 @@ export default function RefereeScreen() {
             );
 
         case 'post_game':
-            return <PostGameScreen score={finalScore} onNewGame={handleNewGame} />;
+            return (
+                <PostGameScreen
+                    score={finalScore}
+                    onNewGame={handleNewGame}
+                    onMatchReport={
+                        finalScore?.gameCode && finalScore.gameMode !== 'quick'
+                            ? () => setScreen('match_report')
+                            : undefined
+                    }
+                />
+            );
+
+        case 'match_report':
+            return finalScore ? (
+                <Suspense fallback={null}>
+                    <PiMatchReport
+                        score={finalScore}
+                        onClose={() => setScreen('post_game')}
+                        onNewGame={handleNewGame}
+                    />
+                </Suspense>
+            ) : <PostGameScreen score={finalScore} onNewGame={handleNewGame} />;
 
         case 'touch_scoring':
             if (!gameState) return <DaemonReconnectingScreen />;
@@ -1476,7 +1499,7 @@ function DaemonReconnectingScreen() {
     );
 }
 
-function PostGameScreen({ score, onNewGame }: {
+function PostGameScreen({ score, onNewGame, onMatchReport }: {
     score: {
         a: number; b: number; teamA: string; teamB: string;
         teamAColor?: string; teamBColor?: string;
@@ -1485,6 +1508,8 @@ function PostGameScreen({ score, onNewGame }: {
         gameCode?: string; gameMode?: string;
     } | null;
     onNewGame: () => void;
+    /** Opens the full stats report (hidden for quick games / missing code). */
+    onMatchReport?: () => void;
 }) {
     const RM = "'JetBrains Mono', monospace";
     const OSW = "'Oswald', sans-serif";
@@ -1695,22 +1720,42 @@ function PostGameScreen({ score, onNewGame }: {
                 </div>
             )}
 
-            {/* New game button */}
-            <div
-                onClick={onNewGame}
-                style={{
-                    padding: '14px 48px',
-                    border: `1px solid ${accentColor}44`, background: `${accentColor}0d`,
-                    color: accentColor, fontFamily: RM,
-                    fontSize: '11px', fontWeight: 700, letterSpacing: '0.2em',
-                    textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none',
-                    transition: 'all 0.15s',
-                    boxShadow: `0 0 20px ${accentColor}22`,
-                }}
-                onTouchStart={e => { (e.currentTarget as HTMLElement).style.background = `${accentColor}22`; }}
-                onTouchEnd={e => { (e.currentTarget as HTMLElement).style.background = `${accentColor}0d`; }}
-            >
-                ↺ NEW GAME
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 14 }}>
+                {onMatchReport && (
+                    <div
+                        onClick={onMatchReport}
+                        style={{
+                            padding: '14px 40px',
+                            border: '1px solid rgba(139,92,246,0.45)', background: 'rgba(139,92,246,0.08)',
+                            color: '#A78BFA', fontFamily: RM,
+                            fontSize: '11px', fontWeight: 700, letterSpacing: '0.2em',
+                            textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none',
+                            transition: 'all 0.15s',
+                            boxShadow: '0 0 20px rgba(139,92,246,0.15)',
+                        }}
+                        onTouchStart={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(139,92,246,0.2)'; }}
+                        onTouchEnd={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(139,92,246,0.08)'; }}
+                    >
+                        ▦ MATCH REPORT
+                    </div>
+                )}
+                <div
+                    onClick={onNewGame}
+                    style={{
+                        padding: '14px 48px',
+                        border: `1px solid ${accentColor}44`, background: `${accentColor}0d`,
+                        color: accentColor, fontFamily: RM,
+                        fontSize: '11px', fontWeight: 700, letterSpacing: '0.2em',
+                        textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none',
+                        transition: 'all 0.15s',
+                        boxShadow: `0 0 20px ${accentColor}22`,
+                    }}
+                    onTouchStart={e => { (e.currentTarget as HTMLElement).style.background = `${accentColor}22`; }}
+                    onTouchEnd={e => { (e.currentTarget as HTMLElement).style.background = `${accentColor}0d`; }}
+                >
+                    ↺ NEW GAME
+                </div>
             </div>
 
             {/* Footer */}

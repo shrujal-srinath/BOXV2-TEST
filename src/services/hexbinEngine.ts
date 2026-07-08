@@ -201,6 +201,10 @@ export interface LandscapeHexBin extends HexBin {
     side: TeamSide;
 }
 
+/** Stable identity for a landscape bin (selection state, React keys). */
+export const landscapeBinId = (b: LandscapeHexBin): string =>
+    `${b.side}:${b.cx.toFixed(2)}:${b.cy.toFixed(2)}`;
+
 export const binsToLandscape = (result: HexbinResult, side: TeamSide): LandscapeHexBin[] =>
     result.bins.map(b => {
         // Portrait bin center: cx = width, cy = depth-from-own-basket.

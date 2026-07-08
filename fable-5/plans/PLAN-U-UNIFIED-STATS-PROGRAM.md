@@ -28,11 +28,20 @@
 3. Renderers keep their own UX (deliberately different):
    - **Web `HexShotChart`** (shipped) — light/dark SaaS card, bloom entrance, tooltip,
      player rail. Refactor its imports to the shared core; zero visual change.
-   - **Pi `ReviewHexChart`** (new) — landscape full-court inside `GameReviewScreen`, dark FUI
-     language (corner brackets, scanlines, Pi tokens), BOTH teams at once on their attacking
-     halves, touch-first: tap a hex → side panel stat readout (no hover on touchscreens),
-     big segmented controls (≥56px), team color coding. Entrance: hexes sweep outward from
-     each rim simultaneously.
+   - **Pi `ReviewHexChart`** (new) — landscape full-court, dark FUI language, BOTH teams at
+     once on their attacking halves, touch-first: tap a hex → side readout (no hover on
+     touchscreens), big segmented controls (≥56px), team color coding. Entrance: hexes sweep
+     outward from each rim simultaneously.
+     **CORRECTION (2026-07-08, verified in code):** `GameReviewScreen` is the PRE-MATCH
+     go/no-go checklist, NOT post-game. The Pi's post-game surface is `PostGameScreen`
+     (RefereeScreen `case 'post_game'`, fed by `finalScore` incl. gameCode/mode/colors).
+     P4 therefore = new full-screen **`PiMatchReport`** reached via a "MATCH REPORT" button
+     on PostGameScreen (hidden for quick games / missing code): left rail = final score +
+     highlights + QR to the web stats hub + NEW GAME; content tabs (≥56px) = SHOT MAP
+     (ReviewHexChart + tap readout + team filter) / OVERVIEW (quarters, special points,
+     Four Factors) / PLAYERS (PTS-sorted, GmSc). Data: getGameByCode + getShotsForGame +
+     getActionsForGame → buildGameReport client-side; graceful offline/quick/empty states
+     (score + QR always render). Volume-mode automatically when !hasMisses.
    - The LIVE HexLayer stays as-is (operator tool, not analytics) — it may consume `core.ts`
      grid math but keeps its arc-split/tap pipeline untouched (S1-wiring territory).
 4. Deletion pass: after both renderers sit on the core, retire duplicate hex math in
