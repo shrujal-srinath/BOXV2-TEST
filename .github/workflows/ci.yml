@@ -13,6 +13,11 @@ jobs:
   web:
     name: tests + build
     runs-on: ubuntu-latest
+    # Placeholder creds: src/services/supabase.ts throws at MODULE LOAD without
+    # them, and tests execute modules (builds don't). Tests never hit the network.
+    env:
+      VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
