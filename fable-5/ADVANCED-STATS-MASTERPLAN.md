@@ -275,6 +275,15 @@ add per-player PDF sheet w/ shot chart; keep A4 print path (coaches like it).
 >    (radial bloom entrance, hover lift + recede, zone tooltip w/ Δ-vs-exp chip, team pills,
 >    jersey player rail, FG%/VS-EXP/VOLUME metrics, min-sample control, reduced-motion).
 >    Restyle freely when Shrujal's reference screenshots arrive — the engine API is stable.
+> 5. **S6 CORE + S4 UI** (`607915e`, 153 goldens): the four report-powered share cards SHIPPED
+>    — `share/cards/reportCards.ts` (Heat / MVP w/ jersey watermark / Momentum w/ run
+>    annotation / Quarters), registered in ShareComposer (Heat reuses the player picker) —
+>    and the coach's `summary/GameStoryPanel.tsx` (highlight moments, paint/fastbreak/
+>    2nd-chance/off-TO bars, clutch lines + leader, contested-vs-open + C&S-vs-pull-up
+>    splits; fully self-gating) mounted atop the Summary tab. **Remaining S6:** composer
+>    stat-picker + career/milestone cards (post-S7). **Remaining S4 UI:** assist-network
+>    table, possession histogram panel, shotQuality panel (hasMisses-gated), oreb/dreb
+>    columns — all pure consumption of report fields.
 
 | Phase | What | Depends on |
 |---|---|---|
