@@ -40,7 +40,7 @@ const PiTouchScoringMinimal = lazy(() => import('../components/refereebox/PiTouc
 // ADVANCED mode → full-court PiAdvancedShotFlow (court + player + context)
 // STATS    mode → compact PiStatsPlayerPicker  (player only, modal style)
 // QUICK    mode → no popup (auto-dismissed upstream)
-import PiAdvancedShotFlow from '../components/refereebox/PiAdvancedShotFlow';
+import AdvancedFlowHost from '../components/refereebox/AdvancedFlowHost';
 import PiStatsPlayerPicker from '../components/refereebox/PiStatsPlayerPicker';
 
 import { subscribePhoneControl } from '../services/castControlService';
@@ -668,30 +668,21 @@ export default function RefereeScreen() {
 
         case 'live_game':
             if (!gameState) return <DaemonReconnectingScreen />;
-            // ADVANCED mode → full-screen court flow takes over the display.
-            if (scorePending && gameState.meta.gameMode === 'advanced') {
-                return (
-                    <PiAdvancedShotFlow
-                        // Key forces a clean remount when a new score event lands
-                        // mid-attribution, so a half-completed flow can't leak
-                        // its court/player selections into the new event.
-                        key={`${scorePending.team}-${scorePending.points}-${gameState.teamA.score}-${gameState.teamB.score}`}
-                        event={scorePending}
-                        teamA={gameState.teamA}
-                        teamB={gameState.teamB}
-                        teamAColor={teamAColor}
-                        teamBColor={teamBColor}
-                        clock={gameState.clock}
-                        gameCode={displayGameCode ?? undefined}
-                        onAttribute={attributeShot}
-                        onSkip={dismissScorePending}
-                        onUndo={() => sendAction('UNDO')}
-                    />
-                );
-            }
-            // STATS mode → compact player-picker modal overlays the live scoreboard.
+            // ADVANCED mode → the machine-owning host takes over while an
+            // attribution is active; mid-flow scores QUEUE instead of wiping.
             return (
-                <>
+                <AdvancedFlowHost
+                    event={gameState.meta.gameMode === 'advanced' ? scorePending : null}
+                    onConsumed={dismissScorePending}
+                    teamA={gameState.teamA}
+                    teamB={gameState.teamB}
+                    teamAColor={teamAColor}
+                    teamBColor={teamBColor}
+                    clock={gameState.clock}
+                    gameCode={displayGameCode ?? undefined}
+                    onAttribute={attributeShot}
+                    onUndo={() => sendAction('UNDO')}
+                    fallback={<>
                 <ScoreboardComponent
                     teamA={gameState.teamA}
                     teamB={gameState.teamB}
@@ -727,7 +718,8 @@ export default function RefereeScreen() {
                         onSkip={dismissScorePending}
                     />
                 )}
-                </>
+                </>}
+                />
             );
 
         case 'settings':
@@ -771,28 +763,20 @@ export default function RefereeScreen() {
 
         case 'touch_scoring':
             if (!gameState) return <DaemonReconnectingScreen />;
-            // ADVANCED mode → full-screen court flow.
-            if (scorePending && gameState.meta.gameMode === 'advanced') {
-                return (
-                    <PiAdvancedShotFlow
-                        // Remount on each new score event (see live_game note).
-                        key={`${scorePending.team}-${scorePending.points}-${gameState.teamA.score}-${gameState.teamB.score}`}
-                        event={scorePending}
-                        teamA={gameState.teamA}
-                        teamB={gameState.teamB}
-                        teamAColor={teamAColor}
-                        teamBColor={teamBColor}
-                        clock={gameState.clock}
-                        gameCode={displayGameCode ?? undefined}
-                        onAttribute={attributeShot}
-                        onSkip={dismissScorePending}
-                        onUndo={() => sendAction('UNDO')}
-                    />
-                );
-            }
-            // STATS mode → player-picker modal overlays the touch deck.
+            // ADVANCED mode → same machine-owning host as live_game.
             return (
-                <>
+                <AdvancedFlowHost
+                    event={gameState.meta.gameMode === 'advanced' ? scorePending : null}
+                    onConsumed={dismissScorePending}
+                    teamA={gameState.teamA}
+                    teamB={gameState.teamB}
+                    teamAColor={teamAColor}
+                    teamBColor={teamBColor}
+                    clock={gameState.clock}
+                    gameCode={displayGameCode ?? undefined}
+                    onAttribute={attributeShot}
+                    onUndo={() => sendAction('UNDO')}
+                    fallback={<>
                 <TouchDeckComponent
                     teamA={gameState.teamA}
                     teamB={gameState.teamB}
@@ -825,7 +809,8 @@ export default function RefereeScreen() {
                         onSkip={dismissScorePending}
                     />
                 )}
-                </>
+                </>}
+                />
             );
 
         case 'phone_setup':

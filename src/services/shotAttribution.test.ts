@@ -7,6 +7,7 @@ import {
     createInitialState,
     getCurrentStep,
     getQueuedCount,
+    getActiveEvent,
     type AttributionState,
     type AttributionAction,
     type PendingScoreEvent,
@@ -293,5 +294,16 @@ describe('guards', () => {
         expect(s.outbox).toHaveLength(2);
         s = reduce(s, { type: 'DRAIN_OUTBOX', count: 2 });
         expect(s.outbox).toHaveLength(0);
+    });
+});
+
+describe('event meta (surface data riding the queue)', () => {
+    it('meta is preserved on the active event through queueing', () => {
+        const first = ev();
+        const second = { ...ev(), meta: { players: [{ id: 'p9' }] } };
+        let s = run(start(first), { type: 'ENQUEUE', event: second });
+        expect(s.queue[1].meta).toEqual({ players: [{ id: 'p9' }] });
+        s = run(s, { type: 'SKIP_STEP' }, { type: 'UNATTRIBUTED' });   // finalize first
+        expect(getActiveEvent(s)?.meta).toEqual({ players: [{ id: 'p9' }] });
     });
 });

@@ -49,6 +49,9 @@ export interface PendingScoreEvent {
     shotClockSec?: number | null;
     /** Court-first entry (web deferred flow): location known before the event. */
     prefill?: { zone: string; x: number; y: number };
+    /** Opaque surface data riding the queue (e.g. the Pi's roster snapshot —
+     *  each queued event keeps ITS rosters, so mid-queue subs stay correct). */
+    meta?: Record<string, unknown>;
     ts: number;
 }
 

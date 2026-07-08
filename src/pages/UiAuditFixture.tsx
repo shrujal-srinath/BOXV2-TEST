@@ -25,7 +25,7 @@ import LockedScoreboard        from '../components/refereebox/LockedScoreboard';
 import LockedScoreboardMinimal from '../components/refereebox/LockedScoreboardMinimal';
 import PiTouchScoring          from '../components/refereebox/PiTouchScoringScreen';
 import PiTouchScoringMinimal   from '../components/refereebox/PiTouchScoringScreenMinimal';
-import PiAdvancedShotFlow      from '../components/refereebox/PiAdvancedShotFlow';
+import AdvancedFlowHost        from '../components/refereebox/AdvancedFlowHost';
 import PiStatsPlayerPicker     from '../components/refereebox/PiStatsPlayerPicker';
 
 const noop = () => {};
@@ -149,13 +149,13 @@ export default function UiAuditFixture() {
 
         case 'shotflow-advanced':
             return (
-                <PiAdvancedShotFlow
+                <AdvancedFlowHost
                     event={shotEvent}
                     teamA={fixture.teamA} teamB={fixture.teamB}
                     teamAColor={fixture.teamA.color} teamBColor={fixture.teamB.color}
                     clock={fixture.clock}
                     onAttribute={noop}
-                    onSkip={noop}
+                    fallback={<div style={{ padding: 40, color: '#888', fontFamily: 'monospace' }}>flow finished — reload to replay</div>}
                 />
             );
 

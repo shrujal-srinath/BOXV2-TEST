@@ -24,7 +24,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io, type Socket } from 'socket.io-client';
 import PiTouchScoringScreen from '../components/refereebox/PiTouchScoringScreen';
-import PiAdvancedShotFlow from '../components/refereebox/PiAdvancedShotFlow';
+import AdvancedFlowHost from '../components/refereebox/AdvancedFlowHost';
 import type { ScorePendingEvent, Player } from '../hooks/useRefereeBox';
 import type { ShotZoneId } from '../components/shotchart/types/shotTypes';
 import { useSupabaseBroadcast } from '../hooks/useSupabaseBroadcast';
@@ -303,29 +303,22 @@ export default function LanControlPage() {
     const gameMs = timer.minutes * 60_000 + timer.seconds * 1_000 + timer.tenths * 100;
     const shotMs = timer.shotClock * 1_000;
 
-    if (scorePending) {
-        return (
-            <PiAdvancedShotFlow
-                key={`${scorePending.team}-${scorePending.points}-${teamA.score}-${teamB.score}`}
-                event={scorePending}
-                teamA={{ name: teamA.name, score: teamA.score, fouls: teamA.fouls, timeouts: teamA.timeouts, color: teamA.color }}
-                teamB={{ name: teamB.name, score: teamB.score, fouls: teamB.fouls, timeouts: teamB.timeouts, color: teamB.color }}
-                teamAColor={teamA.color}
-                teamBColor={teamB.color}
-                clock={{
-                    gameMs, shotMs, isRunning: timer.gameRunning,
-                    period: timer.period, totalPeriods: settings.totalPeriods,
-                    periodMinutes: settings.periodMinutes, shotClockSeconds: settings.shotClockSeconds,
-                }}
-                gameCode={code}
-                onAttribute={handleAttribute}
-                onSkip={handleSkip}
-            />
-        );
-    }
-
     return (
-        <>
+        <AdvancedFlowHost
+            event={scorePending}
+            onConsumed={handleSkip}
+            teamA={{ name: teamA.name, score: teamA.score, fouls: teamA.fouls, timeouts: teamA.timeouts, color: teamA.color }}
+            teamB={{ name: teamB.name, score: teamB.score, fouls: teamB.fouls, timeouts: teamB.timeouts, color: teamB.color }}
+            teamAColor={teamA.color}
+            teamBColor={teamB.color}
+            clock={{
+                gameMs, shotMs, isRunning: timer.gameRunning,
+                period: timer.period, totalPeriods: settings.totalPeriods,
+                periodMinutes: settings.periodMinutes, shotClockSeconds: settings.shotClockSeconds,
+            }}
+            gameCode={code}
+            onAttribute={handleAttribute}
+            fallback={<>
             <PiTouchScoringScreen
                 teamA={{ name: teamA.name, score: teamA.score, fouls: teamA.fouls, timeouts: teamA.timeouts }}
                 teamB={{ name: teamB.name, score: teamB.score, fouls: teamB.fouls, timeouts: teamB.timeouts }}
@@ -372,6 +365,7 @@ export default function LanControlPage() {
                 )}
                 <style>{`@keyframes pulse { 0%,100% { opacity: 0.4 } 50% { opacity: 1 } }`}</style>
             </div>
-        </>
+        </>}
+        />
     );
 }

@@ -13,34 +13,29 @@
 // the referee never loses track of the game state.
 // ═══════════════════════════════════════════════════════════════
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React from 'react';
 import PiHexCourt from './PiHexCourt';
 import { ZONES, SHOT_ATTRIBUTES } from '../shotchart/courtZones';
-import type { ScorePendingEvent, Player, TeamState, ClockState } from '../../hooks/useRefereeBox';
+import type { Player, TeamState, ClockState } from '../../hooks/useRefereeBox';
 import type { ShotZoneId } from '../shotchart/types/shotTypes';
 import { useShotChart } from '../../hooks/useShotChart';
 import { useReducedMotion } from '../../lib/colorPalettes';
-import { getShotTypeSelection } from '../../services/gameControlPrefs';
+import type { UseShotAttribution } from '../../hooks/useShotAttribution';
 
 interface PiAdvancedShotFlowProps {
-    event: ScorePendingEvent;
+    /** The shared attribution machine (owned by RefereeScreen — it holds the
+     *  event QUEUE, so a second score mid-flow no longer wipes progress). */
+    attribution: UseShotAttribution;
     teamA: TeamState; teamB: TeamState;
     teamAColor: string; teamBColor: string;
     clock: ClockState;
     /** Active game code — used to fetch shot history for the in-court heatmap. */
     gameCode?: string;
-    onAttribute: (data: {
-        team: 'A' | 'B'; points: number; made: boolean;
-        playerId: string | null; playerName: string | null;
-        zone?: string; x?: number; y?: number;
-        period?: number; gameClockSec?: number; attributes?: string[];
-    }) => void;
+    /** Dismiss-without-details (records the row via the machine — conservation). */
     onSkip: () => void;
     /** Fires the daemon UNDO action (rolls back the last shot + score). */
     onUndo?: () => void;
 }
-
-type Step = 'court' | 'player' | 'context';
 
 const PLAYER_SECONDS  = 12;  // 12s to pick player — enough to glance at roster
 const CONTEXT_SECONDS = 9;   // 9s to add context tags
@@ -230,114 +225,50 @@ function GameHeader({ teamA, teamB, teamAColor, teamBColor, clock, scoringTeam }
 
 // ─────────────────────────────────────────────────────────────
 export default function PiAdvancedShotFlow({
-    event, teamA, teamB, teamAColor, teamBColor, clock, gameCode, onAttribute, onSkip, onUndo,
+    attribution, teamA, teamB, teamAColor, teamBColor, clock, gameCode, onSkip, onUndo,
 }: PiAdvancedShotFlowProps) {
-    const { team, points, players } = event;
-    const made = event.made ?? true;
-    const teamColor = team === 'A' ? teamAColor : teamBColor;
-    const teamName  = team === 'A' ? teamA.name : teamB.name;
     const reducedMotion = useReducedMotion();
 
     // Pull live shot history for the in-court heatmap.
     const { allShots } = useShotChart(gameCode ?? null);
 
-    // Free throws (+1) skip the court — there's no location to record.
-    // Free throw → player → [context].    Field goal → court → player → [context].
-    // The context (shot-type tagging) step is gated by the shot type selection pref.
-    const isFreeThrow   = points === 1;
-    const showShotType  = getShotTypeSelection();
-    const steps: Step[] = isFreeThrow
-        ? (showShotType ? ['player', 'context'] : ['player'])
-        : (showShotType ? ['court', 'player', 'context'] : ['court', 'player']);
+    // ── Renderer of the shared machine: all flow RULES live in
+    // services/shotAttribution.ts (steps, timers, queue, finalize). The local
+    // names below mirror the legacy state so the render tree stays intact.
+    const active = attribution.activeEvent;
+    if (!active) return null;   // parent unmounts on idle; belt-and-braces
 
-    const [stepIndex, setStepIndex]       = useState(0);
-    const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-    const [selectedZone,   setSelectedZone]   = useState<ShotZoneId | null>(null);
-    const [courtX,         setCourtX]         = useState<number | null>(null);
-    const [courtY,         setCourtY]         = useState<number | null>(null);
-    const [selectedAttrs,  setSelectedAttrs]  = useState<Set<string>>(() => new Set());
-    const [secondsLeft,    setSecondsLeft]    = useState<number | null>(null);
+    const { team, points } = active;
+    // Roster snapshot rides the event through the queue (host puts it there).
+    const players = (active.meta?.players as Player[] | undefined) ?? [];
+    const teamColor = team === 'A' ? teamAColor : teamBColor;
+    const teamName  = team === 'A' ? teamA.name : teamB.name;
 
-    const step    = steps[stepIndex];
-    const doneRef = useRef(false);
+    const steps       = attribution.state.steps;
+    const stepIndex   = attribution.state.stepIndex;
+    const step        = attribution.step;
+    const secondsLeft = attribution.state.secondsLeft;
+    const selectedZone = attribution.state.zone as ShotZoneId | null;
+    const courtX = attribution.state.x;
+    const courtY = attribution.state.y;
+    const selectedAttrs = new Set(attribution.state.attrs);
+    const selectedPlayer: Player | null = attribution.state.playerId
+        ? players.find(pl => pl.id === attribution.state.playerId)
+            ?? { id: attribution.state.playerId, name: attribution.state.playerName ?? '', number: '' } as Player
+        : null;
 
-    const goNext = useCallback(() => setStepIndex(i => Math.min(i + 1, steps.length - 1)), [steps.length]);
-    const goPrev = useCallback(() => setStepIndex(i => Math.max(i - 1, 0)), []);
-
-    const finalize = useCallback((opts: { unattributed?: boolean; playerOverride?: Player | null } = {}) => {
-        if (doneRef.current) return;
-        doneRef.current = true;
-        const player = opts.unattributed ? null : ('playerOverride' in opts ? opts.playerOverride! : selectedPlayer);
-        onAttribute({
-            team, points, made,
-            playerId:     player?.id   ?? null,
-            playerName:   player?.name ?? null,
-            zone:         isFreeThrow ? 'free_throw' : (selectedZone ?? 'unlocated'),
-            x:            isFreeThrow ? undefined : (courtX ?? undefined),
-            y:            isFreeThrow ? undefined : (courtY ?? undefined),
-            period:       clock.period,
-            gameClockSec: Math.ceil(clock.gameMs / 1000),
-            attributes:   Array.from(selectedAttrs),
-        });
-    }, [selectedPlayer, selectedZone, courtX, courtY, selectedAttrs, team, points, made, clock, onAttribute, isFreeThrow]);
-
-    // Reset the countdown when the step changes — done during render (the
-    // documented "adjust state when a prop changes" pattern) instead of an
-    // effect, so the new countdown is visible on the very first paint.
-    const [countdownStep, setCountdownStep] = useState<Step | null>(null);
-    if (countdownStep !== step) {
-        setCountdownStep(step);
-        setSecondsLeft(
-            step === 'player'  ? PLAYER_SECONDS
-            : step === 'context' ? CONTEXT_SECONDS
-            : null
-        );
-    }
-
-    useEffect(() => {
-        if (secondsLeft === null) return;
-        if (secondsLeft <= 0) {
-            if (step === 'player')       finalize({ unattributed: true });
-            else if (step === 'context') finalize();
-            return;
-        }
-        const t = setTimeout(() => setSecondsLeft(v => v === null ? null : v - 1), 1000);
-        return () => clearTimeout(t);
-    }, [secondsLeft, step, finalize]);
+    const goPrev = attribution.back;
+    const finalize = () => attribution.record();
 
     function handleCourtTap(zone: ShotZoneId, x: number, y: number) {
         // Tap commits immediately — no confirm step, no idle countdown.
         // Drag-to-adjust (HexLayer) allows in-flight repositioning before lift.
-        setSelectedZone(zone);
-        setCourtX(x);
-        setCourtY(y);
-        goNext();
+        attribution.tapCourt(zone, x, y);
     }
-
-    function handleSkipLocation() {
-        setSelectedZone('unlocated');
-        setCourtX(null);
-        setCourtY(null);
-        goNext();
-    }
-
-    function handlePlayerSelect(p: Player) {
-        setSelectedPlayer(p);
-        if (!showShotType) finalize({ playerOverride: p });
-        else goNext();
-    }
-    function handleMarkUnattributed() {
-        setSelectedPlayer(null);
-        if (!showShotType) finalize({ unattributed: true });
-        else goNext();
-    }
-    function toggleAttr(id: string) {
-        setSelectedAttrs(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id); else next.add(id);
-            return next;
-        });
-    }
+    function handleSkipLocation()     { attribution.skipStep(); }
+    function handlePlayerSelect(p: Player) { attribution.selectPlayer(p.id, p.name); }
+    function handleMarkUnattributed() { attribution.unattributed(); }
+    function toggleAttr(id: string)   { attribution.toggleAttr(id); }
 
     const numCols   = players.length <= 4 ? 2 : 3;
     const zoneShort = selectedZone ? (ZONES[selectedZone]?.shortLabel ?? selectedZone) : null;
@@ -414,8 +345,15 @@ export default function PiAdvancedShotFlow({
                     {promptText}
                 </span>
 
-                {/* Right: retained chips + countdown */}
+                {/* Right: queue depth + retained chips + countdown */}
                 <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignItems: 'center', flexShrink: 0 }}>
+                    {attribution.queuedCount > 0 && (
+                        <span style={{
+                            padding: '2px 8px', borderRadius: 100, background: 'rgba(245,158,11,0.14)',
+                            border: '1px solid rgba(245,158,11,0.45)', fontFamily: RM, fontSize: 9,
+                            fontWeight: 800, letterSpacing: 1, color: '#F59E0B',
+                        }}>+{attribution.queuedCount} QUEUED</span>
+                    )}
                     {zoneShort && step !== 'court' && (
                         <span style={{
                             padding: '2px 8px', borderRadius: 100, background: `${teamColor}1c`,
