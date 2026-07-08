@@ -11,6 +11,7 @@ import type {
     ShotEvent,
     ShotAttribute,
     ShotZoneId,
+    PersistedZone,
     ShotType,
     GameAction,
     GameActionType,
@@ -29,7 +30,7 @@ export interface CreateShotParams {
     teamSide: 'A' | 'B';
     x: number | null;
     y: number | null;
-    zone: ShotZoneId;
+    zone: PersistedZone;
     made: boolean;
     points: 1 | 2 | 3;
     shotType: ShotType;
@@ -42,11 +43,17 @@ export interface CreateShotParams {
 }
 
 export const createShotEvent = async (params: CreateShotParams): Promise<string | null> => {
-    const finalX = params.x ?? (ZONES[params.zone]?.cx ?? 50);
-    const finalY = params.y ?? (ZONES[params.zone]?.cy ?? 47);
-    const finalZone = params.zone !== 'unlocated' && params.x !== null
-        ? classifyZone(params.x, params.y!)
-        : params.zone;
+    // Free throws have no court location — persist them honestly (2026-07-08;
+    // callers used to send a fake mid_top/paint point). Migration 013 cleans
+    // historical rows the same way.
+    const isFt = params.shotType === 'free_throw';
+    const zoneDef = isFt ? undefined : ZONES[params.zone as ShotZoneId];
+    const finalX = isFt ? null : params.x ?? (zoneDef?.cx ?? 50);
+    const finalY = isFt ? null : params.y ?? (zoneDef?.cy ?? 47);
+    const finalZone = isFt ? 'free_throw'
+        : params.zone !== 'unlocated' && params.x !== null
+            ? classifyZone(params.x, params.y!)
+            : params.zone;
 
     const { data, error } = await supabase
         .from('shot_events')
@@ -279,7 +286,7 @@ export function computeZoneStats(shots: ShotEvent[]): ZoneStat[] {
     const byZone = new Map<ShotZoneId, { fga: number; fgm: number; pts: number }>();
 
     for (const shot of fieldGoals) {
-        const zone = shot.zone;
+        const zone = shot.zone as ShotZoneId; // field-goal filter above excludes 'free_throw'
         const current = byZone.get(zone) || { fga: 0, fgm: 0, pts: 0 };
         current.fga++;
         if (shot.made) {

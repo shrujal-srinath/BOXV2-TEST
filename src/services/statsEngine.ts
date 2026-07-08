@@ -529,9 +529,13 @@ export const buildRosterIndex = (gameData: any): Map<string, { name: string; num
 // shot_clock_sec / game_clock_sec). Pure + unit-tested; see statsEngine.test.ts.
 // ═════════════════════════════════════════════════════════════════════════════
 
-/** Effective zone for analytics: re-derive from coords when located, else stored. */
+/** Effective zone for analytics: re-derive from coords when located, else stored.
+ *  Callers filter free throws first (fieldGoals), so the stored-zone fallback is
+ *  always a court zone at runtime. */
 const effectiveZone = (s: ShotEvent): ShotZoneId =>
-  s.x != null && s.y != null && s.zone !== 'unlocated' ? classifyZone(s.x, s.y) : s.zone;
+  s.x != null && s.y != null && s.zone !== 'unlocated'
+    ? classifyZone(s.x, s.y)
+    : (s.zone as ShotZoneId);
 
 /** Field goals only, optionally filtered by team side and/or player. */
 const fieldGoals = (shots: ShotEvent[], side?: TeamSide, playerId?: string): ShotEvent[] =>

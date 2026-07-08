@@ -24,6 +24,14 @@ export type ShotZoneId =
     | 'three_top_center'
     | 'unlocated';
 
+/**
+ * What the `shot_events.zone` column actually holds: a court zone, OR
+ * 'free_throw' for FT rows (no court location — the Pi path has always
+ * persisted this; the web path joined it on 2026-07-08, migration 013).
+ * Spatial consumers must filter by shotType/zone before indexing ZONES.
+ */
+export type PersistedZone = ShotZoneId | 'free_throw';
+
 export interface ZoneDefinition {
     id: ShotZoneId;
     label: string;
@@ -54,9 +62,13 @@ export interface ShotEvent {
     gameCode: string;
     playerId: string | null;
     teamSide: 'A' | 'B';
+    /** Nullable in reality (FT rows, quick-mode daemon rows write NULL). The
+     *  declaration stays `number` to avoid a repo-wide ripple tonight — every
+     *  spatial consumer already null-checks (`s.x != null`). Honest widening
+     *  is queued for the S1 wiring session. */
     x: number;
     y: number;
-    zone: ShotZoneId;
+    zone: PersistedZone;
     made: boolean;
     points: 1 | 2 | 3;
     shotType: ShotType;

@@ -113,8 +113,10 @@ const binFor = (g: GridSpec, x: number, y: number): { row: number; col: number }
 
 // ── binning ──────────────────────────────────────────────────────────────────
 
+// buildHexbins filters to located non-FT rows before this runs, so the
+// stored-zone fallback is always a court zone at runtime.
 const effectiveZone = (s: ShotEvent): ShotZoneId =>
-    s.zone !== 'unlocated' ? classifyZone(s.x, s.y) : s.zone;
+    s.zone !== 'unlocated' ? classifyZone(s.x, s.y) : (s.zone as ShotZoneId);
 
 /**
  * Build hexbins from shot events. Only LOCATED field-goal attempts participate:

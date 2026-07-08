@@ -33,7 +33,7 @@ import type { Player } from '../types';
 
 import { AdvancedConsole } from '../components/shotchart/AdvancedConsole';
 import { createShotEvent, createGameAction, subscribeToShots } from '../services/shotService';
-import type { ShotEvent, ShotType, ShotZoneId, ShotAttribute, GameActionType } from '../components/shotchart/types/shotTypes';
+import type { ShotEvent, ShotType, ShotZoneId, PersistedZone, ShotAttribute, GameActionType } from '../components/shotchart/types/shotTypes';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -495,7 +495,7 @@ export const HostConsole: React.FC = () => {
         shotType: ShotType;
         x: number | null;
         y: number | null;
-        zone: ShotZoneId;
+        zone: PersistedZone;
         attributes: ShotAttribute[];
     }) => {
         if (!gameCode) return;

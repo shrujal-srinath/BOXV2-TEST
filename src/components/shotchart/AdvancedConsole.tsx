@@ -8,7 +8,7 @@ import { AdvancedCourtHex } from './AdvancedCourtHex';
 import type { CourtTheme, HoverInfo } from './AdvancedCourtHex';
 import { classifyZone, SHOT_ATTRIBUTES, COURT } from './courtZones';
 import type {
-    ShotEvent, ShotAttribute, ShotZoneId, ShotType, GameActionType,
+    ShotEvent, ShotAttribute, ShotZoneId, PersistedZone, ShotType, GameActionType,
 } from './types/shotTypes';
 import type { Player } from '../../types';
 import { TimedPlayerPopup } from './TimedPlayerPopup';
@@ -61,7 +61,7 @@ interface AdvancedConsoleProps {
     period: number; minutes: number; seconds: number;
     shotClock: number; gameRunning: boolean; possession: 'A' | 'B';
     onScoreChange: (team: 'A' | 'B', points: number) => void;
-    onShotRecorded: (shot: { teamSide: 'A' | 'B'; playerId: string | null; points: 1 | 2 | 3; made: boolean; shotType: ShotType; x: number | null; y: number | null; zone: ShotZoneId; attributes: ShotAttribute[] }) => void;
+    onShotRecorded: (shot: { teamSide: 'A' | 'B'; playerId: string | null; points: 1 | 2 | 3; made: boolean; shotType: ShotType; x: number | null; y: number | null; zone: PersistedZone; attributes: ShotAttribute[] }) => void;
     onSecondaryAction: (team: 'A' | 'B', action: GameActionType) => void;
     onToggleClock: () => void; onNextPeriod: () => void;
     onResetShotClock: (v: number) => void; onTogglePossession: () => void;
@@ -82,7 +82,7 @@ const shortName = (name: string) => name.slice(0, 3).toUpperCase();
 function computeZoneHeat(shots: ShotEvent[]) {
     const m = new Map<ShotZoneId, { fgm: number; fga: number; pct: number }>();
     for (const s of shots) {
-        if (s.zone === 'unlocated') continue;
+        if (s.zone === 'unlocated' || s.zone === 'free_throw') continue;
         const c = m.get(s.zone) || { fgm: 0, fga: 0, pct: 0 };
         c.fga++; if (s.made) c.fgm++;
         c.pct = c.fga > 0 ? Math.round((c.fgm / c.fga) * 100) : 0;
@@ -258,7 +258,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
         const pid = getSel(side); const pn = getName(side, pid);
         const shot: PendingShot = { teamSide: side, points: pts, made: true, shotType: st, playerId: pid, playerName: pn };
         if (st === 'free_throw') {
-            onShotRecorded({ teamSide: side, playerId: pid, points: 1, made: true, shotType: st, x: 50, y: COURT.paintTop, zone: 'mid_top', attributes: attrs });
+            onShotRecorded({ teamSide: side, playerId: pid, points: 1, made: true, shotType: st, x: null, y: null, zone: 'free_throw', attributes: attrs });
             setAttrs([]);
         } else {
             setPending(shot);
@@ -278,7 +278,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
         if (isWebLocked) return;
         if (pending) finalize(null, null, 'unlocated');
         const pid = getSel(side);
-        onShotRecorded({ teamSide: side, playerId: pid, points: 1, made: false, shotType: 'free_throw', x: 50, y: COURT.paintTop, zone: 'mid_top', attributes: attrs });
+        onShotRecorded({ teamSide: side, playerId: pid, points: 1, made: false, shotType: 'free_throw', x: null, y: null, zone: 'free_throw', attributes: attrs });
         setAttrs([]);
         logEvent(`MISS FT ${side === 'A' ? teamAName : teamBName}`);
     }, [isWebLocked, pending, selA, selB, pA, pB, onShotRecorded, attrs, teamAName, teamBName]);
@@ -670,13 +670,13 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = (props) => {
                                 offer={analytics.andOneOffer}
                                 onMade={() => {
                                     const o = analytics.andOneOffer!;
-                                    onShotRecorded({ teamSide: o.team, playerId: o.playerId, points: 1, made: true, shotType: 'free_throw', x: 50, y: COURT.paintTop, zone: 'mid_top', attributes: [] });
+                                    onShotRecorded({ teamSide: o.team, playerId: o.playerId, points: 1, made: true, shotType: 'free_throw', x: null, y: null, zone: 'free_throw', attributes: [] });
                                     onScoreChange(o.team, 1);
                                     analytics.clearAndOne();
                                 }}
                                 onMiss={() => {
                                     const o = analytics.andOneOffer!;
-                                    onShotRecorded({ teamSide: o.team, playerId: o.playerId, points: 1, made: false, shotType: 'free_throw', x: 50, y: COURT.paintTop, zone: 'mid_top', attributes: [] });
+                                    onShotRecorded({ teamSide: o.team, playerId: o.playerId, points: 1, made: false, shotType: 'free_throw', x: null, y: null, zone: 'free_throw', attributes: [] });
                                     analytics.clearAndOne();
                                 }}
                                 onDismiss={analytics.clearAndOne}
