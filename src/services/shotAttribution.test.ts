@@ -254,12 +254,35 @@ describe('guards', () => {
     it('actions land only on their step (stale UI events are inert)', () => {
         const s0 = start(ev());                            // court step
         expect(reduce(s0, { type: 'SELECT_PLAYER', playerId: 'x', playerName: null })).toBe(s0);
-        expect(reduce(s0, { type: 'TOGGLE_ATTR', attr: 'fastbreak' })).toBe(s0);
         expect(reduce(s0, { type: 'RECORD' })).toBe(s0);
         const idle = createInitialState();
         expect(reduce(idle, { type: 'TAP_COURT', zone: 'mid_top', x: 50, y: 46 })).toBe(idle);
         expect(reduce(idle, { type: 'TICK' })).toBe(idle);
         expect(reduce(idle, { type: 'DISMISS' })).toBe(idle);
+        expect(reduce(idle, { type: 'TOGGLE_ATTR', attr: 'fastbreak' })).toBe(idle);
+    });
+
+    it('TOGGLE_ATTR works on ANY active step (web tags pre-tap) and rides into the payload', () => {
+        const s = run(
+            start(ev(), { showContext: false }),
+            { type: 'TOGGLE_ATTR', attr: 'fastbreak' },        // during court step
+            { type: 'TAP_COURT', zone: 'restricted', x: 50, y: 16 },
+            { type: 'TOGGLE_ATTR', attr: 'contested' },        // during player step
+            { type: 'SELECT_PLAYER', playerId: 'p1', playerName: null },
+        );
+        expect(s.outbox[0].attributes).toEqual(['fastbreak', 'contested']);
+    });
+
+    it('pre-tap attrs reset between queued events', () => {
+        let s = run(
+            start(ev({ points: 1 }), { showContext: false }),
+            { type: 'TOGGLE_ATTR', attr: 'fastbreak' },
+            { type: 'ENQUEUE', event: ev({ points: 1 }) },
+            { type: 'SELECT_PLAYER', playerId: 'p1', playerName: null },   // finalizes 1st
+        );
+        s = run(s, { type: 'SELECT_PLAYER', playerId: 'p2', playerName: null });
+        expect(s.outbox[0].attributes).toEqual(['fastbreak']);
+        expect(s.outbox[1].attributes).toEqual([]);
     });
 
     it('DRAIN_OUTBOX removes exactly the delivered payloads', () => {

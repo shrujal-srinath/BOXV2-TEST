@@ -303,7 +303,10 @@ export const attributionReducer = (
         }
 
         case 'TOGGLE_ATTR': {
-            if (step !== 'context') return state;
+            // Any ACTIVE step: the web console lets operators tag shots while
+            // the court is still armed (pre-tap), the Pi tags on the context
+            // step — both are per-event state, reset on activate. Idle = inert.
+            if (!step) return state;
             const attrs = state.attrs.includes(action.attr)
                 ? state.attrs.filter(a => a !== action.attr)
                 : [...state.attrs, action.attr];
