@@ -154,7 +154,7 @@ H2H) — design pass required per U3.4.
 | P1 | U2A derived stats in gameReport + goldens — **✅ DONE same day (Fable)**: gameScore/PIE/possessions/Four Factors/ratings + goldens, 157 green | — |
 | P2 | U1 core extraction + web refactor onto it | — |
 | P3 | Migration 014 + `persistGameReport` + lazy backfill + end_game hooks (web) | P1 |
-| P4 | Pi `ReviewHexChart` + GameReviewScreen stats upgrade (box + highlights + hexmap) + daemon persist call | P2, P3 |
+| P4 | ~~Pi ReviewHexChart + match report~~ ✅ **BUILT 2026-07-08** (PiMatchReport off PostGameScreen — see U1.3 correction; daemon persist call still pending P3) | P2 ✅, P3 |
 | P5 | GameSetup roster→profile linking (search by name/code/phone) | P3 |
 | P6 | U3 composer overhaul + stat-picker + PDF v2 | P1 |
 | P7 | Career views + `/team/:id` + career/milestone cards | P3–P5 |
