@@ -1,38 +1,26 @@
 # fable-5 — Ecosystem Context Pack
 
-Written by **Claude Fable 5** on **2026-07-07** in a dedicated context-building session with
-Shrujal. Purpose: give every future AI session (Opus 4.8 and beyond) the full picture of the
-THE BOX × Courtside ecosystem plus the working judgment to build on it well — without
-re-deriving everything from the code.
+Built by **Claude Fable 5** (2026-07-07/08). The cross-product brain for THE BOX × Courtside.
+Canonical copy: `BOXV2-TEST-main/fable-5/` — edit here, re-copy to the other two repos.
 
-## Read order
+## Read order (new session)
+1. `00-MASTER-CONTEXT.md` — WHAT everything is (4 products, backend, identity plan, roadmap)
+2. `OPUS-GUIDANCE.md` — HOW to work (invariants, failure modes, protocols)
+3. `EXECUTION-LADDER.md` — WHO builds WHAT next (the ordered Opus queue + design loop)
+4. `OPUS-TOMORROW.md` — session-zero handoff notes + court-audit truths
 
-1. **`00-MASTER-CONTEXT.md`** — WHAT everything is. The four products (BOX website, pi-daemon
-   hardware box, the_box_app companion, Courtside startup), the shared Supabase backend, the
-   identity unification plan, everything done so far, and the locked roadmap. Read top to
-   bottom on your first session.
-2. **`OPUS-GUIDANCE.md`** — HOW to work here. Session protocols, the ten invariants, how
-   Shrujal prompts, judgment principles, known AI failure modes.
-3. **`CLAUDE-DRAFT.md`** — proposed replacement for the BOXV2 root `CLAUDE.md` (lean,
-   pointer-based, per 2026 best practices). Status: **draft — awaiting Shrujal's review before
-   promotion to repo root.** Only relevant to the website repo.
-4. **`DESIGN-SYSTEM-WEB.md`** — the full BOX website design system (extracted from the original
-   CLAUDE.md; referenced by the draft). Load only for website UI work.
+## Deep references (load when the task touches them)
+- `COURT-PIPELINE-DEEPDIVE.md` — capture→export engineering truth (read before ANY shot/stats code)
+- `ADVANCED-STATS-MASTERPLAN.md` — S1–S8 program, status-annotated
+- `DESIGN-BRIEF-shot-experience.md` — paste into Claude Design for shot-UX work
+- `DESIGN-SYSTEM-WEB.md` — full website design tokens/patterns (CLAUDE.md points here)
+- `SKILLS.md` — frontend/UI-UX skills to install (+ the geometry-authority warning)
+- `CLAUDE-DRAFT.md` — superseded 2026-07-08: PROMOTED to root CLAUDE.md (kept for history)
 
-## Copies
+## plans/ (execution-grade; each = sessions of specced work)
+`README.md` (status table) · A identity · B stats-v2 commit · C pi-daemon fixes ·
+D courtside wiring · R restructure (master sequence) · S1-WIRING (attribution machine
+into both consoles — QUEUE HEAD) · U unified stats program (P1 ✅, P2-math ✅)
 
-This folder lives in all three repos:
-
-- `BOXV2-TEST-main/fable-5/` ← **canonical** (edit here)
-- `the_box_app/fable-5/` ← copy
-- `courtside/fable-5/` ← copy
-
-If you change anything here, re-copy the folder to the other two repos before ending the
-session (`OPUS-GUIDANCE.md` §6).
-
-## Relationship to other docs
-
-This pack is the cross-product authority. Product-internal docs still win inside their scope —
-notably Courtside's own `CLAUDE.md` (glossary/tokens/rules) and `readme/future_plans.md`,
-the_box_app's `APP-MASTERPLAN.md`, and BOXV2's `COMPANION-APP.md` + `readme-files/`. The full
-precedence table is in `00-MASTER-CONTEXT.md` §12.
+Conflict rule: master context wins across products; each plan wins inside its scope;
+newer wins on direction — but flag conflicts to Shrujal, never silently pick.

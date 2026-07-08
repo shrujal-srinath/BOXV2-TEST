@@ -107,3 +107,6 @@ snapshot) · `shot_events` · `game_actions` · `player_profiles` (passport; `pl
 - Prefer editing existing services over adding parallel ones — one write path per entity.
 - Commit in reviewed slices the same session work is built; this repo has a history of large
   at-risk uncommitted trees.
+
+
+> **PROMOTED to root CLAUDE.md on 2026-07-08** — root is now canonical; this file is history.
