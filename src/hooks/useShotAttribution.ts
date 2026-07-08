@@ -48,7 +48,9 @@ export const useShotAttribution = (
 
     // Keep the latest callback without re-arming effects.
     const onAttributeRef = useRef(onAttribute);
-    onAttributeRef.current = onAttribute;
+    useEffect(() => {
+        onAttributeRef.current = onAttribute;
+    }, [onAttribute]);
 
     // 1 Hz countdown while a timed step is active. Re-arms on step entry so the
     // first tick lands a full second after the step appears.

@@ -15,6 +15,7 @@ import { TeamComparison } from './summary/TeamComparison';
 import { ScoringTimelineChart } from './summary/ScoringTimelineChart';
 import { LeadRunStrip } from './summary/LeadRunStrip';
 import { ShotMap } from './advanced/ShotMap';
+import { HexShotChart } from './advanced/HexShotChart';
 import { ZoneHeatmap } from './advanced/ZoneHeatmap';
 import { DistanceBreakdown } from './advanced/DistanceBreakdown';
 import { PossessionPanel } from './advanced/PossessionPanel';
@@ -181,6 +182,7 @@ export const StatsHub = ({ gameCode, onBack, onPlayerClick }: Props) => {
 
       {tab === 'shots' && (
         <div className="space-y-6">
+          <HexShotChart box={box} shots={data.shots} rosterIndex={data.rosterIndex} />
           <ShotMap
             box={box}
             shots={data.shots}
