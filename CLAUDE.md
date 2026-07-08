@@ -31,7 +31,7 @@ npm test           # vitest — 160 golden tests (court law, engines, cards). CI
 cd pi-daemon && npm install && node index.js   # Socket.io on :3001
 ```
 
-No test suite exists yet — verification is `npm run build` + manual flows.
+Verification = tests + build (both CI-gated) + a manual click-through of affected routes.
 
 ## Architecture map
 
