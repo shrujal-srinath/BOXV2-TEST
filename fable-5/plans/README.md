@@ -27,7 +27,7 @@ the executing session's job is to implement, verify, and stop when a stop-condit
 | [PLAN-C](PLAN-C-pi-daemon-fixes.md) | Daemon fixes 1–3: cloud channel alignment, action journal (+undo delete), crash recovery | BOXV2/pi-daemon | ⛔ not started |
 | [PLAN-D](PLAN-D-courtside-supabase-wiring.md) | Replace FakeData with Supabase in dependency order | courtside | ⛔ not started |
 | [PLAN-R](PLAN-R-restructure.md) | **Full codebase restructure** (approved 2026-07-07): security, tooling net, dead-code purge, surface regroup, wire extraction, daemon split, Stage-2 engine unification (E1–E5). Subsumes PLAN-B step 1 (its Phase 0) and sequences PLAN-C (its Phase 7) | BOXV2 | 🟡 Phase 0 DONE 2026-07-07; CI landed 2026-07-08 (Phase 2 partial) |
-| [PLAN-S1-WIRING](PLAN-S1-WIRING.md) | Wire the built attribution machine into the web console (kills the live wrong-team deferred bug, deletes TimedPlayerPopup) then the Pi flow (kills the mid-flow remount wipe). **Recommended next big build** | BOXV2 | ⛔ not started — machine + 22 contract tests ready |
+| [PLAN-S1-WIRING](PLAN-S1-WIRING.md) | Wire the built attribution machine into the web console (kills the live wrong-team deferred bug, deletes TimedPlayerPopup) then the Pi flow (kills the mid-flow remount wipe) | BOXV2 | 🟡 **Part 1 (web) DONE 2026-07-08 `1ab3fe5`** — wrong-team + silent-cancel bugs dead, popup deleted, queue chip live. Part 2 (Pi) next; needs the manual click-through below |
 | [PLAN-U](PLAN-U-UNIFIED-STATS-PROGRAM.md) | **The unified stats program** (2026-07-08): one hex engine w/ web+Pi renderers, auto after-game engine (Game Score/PIE/Four Factors + persist + deliver-to-accounts), export/share at 100/100, migration 014 (teams + game_player_stats save-all-now/link-when-known), career views. P1–P8 | BOXV2 (+bridge to app/courtside) | ⛔ P1/P2/P6 startable now; P3 blocked on Supabase token |
 
 Recommended order: **B step 1 (commit the tree — 30 min, removes data-loss risk) → A phases 0–2
@@ -38,3 +38,9 @@ A's client phases (3–4) can interleave with D (they touch the same Courtside a
 work — it embeds PLAN-B step 1 as its Phase 0 and PLAN-C as its Phase 7. PLAN-B steps 2–3 (finish
 stats v2) run between PLAN-R phases 3–4 or after phase 5, never during a move phase. PLAN-A and
 PLAN-D are unaffected (different repo/database scope).
+
+**Part 1 manual verification list (Shrujal or next session, dev server):** score-first +2/+3
+both teams (pre-selected and not) · court-first tap → team picker → both teams · FG miss flow ·
+FT make/miss · tags pre-tap · court 10s and player 8s timeouts · × dismiss records a row ·
+two rapid scores → QUEUED chip → both rows land · Escape cancels picker · spectator chart gets
+every dot · undo.
