@@ -48,6 +48,12 @@ import {
   shotQuality,
   playerPeriodScoring,
   buildRosterIndex,
+  gameScore,
+  playerPIE,
+  fourFactors,
+  teamRatings,
+  type FourFactors,
+  type TeamRatings,
 } from './statsEngine';
 import { buildHexbins, type HexbinResult } from './hexbinEngine';
 
@@ -86,6 +92,8 @@ export interface PlayerReport {
   periods: PeriodScore[];
   quality: ShotQualitySummary;
   attributes: AttributeSplit[];
+  gameScore: number;   // Hollinger
+  pie: number;         // Player Impact Estimate, % of game
 }
 
 export interface TeamPair<T> { teamA: T; teamB: T }
@@ -115,6 +123,9 @@ export interface GameReport {
   assists: TeamPair<AssistNetwork>;
   shotClockUsage: TeamPair<ShotClockBin[]> | null;   // null when untracked
   quality: TeamPair<ShotQualitySummary>;
+  /** Established advanced metrics; null when the mode tracked too little
+   *  (Four Factors need rebounds/turnovers — quick games have neither). */
+  advanced: TeamPair<{ fourFactors: FourFactors; ratings: TeamRatings }> | null;
   hexbins: TeamPair<HexbinResult> | null;            // null unless located shots exist
   players: PlayerReport[];                            // sorted PTS desc
   highlights: GameHighlight[];                        // sorted weight desc
@@ -309,6 +320,8 @@ export const buildGameReport = (
       periods: playerPeriodScoring(shots, r.playerId, periods),
       quality: shotQuality(shots, side, r.playerId),
       attributes: attributeSplits(shots, side, r.playerId),
+      gameScore: gameScore(r),
+      pie: playerPIE(r, box.teamA.totals, box.teamB.totals),
     }))
     .sort((a, b) => b.row.pts - a.row.pts);
 
@@ -350,6 +363,12 @@ export const buildGameReport = (
         }
       : null,
     quality: { teamA: shotQuality(shots, 'A'), teamB: shotQuality(shots, 'B') },
+    advanced: box.capabilities.mode !== 'quick'
+      ? {
+          teamA: { fourFactors: fourFactors(box.teamA.totals, box.teamB.totals), ratings: teamRatings(box.teamA.totals, box.teamB.totals) },
+          teamB: { fourFactors: fourFactors(box.teamB.totals, box.teamA.totals), ratings: teamRatings(box.teamB.totals, box.teamA.totals) },
+        }
+      : null,
     hexbins: hasLocations
       ? { teamA: buildHexbins(shots, { side: 'A' }), teamB: buildHexbins(shots, { side: 'B' }) }
       : null,

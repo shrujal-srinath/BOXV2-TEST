@@ -204,3 +204,39 @@ describe('clutch pathway (dedicated close-game fixture)', () => {
         expect(star.detail).toContain('Chir');
     });
 });
+
+describe('advanced metrics (PLAN-U P1) — hand-computed on the golden game', () => {
+    const r = report();
+
+    it('Game Score (Hollinger): a1 = 11 + 0.4·5 − 0.7·7 + 0.7·1(ast) = 8.8', () => {
+        const a1 = r.players.find(p => p.playerId === 'a1')!;
+        expect(a1.gameScore).toBeCloseTo(8.8, 5);
+    });
+
+    it('PIE: a1 contributes 10 of the game total 23 → 43.48%', () => {
+        // a1: 11+5−7+1(ast) = 10
+        // game: A(16+7−9+ast3 [a2×2 + a1×1] = 17) + B(7+3+1−4−2+ast1 = 6) = 23
+        const a1 = r.players.find(p => p.playerId === 'a1')!;
+        expect(a1.pie).toBeCloseTo((10 / 23) * 100, 3);
+    });
+
+    it('possessions + ratings: A = 9 poss → ORtg 177.8; B = 4.88 poss', () => {
+        expect(r.advanced).not.toBeNull();
+        const A = r.advanced!.teamA.ratings;
+        expect(A.possessions).toBeCloseTo(9, 5);              // fga9 + 0.44·0 − 0 + 0
+        expect(A.offRating).toBeCloseTo((16 / 9) * 100, 3);
+        const B = r.advanced!.teamB.ratings;
+        expect(B.possessions).toBeCloseTo(4 + 0.44 * 2, 5);   // fga4 + 0.44·fta2
+        expect(A.defRating).toBeCloseTo((7 / 4.88) * 100, 2);
+        expect(A.netRating).toBeCloseTo(A.offRating - A.defRating, 5);
+    });
+
+    it('Four Factors: A eFG (7+0.5·2)/9 = 88.9%, zero TOV/ORB/FT-rate rows honest', () => {
+        const ffA = r.advanced!.teamA.fourFactors;
+        expect(ffA.efgPct).toBeCloseTo(((7 + 0.5 * 2) / 9) * 100, 3);
+        expect(ffA.tovPct).toBe(0);
+        expect(ffA.orbPct).toBe(0);                           // no rebounds tracked → 0, not NaN
+        const ffB = r.advanced!.teamB.fourFactors;
+        expect(ffB.ftRate).toBeCloseTo((2 / 4) * 100, 5);     // fta2 / fga4
+    });
+});

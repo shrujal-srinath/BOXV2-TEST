@@ -801,6 +801,63 @@ export const possessionHistogram = (
   return bins;
 };
 
+// ── established advanced metrics (PLAN-U P1, 2026-07-08) ─────────────────────
+// All computable from current capture. Minutes/usage/+- are NOT here — they
+// need substitution tracking (S8); never estimate them.
+
+/** Hollinger Game Score — single-number game performance. */
+export const gameScore = (r: BoxScoreRow): number =>
+  r.pts + 0.4 * r.fgm - 0.7 * r.fga - 0.4 * (r.fta - r.ftm) +
+  0.7 * r.oreb + 0.3 * r.dreb + r.stl + 0.7 * r.ast + 0.7 * r.blk -
+  0.4 * r.pf - r.tov;
+
+type TotalsLike = Pick<BoxScoreRow, 'pts' | 'fgm' | 'fga' | 'tpm' | 'ftm' | 'fta' | 'oreb' | 'dreb' | 'ast' | 'stl' | 'blk' | 'tov' | 'pf'>;
+
+/** Estimated possessions (standard box-score estimate). */
+export const estimatePossessions = (t: TotalsLike): number =>
+  t.fga + 0.44 * t.fta - t.oreb + t.tov;
+
+export interface FourFactors {
+  efgPct: number;      // shooting
+  tovPct: number;      // ball security (TOV per possession)
+  orbPct: number;      // offensive rebounding (vs opponent DRB)
+  ftRate: number;      // FTA per FGA
+}
+
+export const fourFactors = (own: TotalsLike, opp: TotalsLike): FourFactors => {
+  const poss = estimatePossessions(own);
+  return {
+    efgPct: effectiveFg(own.fgm, own.tpm, own.fga),
+    tovPct: poss > 0 ? (own.tov / poss) * 100 : 0,
+    orbPct: own.oreb + opp.dreb > 0 ? (own.oreb / (own.oreb + opp.dreb)) * 100 : 0,
+    ftRate: own.fga > 0 ? (own.fta / own.fga) * 100 : 0,
+  };
+};
+
+export interface TeamRatings {
+  possessions: number;
+  offRating: number;   // points per 100 possessions
+  defRating: number;   // opponent points per 100 possessions
+  netRating: number;
+}
+
+export const teamRatings = (own: TotalsLike, opp: TotalsLike): TeamRatings => {
+  const poss = estimatePossessions(own);
+  const oppPoss = estimatePossessions(opp);
+  const off = poss > 0 ? (own.pts / poss) * 100 : 0;
+  const def = oppPoss > 0 ? (opp.pts / oppPoss) * 100 : 0;
+  return { possessions: poss, offRating: off, defRating: def, netRating: off - def };
+};
+
+/** NBA Player Impact Estimate: player's box contribution ÷ the whole game's. */
+export const playerPIE = (r: BoxScoreRow, totalA: TotalsLike, totalB: TotalsLike): number => {
+  const val = (t: TotalsLike | BoxScoreRow) =>
+    t.pts + t.fgm + t.ftm - t.fga - t.fta + t.dreb + 0.5 * t.oreb +
+    t.ast + t.stl + 0.5 * t.blk - t.pf - t.tov;
+  const game = val(totalA) + val(totalB);
+  return game > 0 ? (val(r) / game) * 100 : 0;
+};
+
 // ── shot quality (xPPA vs actual) ────────────────────────────────────────────
 
 /**
