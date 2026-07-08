@@ -142,7 +142,7 @@ H2H) — design pass required per U3.4.
 
 | # | What | Depends on |
 |---|---|---|
-| P1 | U2A derived stats in gameReport + goldens | — |
+| P1 | U2A derived stats in gameReport + goldens — **✅ DONE same day (Fable)**: gameScore/PIE/possessions/Four Factors/ratings + goldens, 157 green | — |
 | P2 | U1 core extraction + web refactor onto it | — |
 | P3 | Migration 014 + `persistGameReport` + lazy backfill + end_game hooks (web) | P1 |
 | P4 | Pi `ReviewHexChart` + GameReviewScreen stats upgrade (box + highlights + hexmap) + daemon persist call | P2, P3 |
