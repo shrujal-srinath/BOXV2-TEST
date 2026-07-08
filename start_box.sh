@@ -29,10 +29,10 @@ DISPLAY=:0 unclutter -idle 0 &
 echo "⏳ Waiting for servers..."
 sleep 12
 
-# 4. Pi Launcher on display 0 (DSI primary)
-echo "📺 Launching Pi Launcher UI..."
+# 4. Local website on display 0 (DSI primary)
+echo "📺 Launching local website..."
 DISPLAY=:0 chromium-browser \
-  --app=http://localhost:5173/pi-launcher \
+  --app=http://localhost:5173/ \
   --start-fullscreen \
   --kiosk \
   --no-sandbox \

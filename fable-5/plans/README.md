@@ -26,7 +26,8 @@ the executing session's job is to implement, verify, and stop when a stop-condit
 | [PLAN-B](PLAN-B-stats-v2-commit-and-finish.md) | Commit the at-risk working tree in slices, then finish Stats v2 per spec | BOXV2 | ⛔ not started |
 | [PLAN-C](PLAN-C-pi-daemon-fixes.md) | Daemon fixes 1–3: cloud channel alignment, action journal (+undo delete), crash recovery | BOXV2/pi-daemon | ⛔ not started |
 | [PLAN-D](PLAN-D-courtside-supabase-wiring.md) | Replace FakeData with Supabase in dependency order | courtside | ⛔ not started |
-| [PLAN-R](PLAN-R-restructure.md) | **Full codebase restructure** (approved 2026-07-07): security, tooling net, dead-code purge, surface regroup, wire extraction, daemon split, Stage-2 engine unification (E1–E5). Subsumes PLAN-B step 1 (its Phase 0) and sequences PLAN-C (its Phase 7) | BOXV2 | 🟡 Phase 0 in progress |
+| [PLAN-R](PLAN-R-restructure.md) | **Full codebase restructure** (approved 2026-07-07): security, tooling net, dead-code purge, surface regroup, wire extraction, daemon split, Stage-2 engine unification (E1–E5). Subsumes PLAN-B step 1 (its Phase 0) and sequences PLAN-C (its Phase 7) | BOXV2 | 🟡 Phase 0 DONE 2026-07-07; CI landed 2026-07-08 (Phase 2 partial) |
+| [PLAN-S1-WIRING](PLAN-S1-WIRING.md) | Wire the built attribution machine into the web console (kills the live wrong-team deferred bug, deletes TimedPlayerPopup) then the Pi flow (kills the mid-flow remount wipe). **Recommended next big build** | BOXV2 | ⛔ not started — machine + 22 contract tests ready |
 
 Recommended order: **B step 1 (commit the tree — 30 min, removes data-loss risk) → A phases 0–2
 (unblocks Coach Mode + makes every new account clean) → then B/C/D per Shrujal's mood.**

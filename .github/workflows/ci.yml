@@ -1,0 +1,34 @@
+# CI — the regression net for the court/stats golden tests (PLAN-R Phase 2).
+# Hard gates: unit tests + production build + daemon syntax.
+# Lint is intentionally NOT a gate yet — the repo carries pre-existing lint debt
+# that PLAN-R phases clean incrementally; gate it once `npm run lint` is clean.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    name: tests + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run
+      - run: npm run build
+
+  daemon:
+    name: pi-daemon syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: find pi-daemon -name '*.js' -not -path '*/node_modules/*' -print -exec node --check {} \;
