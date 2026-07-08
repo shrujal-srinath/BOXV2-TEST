@@ -1,7 +1,7 @@
 // Golden tests for the hexbin shot-chart engine. The bin math must stay stable:
 // share cards, StatsHub charts, and (future) career profiles all render from it.
 import { describe, it, expect } from 'vitest';
-import { buildHexbins } from './hexbinEngine';
+import { buildHexbins, binsToLandscape } from './hexbinEngine';
 import type { ShotEvent } from '../components/shotchart/types/shotTypes';
 
 let seq = 0;
@@ -114,6 +114,36 @@ describe('buildHexbins', () => {
                 { d: Infinity, b: r.bins[0] }
             );
             expect(owner.d).toBeLessThanOrEqual(r.radius + 1e-9);
+        }
+    });
+});
+
+describe('binsToLandscape (the unification law: bin in portrait, transform for display)', () => {
+    it('team A bins land on the left basket, team B on the right', () => {
+        const rim = buildHexbins([shot(50, 10.5)]);
+        const a = binsToLandscape(rim, 'A')[0];
+        const b = binsToLandscape(rim, 'B')[0];
+        // Depth-from-own-basket becomes lx from the OWN end: A left, B mirrored right.
+        expect(a.lx).toBeCloseTo(a.cy, 6);
+        expect(b.lx).toBeCloseTo(188 - b.cy, 6);
+        expect(a.ly).toBeCloseTo(a.cx, 6);   // width axis carries over
+        expect(b.ly).toBeCloseTo(b.cx, 6);
+    });
+
+    it('aggregation is untouched — only coordinates are added', () => {
+        const r = buildHexbins([shot(3, 10, { zone: 'three_corner_left', points: 3 }), shot(3, 10, { zone: 'three_corner_left', points: 3, made: false })]);
+        const [land] = binsToLandscape(r, 'B');
+        expect(land.attempts).toBe(2);
+        expect(land.fgPct).toBe(50);
+        expect(land.cx).toBe(r.bins[0].cx);  // portrait fields preserved
+    });
+
+    it('round-trips: landscape center maps back to the portrait bin center', () => {
+        const r = buildHexbins([shot(24, 42, { zone: 'mid_elbow_left' })]);
+        for (const side of ['A', 'B'] as const) {
+            const [land] = binsToLandscape(r, side);
+            const back = side === 'B' ? 188 - land.lx : land.lx;
+            expect(back).toBeCloseTo(land.cy, 6);
         }
     });
 });

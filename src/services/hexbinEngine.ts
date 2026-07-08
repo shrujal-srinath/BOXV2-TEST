@@ -185,3 +185,25 @@ export const buildHexbins = (shots: ShotEvent[], opts: HexbinOptions = {}): Hexb
 
     return { bins, radius: R, minAttempts, maxAttempts, totalAttempts: located.length };
 };
+
+// ── Landscape adapter (PLAN-U P2 — the unification law) ─────────────────────
+// Bin ONCE in portrait (the persisted space); TRANSFORM for display. The Pi's
+// GameReviewScreen renders both teams on one 188×100 full court: team A's bins
+// land on the LEFT basket, team B's on the RIGHT — via the same team-aware
+// mapping the referee court uses (portraitToLandscape). Never re-bin in
+// landscape: identical aggregation everywhere is the whole point.
+
+import { portraitToLandscape } from '../components/refereebox/court/CourtGeometry';
+
+export interface LandscapeHexBin extends HexBin {
+    lx: number;   // landscape center x (0–188)
+    ly: number;   // landscape center y (0–100)
+    side: TeamSide;
+}
+
+export const binsToLandscape = (result: HexbinResult, side: TeamSide): LandscapeHexBin[] =>
+    result.bins.map(b => {
+        // Portrait bin center: cx = width, cy = depth-from-own-basket.
+        const { lx, ly } = portraitToLandscape(b.cx, b.cy, side);
+        return { ...b, lx, ly, side };
+    });
