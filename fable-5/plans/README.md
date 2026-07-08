@@ -28,6 +28,7 @@ the executing session's job is to implement, verify, and stop when a stop-condit
 | [PLAN-D](PLAN-D-courtside-supabase-wiring.md) | Replace FakeData with Supabase in dependency order | courtside | ⛔ not started |
 | [PLAN-R](PLAN-R-restructure.md) | **Full codebase restructure** (approved 2026-07-07): security, tooling net, dead-code purge, surface regroup, wire extraction, daemon split, Stage-2 engine unification (E1–E5). Subsumes PLAN-B step 1 (its Phase 0) and sequences PLAN-C (its Phase 7) | BOXV2 | 🟡 Phase 0 DONE 2026-07-07; CI landed 2026-07-08 (Phase 2 partial) |
 | [PLAN-S1-WIRING](PLAN-S1-WIRING.md) | Wire the built attribution machine into the web console (kills the live wrong-team deferred bug, deletes TimedPlayerPopup) then the Pi flow (kills the mid-flow remount wipe). **Recommended next big build** | BOXV2 | ⛔ not started — machine + 22 contract tests ready |
+| [PLAN-U](PLAN-U-UNIFIED-STATS-PROGRAM.md) | **The unified stats program** (2026-07-08): one hex engine w/ web+Pi renderers, auto after-game engine (Game Score/PIE/Four Factors + persist + deliver-to-accounts), export/share at 100/100, migration 014 (teams + game_player_stats save-all-now/link-when-known), career views. P1–P8 | BOXV2 (+bridge to app/courtside) | ⛔ P1/P2/P6 startable now; P3 blocked on Supabase token |
 
 Recommended order: **B step 1 (commit the tree — 30 min, removes data-loss risk) → A phases 0–2
 (unblocks Coach Mode + makes every new account clean) → then B/C/D per Shrujal's mood.**
